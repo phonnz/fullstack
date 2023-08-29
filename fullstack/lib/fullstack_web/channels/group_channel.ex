@@ -2,8 +2,8 @@ defmodule FullstackWeb.GroupChannel do
   use FullstackWeb, :channel
 
   @impl true
-  def join("group:lobby", payload, socket) do
-    if authorized?(payload) do
+  def join("group:" <> socket_id, payload, socket) do
+    if authorized?(socket_id) do
       {:ok, socket}
     else
       {:error, %{reason: "unauthorized"}}
@@ -26,8 +26,13 @@ defmodule FullstackWeb.GroupChannel do
     {:noreply, socket}
   end
 
+  @impl true
+  def handle_in("ding", _payload, socket) do
+    {:stop, :shutdown, {:ok, %{msg: "shutting down"}}, socket}
+  end
+
   # Add authorization logic here as required.
-  defp authorized?(_payload) do
-    true
+  defp authorized?(payload) do
+    String.equivalent?(payload, "1234567890")
   end
 end
