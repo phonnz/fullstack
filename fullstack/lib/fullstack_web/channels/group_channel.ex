@@ -1,5 +1,6 @@
 defmodule FullstackWeb.GroupChannel do
   use FullstackWeb, :channel
+  import Logger
 
   @impl true
   def join("group:" <> socket_id, payload, socket) do
@@ -13,8 +14,14 @@ defmodule FullstackWeb.GroupChannel do
   # Channels can be used in a request/response fashion
   # by sending replies to requests from the client
   @impl true
-  def handle_in("ping", payload, socket) do
+  def handle_in("ping", _payload, socket) do
     {:reply, {:ok, %{:ping => :pong}}, socket}
+  end
+
+  @impl true
+  def handle_in("handshake", payload, socket) do
+    Logger.info("starting communications with => #{inspect(payload)}")
+    {:reply, {:ok, %{:payload => payload}}, socket}
   end
 
   # It is also common to receive messages from the client and
@@ -33,6 +40,6 @@ defmodule FullstackWeb.GroupChannel do
 
   # Add authorization logic here as required.
   defp authorized?(payload) do
-    String.equivalent?(payload, "1234567890")
+    String.equivalent?(payload, "112233445566")
   end
 end
