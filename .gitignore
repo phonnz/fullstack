@@ -1,11 +1,11 @@
 # The directory Mix will write compiled artifacts to.
-/fullstack/_build/
+/*/_build/
 
 # If you run "mix test --cover", coverage assets end up here.
-/*//cover/
+/*/cover/
 
 # The directory Mix downloads your dependencies sources to.
-/*/deps/
+/*/deps
 
 # Where 3rd-party dependencies like ExDoc output generated docs.
 /*/doc/
@@ -26,7 +26,7 @@
 /*/fullstack-*.tar
 
 # Ignore assets that are produced by build tools.
-/*/priv/static/assets/
+/*/priv/static/*
 
 # Ignore digested assets cache.
 /*/priv/static/cache_manifest.json
