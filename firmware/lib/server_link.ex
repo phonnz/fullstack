@@ -10,7 +10,7 @@ defmodule Firmware.ServerLink do
 
   require Logger
   @endpoint "ws://127.0.0.1:4000/socket/websocket?"
-  @mac_addr "11:22:33:44:55:66"
+  @mac_addr "e4:5f:01:a1:aa:76"
   @topic "group:#{String.replace(@mac_addr, ":", "")}"
   @interval for x <- 500..60_000//500, do: x
 
