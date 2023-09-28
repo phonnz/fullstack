@@ -34,8 +34,8 @@ defmodule FullstackWeb.MainSocket do
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
   @impl true
-  def connect(_params, socket, _connect_info) do
-    {:ok, socket}
+  def connect(%{"mac_addr" => mac_addr} = _params, socket, _connect_info) do
+    {:ok, assign(socket, :mac_addr, mac_addr)}
   end
 
   # Socket id's are topics that allow you to identify all sockets for a given user:
@@ -49,5 +49,7 @@ defmodule FullstackWeb.MainSocket do
   #
   # Returning `nil` makes this socket anonymous.
   @impl true
-  def id(_socket), do: nil
+  def id(socket) do
+    String.replace(socket.assigns.mac_addr, ":", "")
+  end
 end

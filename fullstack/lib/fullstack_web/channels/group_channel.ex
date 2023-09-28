@@ -2,7 +2,9 @@ defmodule FullstackWeb.GroupChannel do
   use FullstackWeb, :channel
 
   @impl true
-  def join("group:lobby", payload, socket) do
+  def join("group:main", payload, socket) do
+    IO.inspect(payload, label: :payload)
+
     if authorized?(payload) do
       {:ok, socket}
     else
@@ -13,7 +15,7 @@ defmodule FullstackWeb.GroupChannel do
   # Channels can be used in a request/response fashion
   # by sending replies to requests from the client
   @impl true
-  def handle_in("ping", payload, socket) do
+  def handle_in("ping", _payload, socket) do
     {:reply, {:ok, %{:ping => :pong}}, socket}
   end
 

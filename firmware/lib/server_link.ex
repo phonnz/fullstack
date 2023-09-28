@@ -11,8 +11,19 @@ defmodule Firmware.ServerLink do
   require Logger
   @endpoint "ws://127.0.0.1:4000/socket/websocket?"
   @mac_addr "e4:5f:01:a1:aa:76"
+  @main_topic "group:main"
   @topic "group:#{String.replace(@mac_addr, ":", "")}"
   @interval for x <- 500..60_000//500, do: x
+
+  def start(), do: start_link(%{})
+  def start_ping, do: send(self(), :start_ping)
+  def get_state(pid), do: GenServer.call(self(), :get_state)
+
+  def disconnect() do
+    IO.puts("trying to disconnect")
+
+    {:ok, send(self(), :disconnect)}
+  end
 
   def start_link(args) do
     Slipstream.start_link(__MODULE__, args, name: __MODULE__)
@@ -20,7 +31,7 @@ defmodule Firmware.ServerLink do
 
   @impl Slipstream
   def init(config) do
-    IO.inspect(config)
+    IO.inspect(config, label: :CONFIG)
 
     opts = [
       uri: "#{@endpoint}mac_addr=#{@mac_addr}",
@@ -28,36 +39,57 @@ defmodule Firmware.ServerLink do
       rejoin_after_msec: [1_000, 3_000, 5_000, 10_000]
     ]
 
-    {:ok, connect!(opts), {:continue, :start_ping}}
-  end
-
-  @impl Slipstream
-  def handle_continue(:start_ping, socket) do
-    timer = :timer.send_interval(10_000, self(), :ping_server)
-
-    {:noreply, assign(socket, :ping_timer, timer)}
+    {:ok, connect!(opts)}
   end
 
   @impl Slipstream
   def handle_connect(socket) do
-    {:ok, join(socket, @topic)}
+    {:ok, join(socket, @main_topic, %{:join_message => "This is a joinning message"})}
+  end
+
+  def handle_call(:get_state, _from, state) do
+    {:reply, state, state}
   end
 
   @impl Slipstream
-  def handle_join(@topic, _join_response, socket) do
+  def handle_join(@main_topic, join_response, socket) do
+    Logger.info("Join_response => #{inspect(join_response)}")
     # an asynchronous push with no reply:
-    push(socket, @topic, "handshake", %{:hello => :world})
-
+    #    push(socket, @topic, "handshake", %{:hello => :world})
+    something = send(self(), :start_ping)
+    IO.inspect("sent interval #{inspect(something)}")
     {:ok, socket}
+  end
+
+  @impl Slipstream
+  def handle_info(:start_ping, socket) do
+    IO.inspect("Start ping")
+    timer = :timer.send_interval(10_000, self(), :ping_server)
+    IO.inspect(timer, label: :TIMER)
+    {:noreply, assign(socket, :ping_timer, timer)}
   end
 
   @impl Slipstream
   def handle_info(:ping_server, socket) do
     # we will asynchronously receive a reply and handle it in the
     # handle_reply/3 implementation below
-    {:ok, ref} = push(socket, @topic, "ping", %{format: "json"})
+    {:ok, ref} = push(socket, @main_topic, "ping", %{format: "json"})
 
     {:noreply, assign(socket, :last_ping, ref)}
+  end
+
+  @impl Slipstream
+  def handle_info(:disconnect, socket) do
+    IO.inspect("Discotnecct")
+    result = :timer.cancel(socket.assigns.ping_timer)
+    IO.inspect(result, label: :RESULT)
+
+    {:ok, socket} =
+      socket
+      |> disconnect()
+      |> await_disconnect()
+
+    {:noreply, socket}
   end
 
   @impl Slipstream
@@ -67,7 +99,7 @@ defmodule Firmware.ServerLink do
     # if ref == socket.assigns.last_ping do
     #   :ok = Firmware.MetricsPublisher.publish(metrics)
     # end
-
+    Logger.info("Reponse #{inspect(response)}")
     {:ok, socket}
   end
 
