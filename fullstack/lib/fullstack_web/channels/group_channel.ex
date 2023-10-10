@@ -29,7 +29,7 @@ defmodule FullstackWeb.GroupChannel do
   end
 
   # Add authorization logic here as required.
-  defp authorized?(_payload) do
+  defp authorized?(payload) do
     true
   end
 end
