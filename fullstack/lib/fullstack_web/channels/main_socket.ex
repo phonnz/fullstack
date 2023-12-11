@@ -34,7 +34,7 @@ defmodule FullstackWeb.MainSocket do
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
   @impl true
-  def connect(%{"mac_addr" => mac_addr} = _params, socket, _connect_info) do
+  def connect(%{"mac_addr" => mac_addr} = params, socket, _connect_info) do
     {:ok, assign(socket, :mac_addr, mac_addr)}
   end
 

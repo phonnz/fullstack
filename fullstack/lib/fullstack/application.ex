@@ -19,7 +19,8 @@ defmodule Fullstack.Application do
       # Start Finch
       {Finch, name: Fullstack.Finch},
       # Start the Endpoint (http/https)
-      FullstackWeb.Endpoint
+      FullstackWeb.Endpoint,
+      FullstackWeb.Presence
       # Start a worker by calling: Fullstack.Worker.start_link(arg)
       # {Fullstack.Worker, arg}
     ]

@@ -4,20 +4,19 @@ defmodule Firmware.ServerLink do
 
   Periodically sends pings and asks the other server for its metrics.
   """
-
   use Slipstream,
     restart: :temporary
 
   require Logger
-  @endpoint "ws://127.0.0.1:4000/socket/websocket?"
-  @mac_addr "e4:5f:01:a1:aa:76"
-  @main_topic "group:main"
-  @topic "group:#{String.replace(@mac_addr, ":", "")}"
+
+  @host "ws://127.0.0.1:"
+  @topic "group:main"
+  @core_topic "grabngo:status:"
   @interval for x <- 500..60_000//500, do: x
 
-  def start(), do: start_link(%{})
+  def start(args), do: Slipstream.start_link(__MODULE__, args, name: __MODULE__)
   def start_ping, do: send(self(), :start_ping)
-  def get_state(pid), do: GenServer.call(self(), :get_state)
+  def get_state(_pid), do: GenServer.call(self(), :get_state)
 
   def disconnect() do
     IO.puts("trying to disconnect")
@@ -25,34 +24,47 @@ defmodule Firmware.ServerLink do
     {:ok, send(self(), :disconnect)}
   end
 
-  def start_link(args) do
-    Slipstream.start_link(__MODULE__, args, name: __MODULE__)
-  end
-
   @impl Slipstream
-  def init(config) do
-    IO.inspect(config, label: :CONFIG)
+  def init(args) do
+    IO.inspect(args, label: :CONFIG)
+    port = Keyword.get(args, :port, "4000")
+    mac_addr = Keyword.get(args, :mac_addr)
+
+    host_uri =
+      "#{@host}#{port}/socket/websocket?mac_addr=#{mac_addr}" |> IO.inspect(lable: :host_uri)
 
     opts = [
-      uri: "#{@endpoint}mac_addr=#{@mac_addr}",
+      uri: host_uri,
       reconnect_after_msec: [1_000, 5_000, 10_000],
       rejoin_after_msec: [1_000, 3_000, 5_000, 10_000]
     ]
 
-    {:ok, connect!(opts)}
+    socket =
+      connect!(opts)
+      |> assign(:port, port)
+      |> assign(:vending_id, mac_addr)
+      |> assign(:mac_addr, mac_addr)
+
+    {:ok, socket}
   end
 
   @impl Slipstream
   def handle_connect(socket) do
-    {:ok, join(socket, @main_topic, %{:join_message => "This is a joinning message"})}
+    IO.inspect(socket, label: :socket_connect)
+
+    {:ok,
+     join(socket, @topic, %{
+       :join_message => "This is a joinning message"
+     })}
   end
 
+  @impl Slipstream
   def handle_call(:get_state, _from, state) do
     {:reply, state, state}
   end
 
   @impl Slipstream
-  def handle_join(@main_topic, join_response, socket) do
+  def handle_join(@topic, join_response, socket) do
     Logger.info("Join_response => #{inspect(join_response)}")
     # an asynchronous push with no reply:
     #    push(socket, @topic, "handshake", %{:hello => :world})
@@ -62,8 +74,9 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
+  IO.inspect("Start ping")
+
   def handle_info(:start_ping, socket) do
-    IO.inspect("Start ping")
     timer = :timer.send_interval(10_000, self(), :ping_server)
     IO.inspect(timer, label: :TIMER)
     {:noreply, assign(socket, :ping_timer, timer)}
@@ -79,8 +92,15 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
+  def handle_info({:error, reason}, socket) do
+    Logger.error("Info error #{inspect(reason)}")
+
+    {:noreply, socket}
+  end
+
+  @impl Slipstream
   def handle_info(:disconnect, socket) do
-    IO.inspect("Discotnecct")
+    IO.inspect("Disconect")
     result = :timer.cancel(socket.assigns.ping_timer)
     IO.inspect(result, label: :RESULT)
 
@@ -100,6 +120,12 @@ defmodule Firmware.ServerLink do
     #   :ok = Firmware.MetricsPublisher.publish(metrics)
     # end
     Logger.info("Reponse #{inspect(response)}")
+    {:ok, socket}
+  end
+
+  @impl Slipstream
+  def handle_message(@topic, "presence_diff", payload, socket) do
+    IO.inspect(payload, label: :presence)
     {:ok, socket}
   end
 
