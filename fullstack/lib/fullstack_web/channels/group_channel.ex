@@ -1,7 +1,7 @@
 defmodule FullstackWeb.GroupChannel do
   use FullstackWeb, :channel
   alias FullstackWeb.Presence
-  intercept(["user_joined"])
+  #  intercept(["user_joined"])
 
   @impl true
   def join("group:main", payload, socket) do

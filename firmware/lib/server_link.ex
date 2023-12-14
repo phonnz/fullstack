@@ -18,12 +18,6 @@ defmodule Firmware.ServerLink do
   def start_ping, do: send(self(), :start_ping)
   def get_state(_pid), do: GenServer.call(self(), :get_state)
 
-  def disconnect() do
-    IO.puts("trying to disconnect")
-
-    {:ok, send(self(), :disconnect)}
-  end
-
   @impl Slipstream
   def init(args) do
     IO.inspect(args, label: :CONFIG)
@@ -68,15 +62,15 @@ defmodule Firmware.ServerLink do
     Logger.info("Join_response => #{inspect(join_response)}")
     # an asynchronous push with no reply:
     #    push(socket, @topic, "handshake", %{:hello => :world})
-    something = send(self(), :start_ping)
-    IO.inspect("sent interval #{inspect(something)}")
+    ## something = send(self(), :start_ping)
+    ## IO.inspect("sent interval #{inspect(something)}")
     {:ok, socket}
   end
 
   @impl Slipstream
-  IO.inspect("Start ping")
-
   def handle_info(:start_ping, socket) do
+    IO.inspect("Start ping")
+
     timer = :timer.send_interval(10_000, self(), :ping_server)
     IO.inspect(timer, label: :TIMER)
     {:noreply, assign(socket, :ping_timer, timer)}
@@ -101,8 +95,8 @@ defmodule Firmware.ServerLink do
   @impl Slipstream
   def handle_info(:disconnect, socket) do
     IO.inspect("Disconect")
-    result = :timer.cancel(socket.assigns.ping_timer)
-    IO.inspect(result, label: :RESULT)
+    ## result = :timer.cancel(socket.assigns.ping_timer)
+    ## IO.inspect(result, label: :RESULT)
 
     {:ok, socket} =
       socket
@@ -124,8 +118,24 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
-  def handle_message(@topic, "presence_diff", payload, socket) do
-    IO.inspect(payload, label: :presence)
+  def handle_message(
+        @topic,
+        "presence_diff",
+        %{"joins" => joins, "leaves" => leaves} = _payload,
+        socket
+      ) do
+    IO.inspect(%{joins: Map.keys(joins), leaves: Map.keys(leaves)}, label: :presence)
+    {:ok, socket}
+  end
+
+  @impl Slipstream
+  def handle_message(
+        @topic,
+        "presence_state",
+        presences,
+        socket
+      ) do
+    IO.inspect(Map.keys(presences), label: :presence)
     {:ok, socket}
   end
 

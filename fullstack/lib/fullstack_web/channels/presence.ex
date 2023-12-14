@@ -16,8 +16,6 @@ defmodule FullstackWeb.Presence do
 
   def fetch(_topic, presences) do
     for {key, %{metas: [meta | metas]}} <- presences, into: %{} do
-      # user can be populated here from the database here we populate
-      # the name for demonstration purposes
       {key, %{metas: [meta | metas], mac_addr: meta.mac_addr, device: %{mac_addr: meta.mac_addr}}}
     end
   end
