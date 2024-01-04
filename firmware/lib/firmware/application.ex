@@ -11,12 +11,12 @@ defmodule Firmware.Application do
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Firmware.Supervisor]
 
+    ## Firmware.ServerLinkSupervisor.children_spec() ++
     children =
       [
-        # Children for all targets
-        # Starts a worker by calling: Firmware.Worker.start_link(arg)
-        # {Firmware.Worker, arg},
-      ] ++ children(target())
+        Firmware.ServerLinkSupervisor
+      ] ++
+        children(target())
 
     Supervisor.start_link(children, opts)
   end

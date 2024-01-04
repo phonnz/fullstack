@@ -9,28 +9,31 @@ defmodule Firmware.ServerLink do
 
   require Logger
 
-  @host "ws://127.0.0.1:"
-  @topic "group:main"
-  @core_topic "grabngo:status:"
+  @host "ws://localhost:"
+  @topic "grabngo:status:"
   @interval for x <- 500..60_000//500, do: x
 
-  def start(args), do: Slipstream.start_link(__MODULE__, args, name: __MODULE__)
+  def start_link(args \\ []),
+    do:
+      Slipstream.start_link(__MODULE__, args,
+        name: String.to_atom("#{__MODULE__}.#{Keyword.get(args, :id, "0")}")
+      )
+
   def start_ping, do: send(self(), :start_ping)
   def get_state(_pid), do: GenServer.call(self(), :get_state)
 
   @impl Slipstream
   def init(args) do
-    IO.inspect(args, label: :CONFIG)
     port = Keyword.get(args, :port, "4000")
-    mac_addr = Keyword.get(args, :mac_addr)
+    mac_addr = Keyword.get(args, :mac_addr, "e4:5f:01:a1:aa:76")
 
     host_uri =
-      "#{@host}#{port}/socket/websocket?mac_addr=#{mac_addr}" |> IO.inspect(lable: :host_uri)
+      "#{@host}#{port}/websocket?mac_addr=#{mac_addr}" |> IO.inspect(lable: :host_uri)
 
     opts = [
       uri: host_uri,
-      reconnect_after_msec: [1_000, 5_000, 10_000],
-      rejoin_after_msec: [1_000, 3_000, 5_000, 10_000]
+      reconnect_after_msec: [1_000],
+      rejoin_after_msec: [1_000]
     ]
 
     socket =
@@ -44,12 +47,10 @@ defmodule Firmware.ServerLink do
 
   @impl Slipstream
   def handle_connect(socket) do
+    IO.inspect(Map.keys(socket))
     IO.inspect(socket, label: :socket_connect)
 
-    {:ok,
-     join(socket, @topic, %{
-       :join_message => "This is a joinning message"
-     })}
+    {:ok, join(socket, @topic <> socket.assigns.mac_addr, %{})}
   end
 
   @impl Slipstream
@@ -58,7 +59,7 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
-  def handle_join(@topic, join_response, socket) do
+  def handle_join(@topic <> _someaddres, join_response, socket) do
     Logger.info("Join_response => #{inspect(join_response)}")
     # an asynchronous push with no reply:
     #    push(socket, @topic, "handshake", %{:hello => :world})
@@ -119,7 +120,7 @@ defmodule Firmware.ServerLink do
 
   @impl Slipstream
   def handle_message(
-        @topic,
+        _topic,
         "presence_diff",
         %{"joins" => joins, "leaves" => leaves} = _payload,
         socket
@@ -130,7 +131,7 @@ defmodule Firmware.ServerLink do
 
   @impl Slipstream
   def handle_message(
-        @topic,
+        _topic,
         "presence_state",
         presences,
         socket
@@ -140,7 +141,7 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
-  def handle_message(@topic, event, message, socket) do
+  def handle_message(_topic, event, message, socket) do
     Logger.error(
       "Was not expecting a push from the server. Heard: " <>
         inspect({@topic, event, message})
@@ -151,8 +152,26 @@ defmodule Firmware.ServerLink do
 
   @impl Slipstream
   def handle_disconnect(_reason, socket) do
-    :timer.cancel(socket.assigns.ping_timer)
+    # :timer.cancel(socket.assigns.ping_timer)
+
+    case reconnect(socket) do
+      {:ok, socket} -> {:ok, socket}
+      {:error, reason} -> {:stop, reason, socket}
+    end
 
     {:stop, :normal, socket}
+  end
+
+  @impl Slipstream
+  def handle_topic_close(device_topic, reason, socket) do
+    Logger.error("MAIN_SERVICES_CONNECTIONS_CHANNEL_DISCONNECT #{inspect(reason)}")
+    rejoin(socket, device_topic)
+  end
+
+  @impl Slipstream
+  def terminate(reason, socket) do
+    Logger.error("MAIN_SERVICES_CONNECTIONS_SOCKET_TERMINATE #{inspect(reason)}")
+
+    disconnect(socket)
   end
 end

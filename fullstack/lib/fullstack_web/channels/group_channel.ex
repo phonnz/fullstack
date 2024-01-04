@@ -4,7 +4,7 @@ defmodule FullstackWeb.GroupChannel do
   #  intercept(["user_joined"])
 
   @impl true
-  def join("group:main", payload, socket) do
+  def join("group:main:" <> mac_addr, payload, socket) do
     IO.inspect(payload, label: :payload)
     IO.inspect(socket.assigns, label: :join_assigns)
 
