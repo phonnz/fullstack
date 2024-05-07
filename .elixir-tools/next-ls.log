@@ -1,0 +1,103 @@
+
+14:45:42.555 [info] Loading 137 CA(s) from :otp store
+
+14:45:42.662 id=1 [debug] handled request client -> server initialize in 60ms
+
+14:45:48.206 [debug] sent notification server -> client window/logMessage
+
+14:45:48.221 [debug] sent notification server -> client window/logMessage
+
+14:45:48.222 [debug] sent notification server -> client window/logMessage
+
+14:45:48.222 [info] [extension] Credo initializing with options %NextLS.InitOpts.Extensions.Credo{enable: true, cli_options: []}
+
+14:45:48.228 [debug] sent notification server -> client $/progress
+
+14:45:48.310 [debug] sent notification server -> client window/logMessage
+
+14:45:48.310 [info] Beginning DB migration...
+
+14:45:48.327 [debug] sent notification server -> client window/logMessage
+
+14:45:48.327 [info] Database is on the latest version: 5
+
+14:45:48.327 [debug] sent notification server -> client window/logMessage
+
+14:45:48.327 [info] Finished DB migration...
+
+14:45:48.328 [debug] sent notification server -> client window/logMessage
+
+14:45:48.328 [info] Using `elixir` found at: /home/phonnz/.asdf/shims/elixir
+
+14:45:48.329 [debug] handled notification client -> server initialized in 129ms
+
+14:45:48.338 [debug] handled notification client -> server textDocument/didOpen in 8ms
+
+14:45:49.346 [debug] sent notification server -> client window/logMessage
+
+14:45:49.346 [info] Connected to node nextls-runtime-1707680748327443295@zephy
+
+14:45:49.419 [debug] sent notification server -> client $/progress
+
+14:45:49.420 [debug] sent notification server -> client window/logMessage
+
+14:45:49.422 [debug] sent notification server -> client $/progress
+
+14:45:49.474 [debug] sent notification server -> client window/logMessage
+
+14:45:49.474 [info] Compiling 4 files (.ex)
+
+
+14:45:49.483 [debug] sent notification server -> client $/progress
+
+14:45:49.532 [debug] sent notification server -> client window/logMessage
+
+14:45:49.532 [info] warning: variable "mac_addr" is unused (if the variable is not meant to be used, prefix it with an underscore)
+  lib/fullstack_web/channels/group_channel.ex:7: FullstackWeb.GroupChannel.join/3
+
+
+
+14:45:49.628 [debug] sent notification server -> client window/logMessage
+
+14:45:49.628 [info] warning: unused alias Full
+  lib/fullstack_web/router.ex:2:3
+
+
+
+14:45:49.647 [debug] sent notification server -> client window/logMessage
+
+14:45:49.647 [info] warning: variable "params" is unused (if the variable is not meant to be used, prefix it with an underscore)
+  lib/fullstack_web/channels/main_socket.ex:37:43
+
+
+
+14:45:49.652 [debug] sent notification server -> client window/logMessage
+
+14:45:49.652 [info] Generated fullstack app
+
+
+14:45:49.653 [debug] sent notification server -> client window/logMessage
+
+14:45:49.653 [info] Compiled fullstack!
+
+14:45:49.658 [debug] sent notification server -> client $/progress
+
+14:45:49.658 [debug] sent notification server -> client textDocument/publishDiagnostics
+
+14:45:49.663 [debug] sent notification server -> client textDocument/publishDiagnostics
+
+14:45:49.664 [debug] sent notification server -> client textDocument/publishDiagnostics
+
+14:45:49.664 [debug] sent notification server -> client textDocument/publishDiagnostics
+
+14:45:49.664 [debug] sent notification server -> client textDocument/publishDiagnostics
+
+14:45:49.664 [debug] sent notification server -> client textDocument/publishDiagnostics
+
+14:45:49.730 [debug] sent notification server -> client $/progress
+
+14:49:16.193 id=2 [debug] handled request client -> server shutdown in 6ms
+
+14:49:16.197 [debug] sent notification server -> client window/logMessage
+
+14:49:16.197 [info] The runtime for fullstack has successfully shut down.
