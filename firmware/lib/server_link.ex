@@ -11,10 +11,17 @@ defmodule Firmware.ServerLink do
 
   @host "ws://127.0.0.1:"
   @topic "group:main"
+  @default_mac "00:00:00:00:00"
   @core_topic "grabngo:status:"
   @interval for x <- 500..60_000//500, do: x
-
-  def start(args), do: Slipstream.start_link(__MODULE__, args, name: __MODULE__)
+  @default_args [
+    host: @host,
+    topic: @topic,
+    mac_addr: @default_mac,
+    core_topic: @core_topic,
+    interva: @interval
+  ]
+  def start(args \\ @default_args), do: Slipstream.start_link(__MODULE__, args, name: __MODULE__)
   def start_ping, do: send(self(), :start_ping)
   def get_state(_pid), do: GenServer.call(self(), :get_state)
 

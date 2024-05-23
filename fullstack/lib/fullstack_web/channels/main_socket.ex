@@ -9,16 +9,16 @@ defmodule FullstackWeb.MainSocket do
   ## Channels
   # Uncomment the following line to define a "room:*" topic
   # pointing to the `FullstackWeb.RoomChannel`:
-  #
   channel "group:*", FullstackWeb.GroupChannel
+  #
   #
   # To create a channel file, use the mix task:
   #
   #     mix phx.gen.channel Room
   #
   # See the [`Channels guide`](https://hexdocs.pm/phoenix/channels.html)
-  # for further details.
 
+  # for further details.
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After
   # verification, you can put default assigns into
