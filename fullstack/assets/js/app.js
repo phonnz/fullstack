@@ -25,7 +25,7 @@ import VegaLite from "./vegalite";
 
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let hooks = { VegaLite }
-let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfToken } })
+let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfToken }, hooks })
 
 
 // Show progress bar on live navigation and form submits
