@@ -6,6 +6,7 @@ defmodule FullstackWeb.DeviceLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
+    socket = socket |> assign(:char_data, [])
     {:ok, stream(socket, :devices, Devices.list_devices())}
   end
 
@@ -35,6 +36,26 @@ defmodule FullstackWeb.DeviceLive.Index do
   @impl true
   def handle_info({FullstackWeb.DeviceLive.FormComponent, {:saved, device}}, socket) do
     {:noreply, stream_insert(socket, :devices, device)}
+  end
+
+  @impl true
+  def update(assigns, socket) do
+    # opts = update_assigns(assigns)
+    # unless assigns[:timer], do: start_timer(opts)
+    {:ok, socket}
+  end
+
+  def update(whatever) do
+    IO.inspect(whatever, label: :GENERIC)
+    {:ok, whatever}
+  end
+
+  @impl true
+  def handle_info(:clock_tick, socket) do
+    today = Date.utc_today() |> Date.add(10)
+    x = %{total: 88, date: Date.to_iso8601(today), name: "potato"}
+
+    {:noreply, update(socket, :chart_data, [x | socket.assigns.char_data])}
   end
 
   @impl true
