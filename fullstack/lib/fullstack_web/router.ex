@@ -18,6 +18,7 @@ defmodule FullstackWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    live "/home/:short_url", HomeLive.Index, :index
     live "/home", HomeLive.Index, :index
   end
 
