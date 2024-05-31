@@ -1,4 +1,3 @@
-<.flash_group flash={@flash} />
 <!-- component -->
 <div class="bg-white h-screen font-sans flex flex-col items-center justify-center">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -84,9 +83,23 @@
               <div class="sm:flex-shrink-0">
                 <div class="flow-root">
                   <div class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full">
-                    Episodes
+                    Counter
                   </div>
-                  <p class="text-4xl font-bold ml-4 text-gray-900">28K+</p>
+                  <p class="text-4xl font-bold ml-4 text-gray-900">
+                    <span
+                      phx-click={:dec}
+                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full"
+                    >
+                      -
+                    </span>
+                    <%= @counter %>
+                    <span
+                      phx-click={:inc}
+                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full"
+                    >
+                      +
+                    </span>
+                  </p>
                 </div>
               </div>
               <!-- <div class="mt-3 sm:mt-0 sm:ml-3">
@@ -114,19 +127,27 @@
               src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;width=40"
             />
           </span>
-          <span class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full"><img
-            class="aspect-square h-full w-full"
-            alt="User 2"
-            src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;width=40"
-          /></span><span class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full"><img
-            class="aspect-square h-full w-full"
-            alt="User 3"
-            src="https://images.unsplash.com/photo-1548142813-c348350df52b?q=80&w=1889&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;width=40"
-          /></span><span class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full"><img
-            class="aspect-square h-full w-full"
-            alt="User 4"
-            src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?q=80&w=1889&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;width=40"
-          /></span>
+          <span class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full">
+            <img
+              class="aspect-square h-full w-full"
+              alt="User 2"
+              src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;width=40"
+            />
+          </span>
+          <span class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full">
+            <img
+              class="aspect-square h-full w-full"
+              alt="User 3"
+              src="https://images.unsplash.com/photo-1548142813-c348350df52b?q=80&w=1889&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;width=40"
+            />
+          </span>
+          <span class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full">
+            <img
+              class="aspect-square h-full w-full"
+              alt="User 4"
+              src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?q=80&w=1889&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;width=40"
+            />
+          </span>
           <img
             class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full"
             src="https://images.unsplash.com/photo-1527718641255-324f8e2d0421?q=80&w=1965&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
