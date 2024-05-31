@@ -2,8 +2,13 @@ defmodule FullstackWeb.HomeLive.Index do
   use Phoenix.LiveView
 
   @impl true
-  def mount(parmas, _, socket) do
-    {:ok, assign(socket, :counter, 0)}
+  def mount(_params, _, socket) do
+    socket =
+      socket
+      |> assign(:feature, random_feature())
+      |> assign(:counter, 0)
+
+    {:ok, socket}
   end
 
   @impl true
@@ -11,7 +16,7 @@ defmodule FullstackWeb.HomeLive.Index do
     IO.inspect(params, label: :PARAMS)
 
     case Map.fetch(params, "short_url") do
-      {:ok, url} ->
+      {:ok, _url} ->
         {:noreply, redirect(socket, to: "/")}
 
       :error ->
@@ -32,4 +37,6 @@ defmodule FullstackWeb.HomeLive.Index do
 
     {:noreply, assign(socket, :counter, counter - 1)}
   end
+
+  defp random_feature(), do: "real-time"
 end
