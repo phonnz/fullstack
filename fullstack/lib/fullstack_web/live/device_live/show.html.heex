@@ -1,0 +1,28 @@
+<.header>
+  Device <%= @device.id %>
+  <:subtitle>This is a device record from your database.</:subtitle>
+  <:actions>
+    <.link patch={~p"/devices/#{@device}/show/edit"} phx-click={JS.push_focus()}>
+      <.button>Edit device</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Wlan mac address"><%= @device.wlan_mac_address %></:item>
+  <:item title="Eth mac address"><%= @device.eth_mac_address %></:item>
+  <:item title="Enabled"><%= @device.enabled %></:item>
+</.list>
+
+<.back navigate={~p"/devices"}>Back to devices</.back>
+
+<.modal :if={@live_action == :edit} id="device-modal" show on_cancel={JS.patch(~p"/devices/#{@device}")}>
+  <.live_component
+    module={FullstackWeb.DeviceLive.FormComponent}
+    id={@device.id}
+    title={@page_title}
+    action={@live_action}
+    device={@device}
+    patch={~p"/devices/#{@device}"}
+  />
+</.modal>
