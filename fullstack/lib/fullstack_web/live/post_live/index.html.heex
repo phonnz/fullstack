@@ -34,6 +34,7 @@
   <.live_component
     module={FullstackWeb.PostLive.FormComponent}
     id={@post.id || :new}
+    author_id={@current_user.id}
     title={@page_title}
     action={@live_action}
     post={@post}

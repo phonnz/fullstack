@@ -7,6 +7,7 @@ defmodule Fullstack.Blog do
   alias Fullstack.Repo
 
   alias Fullstack.Blog.Post
+  alias Fullstack.Accounts.User
 
   @doc """
   Returns the list of posts.
