@@ -80,7 +80,17 @@ defmodule FullstackWeb.Router do
       live "/posts/:id/edit", PostLive.Index, :edit
       live "/posts/:id", PostLive.Show, :show
       live "/posts/:id/show/edit", PostLive.Show, :edit
+      live "/customers", CustomerLive.Index, :index
+      live "/customers/new", CustomerLive.Index, :new
+      live "/customers/:id/edit", CustomerLive.Index, :edit
+      live "/poss", PosLive.Index, :index
+      live "/poss/new", PosLive.Index, :new
+      live "/poss/:id/edit", PosLive.Index, :edit
 
+      live "/poss/:id", PosLive.Show, :show
+      live "/poss/:id/show/edit", PosLive.Show, :edit
+      live "/customers/:id", CustomerLive.Show, :show
+      live "/customers/:id/show/edit", CustomerLive.Show, :edit
       live "/users/settings", UserSettingsLive, :edit
       live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
     end

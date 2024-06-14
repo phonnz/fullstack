@@ -1,0 +1,41 @@
+<.header>
+  Listing Poss
+  <:actions>
+    <.link patch={~p"/poss/new"}>
+      <.button>New Pos</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table
+  id="poss"
+  rows={@streams.poss}
+  row_click={fn {_id, pos} -> JS.navigate(~p"/poss/#{pos}") end}
+>
+  <:col :let={{_id, pos}} label="Name"><%= pos.name %></:col>
+  <:action :let={{_id, pos}}>
+    <div class="sr-only">
+      <.link navigate={~p"/poss/#{pos}"}>Show</.link>
+    </div>
+    <.link patch={~p"/poss/#{pos}/edit"}>Edit</.link>
+  </:action>
+  <:action :let={{id, pos}}>
+    <.link
+      phx-click={JS.push("delete", value: %{id: pos.id}) |> hide("##{id}")}
+      data-confirm="Are you sure?"
+    >
+      Delete
+    </.link>
+  </:action>
+</.table>
+
+<.modal :if={@live_action in [:new, :edit]} id="pos-modal" show on_cancel={JS.patch(~p"/poss")}>
+  <.live_component
+    module={FullstackWeb.PosLive.FormComponent}
+    id={@pos.id || :new}
+    title={@page_title}
+    action={@live_action}
+    pos={@pos}
+    patch={~p"/poss"}
+  />
+</.modal>
