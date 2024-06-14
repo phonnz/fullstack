@@ -1,0 +1,26 @@
+<.header>
+  Transaction <%= @transaction.id %>
+  <:subtitle>This is a transaction record from your database.</:subtitle>
+  <:actions>
+    <.link patch={~p"/transactions/#{@transaction}/show/edit"} phx-click={JS.push_focus()}>
+      <.button>Edit transaction</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Amount"><%= @transaction.amount %></:item>
+</.list>
+
+<.back navigate={~p"/transactions"}>Back to transactions</.back>
+
+<.modal :if={@live_action == :edit} id="transaction-modal" show on_cancel={JS.patch(~p"/transactions/#{@transaction}")}>
+  <.live_component
+    module={FullstackWeb.TransactionLive.FormComponent}
+    id={@transaction.id}
+    title={@page_title}
+    action={@live_action}
+    transaction={@transaction}
+    patch={~p"/transactions/#{@transaction}"}
+  />
+</.modal>

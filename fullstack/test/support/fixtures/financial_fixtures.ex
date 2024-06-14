@@ -17,4 +17,18 @@ defmodule Fullstack.FinancialFixtures do
 
     pos
   end
+
+  @doc """
+  Generate a transaction.
+  """
+  def transaction_fixture(attrs \\ %{}) do
+    {:ok, transaction} =
+      attrs
+      |> Enum.into(%{
+        amount: 42
+      })
+      |> Fullstack.Financial.create_transaction()
+
+    transaction
+  end
 end

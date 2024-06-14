@@ -91,6 +91,13 @@ defmodule FullstackWeb.Router do
       live "/poss/:id/show/edit", PosLive.Show, :edit
       live "/customers/:id", CustomerLive.Show, :show
       live "/customers/:id/show/edit", CustomerLive.Show, :edit
+      live "/transactions", TransactionLive.Index, :index
+
+      live "/transactions/new", TransactionLive.Index, :new
+      live "/transactions/:id/edit", TransactionLive.Index, :edit
+
+      live "/transactions/:id", TransactionLive.Show, :show
+      live "/transactions/:id/show/edit", TransactionLive.Show, :edit
       live "/users/settings", UserSettingsLive, :edit
       live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
     end
