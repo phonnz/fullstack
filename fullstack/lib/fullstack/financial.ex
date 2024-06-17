@@ -123,6 +123,37 @@ defmodule Fullstack.Financial do
     Repo.all(Transaction)
   end
 
+  def stream_trx() do
+    query =
+      from(t in Transaction,
+        join: c in assoc(t, :customer),
+        join: p in assoc(t, :pos),
+        select: %{
+          date: t.inserted_at,
+          transaction: t.id,
+          pos: p.name,
+          customer: c.full_name
+        },
+        order_by: [desc: t.inserted_at]
+      )
+
+    ## stream =
+    {:ok, transactions} =
+      Repo.transaction(fn ->
+        Repo.stream(query)
+        |> Task.async_stream(&set_extra_data/1, timeout: 7000)
+        #        |> Enum.map(&Task.await(&1))
+        |> Enum.to_list()
+      end)
+
+    transactions
+  end
+
+  defp set_extra_data(trx) do
+    Process.sleep(2000)
+    Map.put(trx, :description, "customer #{trx.customer} made a purchase at #{trx.pos}")
+  end
+
   @doc """
   Gets a single transaction.
 

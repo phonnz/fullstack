@@ -8,6 +8,7 @@ defmodule Fullstack.Blog.Post do
     field :title, :string
     field :content, :string
     belongs_to :author, Fullstack.Accounts.User
+
     timestamps()
   end
 
