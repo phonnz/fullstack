@@ -7,6 +7,7 @@ defmodule Fullstack.Financial do
   alias Fullstack.Repo
 
   alias Fullstack.Financial.Pos
+  alias Fullstack.Customers
 
   @doc """
   Returns the list of poss.
@@ -36,6 +37,11 @@ defmodule Fullstack.Financial do
 
   """
   def get_pos!(id), do: Repo.get!(Pos, id)
+
+  def random_pos_id() do
+    Repo.all(from p in Pos, select: p.id)
+    |> Enum.random()
+  end
 
   @doc """
   Creates a pos.
@@ -132,6 +138,19 @@ defmodule Fullstack.Financial do
 
   """
   def get_transaction!(id), do: Repo.get!(Transaction, id)
+
+  def trx_gen() do
+    new_trx =
+      %{
+        customer_id: Customers.random_customer_id(),
+        pos_id: random_pos_id()
+      }
+      |> IO.inspect()
+
+    %Transaction{}
+    |> Transaction.changeset(new_trx)
+    |> Repo.insert()
+  end
 
   @doc """
   Creates a transaction.

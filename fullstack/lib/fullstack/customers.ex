@@ -37,9 +37,24 @@ defmodule Fullstack.Customers do
   """
   def get_customer!(id), do: Repo.get!(Customer, id)
 
-  @doc """
-  Creates a customer.
+  def random_customer_id do
+    Repo.all(from c in Customer, select: c.id)
+    |> Enum.random()
+  end
 
+  def gen() do
+    new_id =
+      Repo.aggregate(Customer, :count, :id) + 1
+
+    create_customer(%{
+      full_name: "user-#{new_id}",
+      email: "user-#{new_id}@email.com"
+    })
+  end
+
+  @doc """
+
+  Creates a customer.
   ## Examples
 
       iex> create_customer(%{field: value})

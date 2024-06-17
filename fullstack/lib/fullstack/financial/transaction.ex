@@ -1,13 +1,15 @@
 defmodule Fullstack.Financial.Transaction do
   use Ecto.Schema
   import Ecto.Changeset
+  alias Fullstack.Customers.Customer
+  alias Fullstack.Financial.Pos
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "transactions" do
-    field :amount, :integer
-    field :customer_id, :binary_id
-    field :post_id, :binary_id
+    field :amount, :integer, default: 0
+    belongs_to :customer, Customer
+    belongs_to :pos, Pos
 
     timestamps()
   end
@@ -15,7 +17,9 @@ defmodule Fullstack.Financial.Transaction do
   @doc false
   def changeset(transaction, attrs) do
     transaction
-    |> cast(attrs, [:amount])
-    |> validate_required([:amount])
+    |> cast(attrs, [:amount, :customer_id, :pos_id])
+    ## |> cast_assoc(:customer_id)
+    ## |> cast_assoc(:pos_id)
+    |> validate_required([:amount, :customer_id, :pos_id])
   end
 end
