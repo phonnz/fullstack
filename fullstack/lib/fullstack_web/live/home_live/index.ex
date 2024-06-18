@@ -1,11 +1,17 @@
 defmodule FullstackWeb.HomeLive.Index do
+  alias Fullstack.Financial
   use Phoenix.LiveView
+
+  alias Fullstack.Customers
+  alias Fullstack.Financial
 
   @impl true
   def mount(_params, _, socket) do
     socket =
       socket
       |> assign(:feature, random_feature())
+      |> assign(:transactions_count, transactions_count())
+      |> assign(:customers_count, customers_count())
       |> assign(:counter, 0)
 
     {:ok, socket}
@@ -39,4 +45,6 @@ defmodule FullstackWeb.HomeLive.Index do
   end
 
   defp random_feature(), do: "real-time"
+  defp transactions_count(), do: Financial.transactions_count()
+  defp customers_count(), do: Customers.customers_count()
 end

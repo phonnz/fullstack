@@ -7,6 +7,7 @@ defmodule Fullstack.Customers do
   alias Fullstack.Repo
 
   alias Fullstack.Customers.Customer
+  def customers_count, do: Repo.aggregate(Customer, :count, :id)
 
   @doc """
   Returns the list of customers.

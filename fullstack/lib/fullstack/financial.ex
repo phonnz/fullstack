@@ -109,6 +109,7 @@ defmodule Fullstack.Financial do
   end
 
   alias Fullstack.Financial.Transaction
+  def transactions_count, do: Repo.aggregate(Transaction, :count, :id)
 
   @doc """
   Returns the list of transactions.
@@ -176,6 +177,7 @@ defmodule Fullstack.Financial do
         customer_id: Customers.random_customer_id(),
         pos_id: random_pos_id()
       }
+      |> IO.inspect()
 
     %Transaction{}
     |> Transaction.changeset(new_trx)
