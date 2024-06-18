@@ -39,8 +39,14 @@ defmodule Fullstack.Financial do
   def get_pos!(id), do: Repo.get!(Pos, id)
 
   def random_pos_id() do
-    Repo.all(from p in Pos, select: p.id)
-    |> Enum.random()
+    case Repo.all(from p in Pos, select: p.id) do
+      [] ->
+        {:ok, pos} = create_pos(%{name: "Main central point of sales"})
+        pos.id
+
+      poss ->
+        Enum.random(poss)
+    end
   end
 
   @doc """
