@@ -183,7 +183,6 @@ defmodule Fullstack.Financial do
         customer_id: Customers.random_customer_id(),
         pos_id: random_pos_id()
       }
-      |> IO.inspect()
 
     %Transaction{}
     |> Transaction.changeset(new_trx)
