@@ -9,7 +9,7 @@ defmodule Firmware.ServerLink do
     restart: :temporary
 
   require Logger
-  @endpoint "ws://127.0.0.1:4000/socket/websocket?"
+  @endpoint "ws://192.168.1.203:4000/socket/websocket?"
   @mac_addr "e4:5f:01:a1:aa:76"
   @main_topic "group:main"
   @topic "group:#{String.replace(@mac_addr, ":", "")}"
@@ -17,7 +17,7 @@ defmodule Firmware.ServerLink do
 
   def start(), do: start_link(%{})
   def start_ping, do: send(self(), :start_ping)
-  def get_state(pid), do: GenServer.call(self(), :get_state)
+  def get_state(_pid), do: GenServer.call(self(), :get_state)
 
   def disconnect() do
     IO.puts("trying to disconnect")
@@ -31,7 +31,7 @@ defmodule Firmware.ServerLink do
 
   @impl Slipstream
   def init(config) do
-    IO.inspect(config, label: :CONFIG)
+    Logger.info(config)
 
     opts = [
       uri: "#{@endpoint}mac_addr=#{@mac_addr}",
@@ -39,11 +39,18 @@ defmodule Firmware.ServerLink do
       rejoin_after_msec: [1_000, 3_000, 5_000, 10_000]
     ]
 
-    {:ok, connect!(opts)}
+    socket = connect!(opts)
+    Logger.info(" #{inspect(socket)}")
+
+    Process.flag(:trap_exit, true)
+
+    {:ok, socket}
   end
 
   @impl Slipstream
   def handle_connect(socket) do
+    Logger.info("#{inspect(socket.assigns)}")
+    IO.inspect(connected?(socket), label: :connection_status)
     {:ok, join(socket, @main_topic, %{:join_message => "This is a joinning message"})}
   end
 
@@ -63,10 +70,16 @@ defmodule Firmware.ServerLink do
 
   @impl Slipstream
   def handle_info(:start_ping, socket) do
-    IO.inspect("Start ping")
-    timer = :timer.send_interval(10_000, self(), :ping_server)
-    IO.inspect(timer, label: :TIMER)
-    {:noreply, assign(socket, :ping_timer, timer)}
+    case connected?(socket) do
+      true ->
+        timer = :timer.send_interval(10_000, self(), :ping_server)
+        IO.inspect(timer, label: :TIMER)
+        {:noreply, assign(socket, :ping_timer, timer)}
+
+      false ->
+        IO.puts("Ping not available due socket conn down")
+        :timer.send_after(self(), :start_ping, 1_000)
+    end
   end
 
   @impl Slipstream
@@ -115,8 +128,13 @@ defmodule Firmware.ServerLink do
 
   @impl Slipstream
   def handle_disconnect(_reason, socket) do
-    :timer.cancel(socket.assigns.ping_timer)
+    case reconnect(socket) do
+      {:ok, socket} ->
+        {:ok, socket}
 
-    {:stop, :normal, socket}
+      {:error, reason} ->
+        if Map.has_key?(socket.assigns, :timer), do: :timer.cancel(socket.assigns.ping_timer)
+        {:stop, reason, socket}
+    end
   end
 end

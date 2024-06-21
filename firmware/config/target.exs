@@ -54,8 +54,22 @@ config :vintage_net,
        type: VintageNetEthernet,
        ipv4: %{method: :dhcp}
      }},
-    {"wlan0", %{type: VintageNetWiFi}}
+    {"wlan0",
+     %{
+       type: VintageNetWiFi,
+       vintage_net_wifi: %{
+         key_mgmt: :wpa_psk,
+         mode: :infrastructure,
+         ssid: System.get_env("SSID") || raise("No environment variable SSID provided for wifi"),
+         psk: System.get_env("PSK") || raise("No environment variable PSK provided for wifi")
+       },
+       ipv4: %{method: :dhcp}
+     }}
   ]
+
+hostname =
+  System.get_env("HOSTNAME") ||
+    raise("Missing environment variable HOSTNAME")
 
 config :mdns_lite,
   # The `hosts` key specifies what hostnames mdns_lite advertises.  `:hostname`
@@ -66,7 +80,7 @@ config :mdns_lite,
   # because otherwise any of the devices may respond to nerves.local leading to
   # unpredictable behavior.
 
-  hosts: [:hostname, "nerves"],
+  hosts: [:hostname, hostname],
   ttl: 120,
 
   # Advertise the following services over mDNS.
