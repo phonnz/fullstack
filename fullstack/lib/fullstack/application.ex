@@ -17,9 +17,9 @@ defmodule Fullstack.Application do
       # Start Finch
       {Finch, name: Fullstack.Finch},
       # Start the Endpoint (http/https)
-      FullstackWeb.Endpoint,
-            {Fullstack.Servers.Generators.Customers, []},
-{Fullstack.Servers.Generators.Transactions, []}
+      FullstackWeb.Endpoint
+      ## {Fullstack.Servers.Generators.Customers, []},
+      ## {Fullstack.Servers.Generators.Transactions, []}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

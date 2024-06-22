@@ -6,28 +6,32 @@ defmodule FullstackWeb.HomeLive.Index do
   alias Fullstack.Financial
 
   @impl true
-  def mount(_params, _, socket) do
+  def mount(params, _, socket) do
+    IO.inspect(params, label: :PARAMS)
+
     socket =
       socket
       |> assign(:feature, random_feature())
       |> assign(:transactions_count, transactions_count())
       |> assign(:customers_count, customers_count())
       |> assign(:counter, 0)
+      |> assign(:arcade, params["arcade"])
 
     {:ok, socket}
   end
 
   @impl true
   def handle_params(params, _uri, socket) do
-    IO.inspect(params, label: :PARAMS)
+    IO.inspect(params, label: :handel_params)
 
-    case Map.fetch(params, "short_url") do
-      {:ok, _url} ->
-        {:noreply, redirect(socket, to: "/")}
-
-      :error ->
-        {:noreply, socket}
+    if Map.has_key?(params, :arcade) do
+      socket =
+        socket
+        |> put_flash(:warning, "Validating User for Device #{params.arcade}")
+        |> put_flash(:info, "Calling Arcade #{params.arcade}")
     end
+
+    {:noreply, socket}
   end
 
   @impl true
