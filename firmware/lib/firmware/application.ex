@@ -16,6 +16,7 @@ defmodule Firmware.Application do
         # Children for all targets
         # Starts a worker by calling: Firmware.Worker.start_link(arg)
         # {Firmware.Worker, arg},
+        {Firmware.ServerLink, []}
       ] ++ children(target())
 
     Supervisor.start_link(children, opts)
@@ -26,7 +27,7 @@ defmodule Firmware.Application do
     [
       # Children that only run on the host
       # Starts a worker by calling: Firmware.Worker.start_link(arg)
-      {Firmware.ServerLink, []}
+      {Firmware.Counter, []}
     ]
   end
 
@@ -34,8 +35,7 @@ defmodule Firmware.Application do
     [
       # Children for all targets except host
       # Starts a worker by calling: Firmware.Worker.start_link(arg)
-      {Firmware.Counter, []},
-      {Firmware.ServerLink, []}
+      # {ScrollHat.Display, []}
     ]
   end
 

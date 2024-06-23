@@ -2,13 +2,13 @@ defmodule Firmware.ServerLink do
   @moduledoc """
   A socket client for connecting to that other Phoenix server
 
-  Periodically sends pings and asks the other server for its metrics.
   """
-
   use Slipstream,
     restart: :temporary
 
   require Logger
+  alias Firmware.Control
+
   @endpoint "ws://192.168.1.203:4000/socket/websocket?"
   @mac_addr "e4:5f:01:a1:aa:76"
   @main_topic "group:main"
@@ -39,12 +39,7 @@ defmodule Firmware.ServerLink do
       rejoin_after_msec: [1_000, 3_000, 5_000, 10_000]
     ]
 
-    socket = connect!(opts)
-    Logger.info(" #{inspect(socket)}")
-
-    Process.flag(:trap_exit, true)
-
-    {:ok, socket}
+    {:ok, connect!(opts)}
   end
 
   @impl Slipstream
@@ -117,10 +112,17 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
-  def handle_message(@topic, event, message, socket) do
+  def handle_message(@topic, "action", payload, socket) do
+    Control.exec(payload)
+
+    {:ok, socket}
+  end
+
+  @impl Slipstream
+  def handle_message(topic, event, message, socket) do
     Logger.error(
       "Was not expecting a push from the server. Heard: " <>
-        inspect({@topic, event, message})
+        inspect({topic, event, message})
     )
 
     {:ok, socket}
