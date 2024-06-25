@@ -102,6 +102,33 @@ config :mdns_lite,
     }
   ]
 
+config :firmware, :viewport, %{
+  name: :main_viewport,
+  default_scene: {Firmware.Scene.Main, nil},
+  # Match these to your display
+  size: {128, 128},
+  opts: [scale: 1.0],
+  drivers: [
+    %{
+      module: Scenic.Driver.Nerves.Waveshare,
+      opts: [
+        device_sku: :sku138191,
+        # :color18bit (default) | :color16bit | :color12bit
+        color_depth: :color18bit,
+        # :rgb | :bgr (default)
+        color_order: :bgr,
+        # :l2r_u2d | :l2r_d2u | :r2l_u2d | :r2l_d2u | :u2d_l2r | :u2d_r2l (default) | :d2u_l2r | :d2u_r2l
+        scan_dir: :u2d_r2l,
+        # :ppm | :rgb24 (default) | :rgb565 | :mono | :mono_column_scan
+        capture_format: :rgb24,
+        refresh_interval: 50,
+        spi_speed_hz: 40_000_000
+      ],
+      name: :waveshare
+    }
+  ]
+}
+
 # Import target specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 # Uncomment to use target specific configurations

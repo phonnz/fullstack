@@ -32,10 +32,14 @@ defmodule Firmware.Application do
   end
 
   def children(_target) do
+    main_viewport_config = Application.get_env(:firmware, :viewport)
+
     [
       # Children for all targets except host
       # Starts a worker by calling: Firmware.Worker.start_link(arg)
-      # {ScrollHat.Display, []}
+      #      {ScrollHat.Display, [brightness: 5]}
+
+      {Scenic, viewports: [main_viewport_config]}
     ]
   end
 
