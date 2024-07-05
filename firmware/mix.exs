@@ -46,7 +46,7 @@ defmodule Firmware.MixProject do
       {:shoehorn, "~> 0.9.1"},
       {:ring_logger, "~> 0.10.0"},
       {:toolshed, "~> 0.3.0"},
-      {:circuits_gpio, "~> 1.0"},
+      {:circuits_gpio, "~> 0.4"},
       {:circuits_uart, "~> 1.3"},
       {:httpoison, "~> 2.0"},
 
@@ -55,7 +55,7 @@ defmodule Firmware.MixProject do
       {:hackney, "~> 1.9"},
       # optional dependency
       {:sweet_xml, "~> 0.7.3"},
-
+      {:lcd_display, "0.2.0"},
       # SQLite
       {:exqlite, "~> 0.13"},
       {:uuid, "~> 1.1"},
