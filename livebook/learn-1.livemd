@@ -1,0 +1,217 @@
+# Learn Elixir
+
+## Numbers
+
+
+
+```elixir
+[
+  # Integer
+  10,
+  # hex
+  0x0A,
+  # float
+  10.0
+]
+```
+
+## Atoms
+
+Atoms are constants which value is the name
+`:value`
+
+```elixir
+[
+  :happy,
+  :this_is_an_atom,
+  :"this as well",
+  :"45"
+]
+```
+
+#### WARNING!
+
+Atoms stored in memory
+
+**Don't create atoms dynamically!**
+
+```elixir
+## NO Dont!!!
+String.to_atom("this a string ")
+```
+
+## Strings & Charlist
+
+```elixir
+"This is a string"
+```
+
+```elixir
+"UTF-8? Com certça meu!"
+```
+
+Interpolations
+
+```elixir
+my_value = 10_008_000
+"This an interpolated value #{inspect(my_value)}"
+```
+
+**Please don't abuse of this tip**
+
+```elixir
+my_value = [10_008_000, :a, "s"]
+"This an inspected value #{inspect(my_value)}"
+```
+
+```elixir
+char_list = ~c"This is a charlist"
+```
+
+ASCII
+
+```elixir
+?x
+```
+
+Actually String are binaries
+
+```elixir
+<<120, 121, 122>>
+```
+
+And Charlist exactly lists of chars
+
+```elixir
+[120, 121, 122]
+```
+
+```elixir
+[120, 121, 122] == "xyz"
+```
+
+```elixir
+[120, 121, 122] == ~c"xyz"
+```
+
+```elixir
+<<97, 98, 99>> <> <<120, 121, 122>>
+```
+
+```elixir
+multi_line_string =
+  """
+    this is a
+    multiline
+    string,
+    really?
+  """
+```
+
+```elixir
+IO.puts(multi_line_string)
+IO.puts(char_list)
+```
+
+Responses from functions
+
+* {:ok, value}
+
+* :error
+
+* {:error, :not_found}
+
+## Tuples
+
+```elixir
+my_tuple = {"a", :b, 2}
+```
+
+```elixir
+elem(my_tuple, 1)
+```
+
+Remember about this tuple {:ok, [123,890]}
+
+## Lists
+
+```elixir
+my_list = [5, 6, 7]
+```
+
+```elixir
+Enum.into(1..20, [])
+```
+
+```elixir
+for x <- 1..10, do: x
+```
+
+Lists are prepend linked list,
+so think always to prepend the new item and
+user recursion for the entire list
+
+<!-- livebook:{"break_markdown":true} -->
+
+<!-- Learn more at https://mermaid-js.github.io/mermaid -->
+
+```mermaid
+graph LR;
+A-->B;
+B-->C;
+C-->D;
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+
+
+```elixir
+[head | tail] = my_list
+IO.puts("This a head: #{head}")
+IO.inspect(tail, label: :Tail)
+my_list
+```
+
+<!-- Learn more at https://mermaid-js.github.io/mermaid -->
+
+```mermaid
+graph LR;
+  id1((This is a new itme))-->A;
+A-->B;
+B-->C;
+C-->D;
+```
+
+```elixir
+new_value = 10
+[new_value | my_list]
+```
+
+That's the reason concatenate a list & an item won't work
+
+```elixir
+my_list ++ new_value
+```
+
+You need to wrap it in a new list
+
+```elixir
+my_list ++ [new_value]
+```
+
+With a large amount of data in lists you will see the performace difference
+
+```elixir
+big_list = Enum.into(1..100_000_000, [])
+```
+
+Prepending the `big_list` will require to scroll all the values to connect the tail with the head of `my_list`
+
+```elixir
+big_list ++ my_list
+```
+
+```elixir
+[1, 2, 3, 4, 5, 6, 7, 8, 9] ++ big_list
+```
