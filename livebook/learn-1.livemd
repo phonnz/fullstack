@@ -15,6 +15,10 @@
 
 **Please don't write this ugly code**
 
+*embrace immutability, adopt trasnforming structs*
+
+_use pipe operator_ `|>`
+
 ```elixir
 step_1 = (1 + 2 - 1) * 4 / 2
 step_2 = div(round(step_1), 4)
@@ -138,7 +142,75 @@ my_tuple = {"a", :b, 2}
 elem(my_tuple, 1)
 ```
 
-Remember about this tuple {:ok, [123,890]}
+Remember about this tuple {:ok, [value_1, value_2]}
+
+## Maps (key-value)
+
+**WARNING: avoid to mix key types**
+
+```elixir
+my_map =
+  %{
+    "this is a key" => :this_is_a_value,
+    :"atom key" => 789,
+    :embedded_map => %{:key => "value"},
+    another_key: "This is a value as well"
+  }
+```
+
+```elixir
+Map.fetch(my_map, "this is a key")
+```
+
+```elixir
+Map.fetch!(my_map, :"atom key")
+```
+
+```elixir
+Map.take(my_map, [:another_key, :embedded_map, :new_key])
+```
+
+```elixir
+Map.get(my_map, :some_inexistent_key, "default value if not exists")
+```
+
+```elixir
+Map.get(my_map, :embedded_map)
+```
+
+```elixir
+get_in(my_map, [:embedded_map, :key])
+```
+
+```elixir
+Map.put(my_map, :new_key, 1000)
+```
+
+At this moment just accept a function can be writen like
+
+```
+fn value -> some_process(value) end
+```
+
+```elixir
+Map.update!(my_map, :"atom key", fn value -> value * 2 end)
+```
+
+```elixir
+Map.update(my_map, :new_key, 5000, fn value -> value * 2 end)
+```
+
+```elixir
+my_map.another_key
+```
+
+```elixir
+my_map["this is a key"]
+```
+
+```elixir
+put_in(my_map, [:embedded_map, :another_key], "amazing_value")
+```
 
 ## Lists
 
@@ -197,6 +269,10 @@ new_value = 10
 [new_value | my_list]
 ```
 
+Just remember for the future getting a Head and Tail with that syntax is because of pattern matching
+
+<!-- livebook:{"break_markdown":true} -->
+
 That's the reason concatenate a list & an item won't work
 
 ```elixir
@@ -225,19 +301,49 @@ big_list ++ my_list
 [1, 2, 3, 4, 5, 6, 7, 8, 9] ++ big_list
 ```
 
+```elixir
+List.first(my_list)
+```
+
+```elixir
+List.last(big_list)
+```
+
+```elixir
+Enum.each(my_list, fn value -> IO.puts(value) end)
+```
+
+```elixir
+Enum.count(my_list)
+```
+
+```elixir
+Enum.empty?(my_list)
+```
+
+```elixir
+Enum.all?(my_list, fn value -> rem(value, 2) > 0 end)
+```
+
+```elixir
+Enum.all?(my_list, fn value -> value > 0 end)
+```
+
 ## Pipe Operator
 
 ```elixir
 initial = 1
 
 initial
-|> Kernel.+(1)
+|> Kernel.+(2)
+|> Kernel.+(-1)
 |> Kernel.*(2)
-|> Kernel./(4)
-|> IO.inspect(label: :first_result)
+|> Kernel./(2)
+|> IO.inspect(label: :first_result_as_float)
+|> round()
+|> div(2)
+|> IO.inspect(label: :second_result_as_integer)
 |> Kernel.*(4)
-|> trunc
-|> IO.inspect(label: :trunc_integer)
 |> rem(3)
 ```
 
@@ -250,5 +356,3 @@ Transaction
 |> maybe_discount
 |> compute_total_amount
 ```
-
-## Section
