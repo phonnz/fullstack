@@ -2,8 +2,6 @@
 
 ## Numbers
 
-
-
 ```elixir
 [
   # Integer
@@ -13,6 +11,15 @@
   # float
   10.0
 ]
+```
+
+**Please don't write this ugly code**
+
+```elixir
+step_1 = (1 + 2 - 1) * 4 / 2
+step_2 = div(round(step_1), 4)
+step_3 = step_2 * 4
+result = rem(step_3, 3)
 ```
 
 ## Atoms
@@ -147,12 +154,6 @@ Enum.into(1..20, [])
 for x <- 1..10, do: x
 ```
 
-Lists are prepend linked list,
-so think always to prepend the new item and
-user recursion for the entire list
-
-<!-- livebook:{"break_markdown":true} -->
-
 <!-- Learn more at https://mermaid-js.github.io/mermaid -->
 
 ```mermaid
@@ -172,6 +173,14 @@ IO.puts("This a head: #{head}")
 IO.inspect(tail, label: :Tail)
 my_list
 ```
+
+Lists are prepend linked list,
+so think always to prepend the new item and
+user recursion for the entire list
+
+**remember this for pipe operator*
+
+<!-- livebook:{"break_markdown":true} -->
 
 <!-- Learn more at https://mermaid-js.github.io/mermaid -->
 
@@ -215,3 +224,31 @@ big_list ++ my_list
 ```elixir
 [1, 2, 3, 4, 5, 6, 7, 8, 9] ++ big_list
 ```
+
+## Pipe Operator
+
+```elixir
+initial = 1
+
+initial
+|> Kernel.+(1)
+|> Kernel.*(2)
+|> Kernel./(4)
+|> IO.inspect(label: :first_result)
+|> Kernel.*(4)
+|> trunc
+|> IO.inspect(label: :trunc_integer)
+|> rem(3)
+```
+
+what we build in real life with pipelines tents to abstract data processes and make the code readable for humans.
+
+```
+Transaction
+|> find_the_customer
+|> get_average_ticket_amount
+|> maybe_discount
+|> compute_total_amount
+```
+
+## Section
