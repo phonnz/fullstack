@@ -22,7 +22,7 @@ defmodule Firmware.MixProject do
       app: @app,
       version: @version,
       elixir: "~> 1.11",
-      archives: [nerves_bootstrap: "~> 1.11"],
+      archives: [nerves_bootstrap: "~> 1.13"],
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       releases: [{@app, release()}],
@@ -49,14 +49,9 @@ defmodule Firmware.MixProject do
       {:circuits_gpio, "~> 0.4"},
       {:circuits_uart, "~> 1.3"},
       {:httpoison, "~> 2.0"},
-
-      # AWS S3
       {:ex_aws_s3, "~> 2.0"},
       {:hackney, "~> 1.9"},
-      # optional dependency
       {:sweet_xml, "~> 0.7.3"},
-      {:lcd_display, "0.2.0"},
-      # SQLite
       {:exqlite, "~> 0.13"},
       {:uuid, "~> 1.1"},
       {:muontrap, "~> 1.0"},
@@ -64,11 +59,12 @@ defmodule Firmware.MixProject do
       {:jason, "~> 1.2"},
       {:castore, "~> 0.1.0"},
       {:json, "~> 1.4"},
-      {:yaml_elixir, "~> 2.9.0"},
+      {:lcd_display, "0.2.0"},
       # Allow Nerves.Runtime on host to support development, testing and CI.
       # See config/host.exs for usage.
       {:nerves_runtime, "~> 0.13.0"},
       {:scroll_hat, "~> 0.2.2"},
+      {:zbar, "~> 0.2.1"},
       # Dependencies for all targets except :host
       {:nerves_pack, "~> 0.7.0", targets: @all_targets},
 
@@ -77,17 +73,15 @@ defmodule Firmware.MixProject do
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
       # version updates, please review their release notes in case
       # changes to your application are needed.
-      {:nerves_system_rpi, "~> 1.19", runtime: false, targets: :rpi},
-      {:nerves_system_rpi0, "~> 1.19", runtime: false, targets: :rpi0},
-      {:nerves_system_rpi2, "~> 1.19", runtime: false, targets: :rpi2},
-      {:nerves_system_rpi3, "~> 1.19", runtime: false, targets: :rpi3},
-      {:nerves_system_rpi3a, "~> 1.19", runtime: false, targets: :rpi3a},
-      {:nerves_system_rpi4, "~> 1.19", runtime: false, targets: :rpi4},
-      {:nerves_system_bbb, "~> 2.14", runtime: false, targets: :bbb},
-      {:nerves_system_osd32mp1, "~> 0.10", runtime: false, targets: :osd32mp1},
-      {:nerves_system_x86_64, "~> 1.19", runtime: false, targets: :x86_64},
-      {:nerves_system_grisp2, "~> 0.3", runtime: false, targets: :grisp2},
-      {:nerves_system_mangopi_mq_pro, "~> 0.4", runtime: false, targets: :mangopi_mq_pro}
+      ##     {:nerves_system_rpi0, "~> 1.19", runtime: false, targets: :rpi0},
+      {:custom_rpi0,
+       runtime: false,
+       path: "../../../nerves/custom_rpi0",
+       targets: :rpi0,
+       override: true,
+       nerves: [compile: true]},
+      ## {:nerves_system_rpi4, "~> 1.19", runtime: false, targets: :rpi4},
+      {:nerves_system_x86_64, "~> 1.27.1", runtime: false, targets: :x86_64}
     ]
   end
 
