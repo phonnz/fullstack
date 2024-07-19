@@ -12,6 +12,7 @@ config :fullstack, Fullstack.Repo,
   timeout: 20_000,
   pool_timeout: 20_000
 
+port = String.to_integer(System.get_env("PORT") || "4000")
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #
@@ -29,6 +30,13 @@ config :fullstack, FullstackWeb.Endpoint,
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:default, ~w(--watch)]}
+  ]
+
+config :libcluster,
+  topologies: [
+    fullstack: [
+      strategy: Cluster.Strategy.Gossip
+    ]
   ]
 
 # ## SSL Support

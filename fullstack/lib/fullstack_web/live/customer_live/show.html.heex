@@ -15,7 +15,12 @@
 
 <.back navigate={~p"/customers"}>Back to customers</.back>
 
-<.modal :if={@live_action == :edit} id="customer-modal" show on_cancel={JS.patch(~p"/customers/#{@customer}")}>
+<.modal
+  :if={@live_action == :edit}
+  id="customer-modal"
+  show
+  on_cancel={JS.patch(~p"/customers/#{@customer}")}
+>
   <.live_component
     module={FullstackWeb.CustomerLive.FormComponent}
     id={@customer.id}

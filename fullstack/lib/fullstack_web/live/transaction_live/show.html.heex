@@ -14,7 +14,12 @@
 
 <.back navigate={~p"/transactions"}>Back to transactions</.back>
 
-<.modal :if={@live_action == :edit} id="transaction-modal" show on_cancel={JS.patch(~p"/transactions/#{@transaction}")}>
+<.modal
+  :if={@live_action == :edit}
+  id="transaction-modal"
+  show
+  on_cancel={JS.patch(~p"/transactions/#{@transaction}")}
+>
   <.live_component
     module={FullstackWeb.TransactionLive.FormComponent}
     id={@transaction.id}

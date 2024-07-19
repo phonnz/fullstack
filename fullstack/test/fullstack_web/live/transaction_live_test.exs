@@ -69,7 +69,10 @@ defmodule FullstackWeb.TransactionLiveTest do
     test "deletes transaction in listing", %{conn: conn, transaction: transaction} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-      assert index_live |> element("#transactions-#{transaction.id} a", "Delete") |> render_click()
+      assert index_live
+             |> element("#transactions-#{transaction.id} a", "Delete")
+             |> render_click()
+
       refute has_element?(index_live, "#transactions-#{transaction.id}")
     end
   end

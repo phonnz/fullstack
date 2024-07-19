@@ -32,6 +32,7 @@ defmodule FullstackWeb.PostLive.FormComponent do
   @impl true
   def update(%{post: post} = assigns, socket) do
     changeset = Blog.change_post(post)
+
     {:ok,
      socket
      |> assign(assigns)
@@ -49,7 +50,7 @@ defmodule FullstackWeb.PostLive.FormComponent do
   end
 
   def handle_event("save", %{"post" => post_params}, socket) do
-   post_params = Map.put(post_params,  "author_id", socket.assigns.author_id)
+    post_params = Map.put(post_params, "author_id", socket.assigns.author_id)
     save_post(socket, socket.assigns.action, post_params)
   end
 

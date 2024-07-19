@@ -4,8 +4,16 @@ defmodule FullstackWeb.DeviceLiveTest do
   import Phoenix.LiveViewTest
   import Fullstack.DevicesFixtures
 
-  @create_attrs %{enabled: true, wlan_mac_address: "some wlan_mac_address", eth_mac_address: "some eth_mac_address"}
-  @update_attrs %{enabled: false, wlan_mac_address: "some updated wlan_mac_address", eth_mac_address: "some updated eth_mac_address"}
+  @create_attrs %{
+    enabled: true,
+    wlan_mac_address: "some wlan_mac_address",
+    eth_mac_address: "some eth_mac_address"
+  }
+  @update_attrs %{
+    enabled: false,
+    wlan_mac_address: "some updated wlan_mac_address",
+    eth_mac_address: "some updated eth_mac_address"
+  }
   @invalid_attrs %{enabled: false, wlan_mac_address: nil, eth_mac_address: nil}
 
   defp create_device(_) do

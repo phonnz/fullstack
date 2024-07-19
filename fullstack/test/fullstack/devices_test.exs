@@ -21,7 +21,11 @@ defmodule Fullstack.DevicesTest do
     end
 
     test "create_device/1 with valid data creates a device" do
-      valid_attrs = %{enabled: true, wlan_mac_address: "some wlan_mac_address", eth_mac_address: "some eth_mac_address"}
+      valid_attrs = %{
+        enabled: true,
+        wlan_mac_address: "some wlan_mac_address",
+        eth_mac_address: "some eth_mac_address"
+      }
 
       assert {:ok, %Device{} = device} = Devices.create_device(valid_attrs)
       assert device.enabled == true
@@ -35,7 +39,12 @@ defmodule Fullstack.DevicesTest do
 
     test "update_device/2 with valid data updates the device" do
       device = device_fixture()
-      update_attrs = %{enabled: false, wlan_mac_address: "some updated wlan_mac_address", eth_mac_address: "some updated eth_mac_address"}
+
+      update_attrs = %{
+        enabled: false,
+        wlan_mac_address: "some updated wlan_mac_address",
+        eth_mac_address: "some updated eth_mac_address"
+      }
 
       assert {:ok, %Device{} = device} = Devices.update_device(device, update_attrs)
       assert device.enabled == false

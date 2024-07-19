@@ -1,15 +1,31 @@
 defmodule FullstackWeb.GroupChannel do
   use FullstackWeb, :channel
+  alias FullstackWeb.Presence
+  #  intercept(["user_joined"])
 
   @impl true
   def join("group:main", payload, socket) do
     IO.inspect(payload, label: :payload)
+    IO.inspect(socket.assigns, label: :join_assigns)
 
-    if authorized?(payload) do
+    if authorized?(socket.assigns) do
+      send(self(), :after_join)
       {:ok, socket}
     else
       {:error, %{reason: "unauthorized"}}
     end
+  end
+
+  @impl true
+  def handle_info(:after_join, socket) do
+    {:ok, _} =
+      Presence.track(socket, socket.assigns.mac_addr, %{
+        online_at: inspect(System.system_time(:second)),
+        mac_addr: socket.assigns.mac_addr
+      })
+
+    push(socket, "presence_state", Presence.list(socket))
+    {:noreply, socket}
   end
 
   # Channels can be used in a request/response fashion
@@ -29,7 +45,8 @@ defmodule FullstackWeb.GroupChannel do
   end
 
   # Add authorization logic here as required.
-  defp authorized?(payload) do
+  defp authorized?(%{:mac_addr => _macc_adrr} = payload) do
+    IO.inspect(payload, label: :authorizing)
     true
   end
 end

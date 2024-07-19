@@ -38,6 +38,11 @@ defmodule FullstackWeb.MainSocket do
     {:ok, assign(socket, :mac_addr, mac_addr)}
   end
 
+  @impl true
+  def connect(_params, socket, _connect_info) do
+    {:ok, assign(socket, :mac_addr, "00:00:00:00:00:00")}
+  end
+
   # Socket id's are topics that allow you to identify all sockets for a given user:
   #
   #     def id(socket), do: "user_socket:#{socket.assigns.user_id}"

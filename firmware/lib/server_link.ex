@@ -15,7 +15,7 @@ defmodule Firmware.ServerLink do
   @topic "group:#{String.replace(@mac_addr, ":", "")}"
   @interval for x <- 500..60_000//500, do: x
 
-  def start(), do: start_link(%{})
+  def start(args), do: Slipstream.start_link(__MODULE__, args, name: __MODULE__)
   def start_ping, do: send(self(), :start_ping)
   def get_state(_pid), do: GenServer.call(self(), :get_state)
 
@@ -34,12 +34,18 @@ defmodule Firmware.ServerLink do
     Logger.info(config)
 
     opts = [
-      uri: "#{@endpoint}mac_addr=#{@mac_addr}",
+      uri: host_uri,
       reconnect_after_msec: [1_000, 5_000, 10_000],
       rejoin_after_msec: [1_000, 3_000, 5_000, 10_000]
     ]
 
-    {:ok, connect!(opts)}
+    socket =
+      connect!(opts)
+      |> assign(:port, port)
+      |> assign(:vending_id, mac_addr)
+      |> assign(:mac_addr, mac_addr)
+
+    {:ok, socket}
   end
 
   @impl Slipstream
@@ -49,17 +55,18 @@ defmodule Firmware.ServerLink do
     {:ok, join(socket, @main_topic, %{:join_message => "This is a joinning message"})}
   end
 
+  @impl Slipstream
   def handle_call(:get_state, _from, state) do
     {:reply, state, state}
   end
 
   @impl Slipstream
-  def handle_join(@main_topic, join_response, socket) do
+  def handle_join(@topic, join_response, socket) do
     Logger.info("Join_response => #{inspect(join_response)}")
     # an asynchronous push with no reply:
     #    push(socket, @topic, "handshake", %{:hello => :world})
-    something = send(self(), :start_ping)
-    IO.inspect("sent interval #{inspect(something)}")
+    ## something = send(self(), :start_ping)
+    ## IO.inspect("sent interval #{inspect(something)}")
     {:ok, socket}
   end
 
@@ -87,10 +94,17 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
+  def handle_info({:error, reason}, socket) do
+    Logger.error("Info error #{inspect(reason)}")
+
+    {:noreply, socket}
+  end
+
+  @impl Slipstream
   def handle_info(:disconnect, socket) do
-    IO.inspect("Discotnecct")
-    result = :timer.cancel(socket.assigns.ping_timer)
-    IO.inspect(result, label: :RESULT)
+    IO.inspect("Disconect")
+    ## result = :timer.cancel(socket.assigns.ping_timer)
+    ## IO.inspect(result, label: :RESULT)
 
     {:ok, socket} =
       socket
