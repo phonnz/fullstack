@@ -20,9 +20,8 @@ defmodule Fullstack.Application do
       {Finch, name: Fullstack.Finch},
       # Start the Endpoint (http/https)
       FullstackWeb.Endpoint,
-      FullstackWeb.Presence
-      # Start a worker by calling: Fullstack.Worker.start_link(arg)
-      # {Fullstack.Worker, arg}
+      FullstackWeb.Presence,
+      Fullstack.Servers.OperationsSupervisor
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
