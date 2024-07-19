@@ -6,16 +6,9 @@
         <div class="">
           <div class="flex flex-col items-center justify-center">
             <div class="p-12 sm:flex sm:justify-center sm:mt-24 lg:justify-start">
-              <img class="w8" src="/assets/1.png" />
+              <img class="" src="/assets/img/logo.svg" />
             </div>
 
-            <div class="p-12 sm:flex sm:justify-center sm:mt-24 lg:justify-start">
-              <img class="w-4" src="/assets/img/logo.svg" />
-            </div>
-
-            <div class="p-12 sm:flex sm:justify-center sm:mt-24 lg:justify-start">
-              <img class="8" src="/assets/2.png" />
-            </div>
             <a
               class="inline-flex px-1 py-1 gap-x-2 rounded-xl border border-gray-400 border-2 hover:border-orange-500 items-center text-sm font-semibold text-gray-600 space-x-1"
               href="#"
@@ -72,8 +65,8 @@
           </div>
         </div>
       </div>
-      <div class="mt-16 ml-6 sm:mt-24 lg:mt-0 lg:col-span-5">
-        <p class="text-base ml-12 text-gray-600 sm:text-xl lg:text-lg xl:text-xl">
+      <div class="pt-16 mt-16 ml-6 sm:mt-24 lg:mt-0 lg:col-span-5">
+        <p class="text-base mt-16 ml-12 text-gray-600 sm:text-xl lg:text-lg xl:text-xl">
           This is a simple demo of Phoenix Liveview capabilities
         </p>
         <div class="mt-12 ml-8">
@@ -93,7 +86,10 @@
                       -
                     </span>
                     <%= @counter %>
-                    <span class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full">
+                    <span
+                      phx-click={:inc}
+                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full"
+                    >
                       +
                     </span>
                   </p>
