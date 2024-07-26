@@ -32,7 +32,6 @@ defmodule Fullstack.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:libcluster, "~> 3.3"},
       {:bcrypt_elixir, "~> 3.0"},
       {:phoenix, "~> 1.7.12"},
       {:phoenix_ecto, "~> 4.4"},
@@ -47,6 +46,7 @@ defmodule Fullstack.MixProject do
       {:tailwind, "~> 0.2.0", runtime: Mix.env() == :dev},
       {:heroicons, "~> 0.5.0", [env: :prod, hex: "heroicons", repo: "hexpm", optional: false]},
       {:swoosh, "~> 1.3"},
+      {:libcluster, "~> 3.3.3"},
       {:finch, "~> 0.13"},
       {:telemetry_metrics, "~> 0.6"},
       {:telemetry_poller, "~> 1.0"},

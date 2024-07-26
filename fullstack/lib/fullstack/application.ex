@@ -21,8 +21,8 @@ defmodule Fullstack.Application do
       # Start the Endpoint (http/https)
       FullstackWeb.Endpoint,
       FullstackWeb.Presence,
-      {Fullstack.Servers.Generators.Customers, []},
-      {Fullstack.Servers.Generators.Transactions, []},
+      #{Fullstack.Servers.Generators.Customers, []},
+      #{Fullstack.Servers.Generators.Transactions, []},
       Fullstack.Servers.OperationsSupervisor
     ]
 
