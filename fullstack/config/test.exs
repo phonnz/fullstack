@@ -19,9 +19,16 @@ config :fullstack, Fullstack.Repo,
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :fullstack, FullstackWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4002],
+  http: [ip: {127, 0, 0, 1}, port: 4000],
   secret_key_base: "Ht7b80Z4M/i3pYxj1jkNme51b64wzsaVXt7ZByYS4F9VoVKDLwCOZfdrXwpITCNV",
   server: false
+
+config :libcluster,
+  topologies: [
+    fullstack: [
+      strategy: Cluster.Strategy.Gossip
+    ]
+  ]
 
 # In test we don't send emails.
 config :fullstack, Fullstack.Mailer, adapter: Swoosh.Adapters.Test
