@@ -21,6 +21,7 @@ defmodule FullstackWeb.Router do
     pipe_through :browser
 
     ## get "/", PageController, :home
+    live "/chat", ChatLive
     live "/home/:arcade", HomeLive.Index, :index
     live "/", HomeLive.Index, :index
 
