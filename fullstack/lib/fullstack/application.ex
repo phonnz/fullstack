@@ -8,8 +8,8 @@ defmodule Fullstack.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      {Cluster.Supervisor,
-       [Application.get_env(:libcluster, :topologies), [name: Fullstack.ClusterSupervisor]]},
+      # {Cluster.Supervisor,
+      # [Application.get_env(:libcluster, :topologies), [name: Fullstack.ClusterSupervisor]]},
       # Start the Telemetry supervisor
       FullstackWeb.Telemetry,
       # Start the Ecto repository
@@ -21,8 +21,8 @@ defmodule Fullstack.Application do
       # Start the Endpoint (http/https)
       FullstackWeb.Endpoint,
       FullstackWeb.Presence,
-      # {Fullstack.Servers.Generators.Customers, []},
-      # {Fullstack.Servers.Generators.Transactions, []},
+      {Fullstack.Servers.Generators.Customers, []},
+      {Fullstack.Servers.Generators.Transactions, []},
       Fullstack.Servers.OperationsSupervisor
     ]
 
