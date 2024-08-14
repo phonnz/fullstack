@@ -1,8 +1,9 @@
 defmodule FullstackWeb.ChatLive do
   use FullstackWeb, :live_view
+  @cache :chat
 
   @impl true
-  def mount(params, session, socket) do
+  def mount(_params, session, socket) do
     if connected?(socket) do
       FullstackWeb.Endpoint.subscribe("chat")
     end
@@ -41,11 +42,13 @@ defmodule FullstackWeb.ChatLive do
     """
   end
 
+  @impl true
   def handle_info(%{event: "new_message", payload: income_message}, socket) do
     {:noreply, assign(socket, messages: [income_message])}
   end
 
-  def handle_event("save", %{"form" => %{"message" => message}} = params, socket) do
+  @impl true
+  def handle_event("save", %{"form" => %{"message" => message}}, socket) do
     new_message = %{
       id: :rand.uniform(100),
       from: socket.assigns.tmp_id,
@@ -53,6 +56,7 @@ defmodule FullstackWeb.ChatLive do
     }
 
     FullstackWeb.Endpoint.broadcast("chat", "new_message", new_message)
+    save_message(new_message)
 
     {:noreply,
      assign(socket, :messages, [new_message])
@@ -60,7 +64,17 @@ defmodule FullstackWeb.ChatLive do
   end
 
   def load_messages() do
-    [%{id: :rand.uniform(100), from: "Fullstack", text: "Hi!"}]
+    messages =
+      case Cachex.get(@cache, "chat") do
+        {:ok, messages} when is_list(messages) ->
+          Enum.reverse(messages)
+
+        {:ok, nil} ->
+          Cachex.put(@cache, "chat", [])
+          []
+      end
+
+    [%{id: :rand.uniform(100), from: "Fullstack", text: "Welcome!"} | messages]
   end
 
   defp get_form(params, action \\ :subimt) do
@@ -77,5 +91,14 @@ defmodule FullstackWeb.ChatLive do
     {data, types}
     |> Ecto.Changeset.cast(params, Map.keys(types))
     |> Ecto.Changeset.validate_required([:question])
+  end
+
+  defp save_message(message) do
+    Cachex.transaction!(@cache, ["chat"], fn cache ->
+      {:ok, previous_msg} = Cachex.get(cache, "chat")
+      messages = [message | previous_msg] |> Enum.take(11)
+      Cachex.put!(cache, "chat", messages)
+      messages
+    end)
   end
 end
