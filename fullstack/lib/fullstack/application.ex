@@ -12,17 +12,14 @@ defmodule Fullstack.Application do
       # [Application.get_env(:libcluster, :topologies), [name: Fullstack.ClusterSupervisor]]},
       # Start the Telemetry supervisor
       FullstackWeb.Telemetry,
-      # Start the Ecto repository
       Fullstack.Repo,
-      # Start the PubSub system
       {Phoenix.PubSub, name: Fullstack.PubSub},
-      # Start Finch
       {Finch, name: Fullstack.Finch},
-      # Start the Endpoint (http/https)
       FullstackWeb.Endpoint,
       FullstackWeb.Presence,
       {Fullstack.Servers.Generators.Customers, []},
       {Fullstack.Servers.Generators.Transactions, []},
+      {Cachex, [name: :chat]},
       Fullstack.Servers.OperationsSupervisor
     ]
 
