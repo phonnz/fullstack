@@ -6,6 +6,7 @@
 
 # General application configuration
 import Config
+config :fullstack, env: Mix.env()
 
 config :fullstack,
   ecto_repos: [Fullstack.Repo],

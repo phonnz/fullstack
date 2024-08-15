@@ -7,26 +7,36 @@ defmodule Fullstack.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      # {Cluster.Supervisor,
-      # [Application.get_env(:libcluster, :topologies), [name: Fullstack.ClusterSupervisor]]},
-      # Start the Telemetry supervisor
-      FullstackWeb.Telemetry,
-      Fullstack.Repo,
-      {Phoenix.PubSub, name: Fullstack.PubSub},
-      {Finch, name: Fullstack.Finch},
-      FullstackWeb.Endpoint,
-      FullstackWeb.Presence,
-      {Fullstack.Servers.Generators.Customers, []},
-      {Fullstack.Servers.Generators.Transactions, []},
-      {Cachex, [name: :chat]},
-      Fullstack.Servers.OperationsSupervisor
-    ]
+    children =
+      [
+        # {Cluster.Supervisor,
+        # [Application.get_env(:libcluster, :topologies), [name: Fullstack.ClusterSupervisor]]},
+        # Start the Telemetry supervisor
+        FullstackWeb.Telemetry,
+        Fullstack.Repo,
+        {Phoenix.PubSub, name: Fullstack.PubSub},
+        {Finch, name: Fullstack.Finch},
+        FullstackWeb.Endpoint,
+        FullstackWeb.Presence,
+        {Cachex, [name: :chat]},
+        Fullstack.Servers.OperationsSupervisor
+      ] ++ prod_child()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Fullstack.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp prod_child() do
+    if Application.get_env(:fullstack, :env) == :prod do
+      [
+        {Fullstack.Servers.Generators.Transactions, []},
+        {Fullstack.Servers.Generators.Customers, []}
+      ]
+    else
+      []
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration
