@@ -13,12 +13,11 @@ defmodule FullstackWeb.ChatLive do
       socket
       |> assign(:text_value, nil)
       |> assign(:tmp_id, tmp_id(session))
-      |> assign(:form, to_form(%{"message" => ""}, as: :form ))
+      |> assign(:form, to_form(%{"message" => ""}, as: :form))
       |> assign(:messages, load_messages()),
       temporary_assigns: [messages: []]
     }
   end
-
 
   @impl true
   def render(assigns) do
@@ -35,17 +34,23 @@ defmodule FullstackWeb.ChatLive do
       </section>
       <section class="">
         <.simple_form for={@form} phx-change="change" phx-submit="save">
-          <.input field={@form[:message]} value={@text_value} phx-mounted={JS.focus()} placeholder="Say something!" />
-            </.simple_form>
+          <.input
+            field={@form[:message]}
+            value={@text_value}
+            phx-mounted={JS.focus()}
+            placeholder="Say something!"
+          />
+        </.simple_form>
       </section>
     </div>
     """
   end
 
-  @impl true 
+  @impl true
   def handle_params(params, _uri, socket) do
     {:noreply, socket}
   end
+
   @impl true
   def handle_info(%{event: "new_message", payload: income_message}, socket) do
     {:noreply, assign(socket, messages: [income_message])}
@@ -53,9 +58,10 @@ defmodule FullstackWeb.ChatLive do
 
   @impl true
   def handle_event("change", %{"form" => %{"message" => value}}, socket) do
-  socket = assign(socket, :text_value, value)
-  {:noreply, socket}
-end
+    socket = assign(socket, :text_value, value)
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_event("save", %{"form" => %{"message" => message}}, socket) do
     new_message = %{
@@ -64,16 +70,14 @@ end
       text: message
     }
 
-      new_message
-      |> save_message
-      |> broadcast_message
-
+    new_message
+    |> save_message
+    |> broadcast_message
 
     {:noreply,
-      socket
+     socket
      |> assign(:messages, [new_message])
-     |> assign(:text_value, nil)
-    }
+     |> assign(:text_value, nil)}
   end
 
   def message_line(%{message: %{from: "Fullstack"}} = assigns) do
@@ -85,14 +89,21 @@ end
   def message_line(assigns) do
     ~H"""
     <span class="bg-slate-100 text-gray p-2">
-      <%= assigns.message.from %>: <%= assigns.message.text %>
+      <%= assigns.message.from %>:
     </span>
+    <%= assigns.message.text %>
     """
   end
 
   defp tmp_id(%{"_csrf_token" => token}) do
-        tmpid = token |>  String.downcase() |> String.slice(1..14)
-    broadcast_message( %{id: :rand.uniform(100), from: "Fullstack", text: "#{tmpid} joined the room!"})
+    tmpid = token |> String.downcase() |> String.slice(1..14)
+
+    broadcast_message(%{
+      id: :rand.uniform(100),
+      from: "Fullstack",
+      text: "#{tmpid} joined the room!"
+    })
+
     tmpid
   end
 
@@ -100,17 +111,17 @@ end
 
   defp broadcast_message(message) do
     FullstackWeb.Endpoint.broadcast("chat", "new_message", message)
-    end
+  end
 
   def load_messages() do
-      case Cachex.get(@cache, "chat") do
-        {:ok, messages} when is_list(messages) ->
-          Enum.reverse(messages)
+    case Cachex.get(@cache, "chat") do
+      {:ok, messages} when is_list(messages) ->
+        Enum.reverse(messages)
 
-        {:ok, nil} ->
-          Cachex.put(@cache, "chat", [])
-          []
-      end
+      {:ok, nil} ->
+        Cachex.put(@cache, "chat", [])
+        []
+    end
   end
 
   defp get_form(params, action \\ :subimt) do
@@ -131,18 +142,21 @@ end
 
   defp save_message(message) do
     Cachex.transaction!(@cache, ["chat"], fn cache ->
-messages = case Cachex.get(cache, "chat") do
-        {:ok, previous_msg} when is_list(previous_msg) ->
-          [message | Enum.reverse(previous_msg)]
+      messages =
+        case Cachex.get(cache, "chat") do
+          {:ok, previous_msg} when is_list(previous_msg) ->
+            [message | Enum.reverse(previous_msg)]
 
-        {:ok, nil} ->
-          Cachex.put(@cache, "chat", [])
-          []
-      end
-         |> Enum.take(11)
+          {:ok, nil} ->
+            Cachex.put(@cache, "chat", [])
+            []
+        end
+        |> Enum.take(11)
+
       Cachex.put!(cache, "chat", messages)
       :ok
     end)
+
     message
   end
 end
