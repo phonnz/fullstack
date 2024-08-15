@@ -17,6 +17,7 @@ defmodule Fullstack.Application do
         {Phoenix.PubSub, name: Fullstack.PubSub},
         {Finch, name: Fullstack.Finch},
         FullstackWeb.Endpoint,
+        FullstackWeb.ChatPresence,
         FullstackWeb.Presence,
         {Cachex, [name: :chat]},
         Fullstack.Servers.OperationsSupervisor

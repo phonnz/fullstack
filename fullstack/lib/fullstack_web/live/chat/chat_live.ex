@@ -1,11 +1,14 @@
 defmodule FullstackWeb.ChatLive do
+  alias Phoenix.Presence
   use FullstackWeb, :live_view
+  alias FullstackWeb.ChatPresence, as: Presence
   @cache :chat
 
   @impl true
   def mount(_params, session, socket) do
     if connected?(socket) do
       FullstackWeb.Endpoint.subscribe("chat")
+      Phoenix.PubSub.subscribe(Fullstack.PubSub, "chat:presence")
     end
 
     {
@@ -14,7 +17,8 @@ defmodule FullstackWeb.ChatLive do
       |> assign(:text_value, nil)
       |> assign(:tmp_id, tmp_id(session))
       |> assign(:form, to_form(%{"message" => ""}, as: :form))
-      |> assign(:messages, load_messages()),
+      |> assign(:messages, load_messages())
+      |> assign(:users_count, get_users_count()),
       temporary_assigns: [messages: []]
     }
   end
@@ -42,6 +46,7 @@ defmodule FullstackWeb.ChatLive do
           />
         </.simple_form>
       </section>
+      <span><%= @users_count %> users connected</span>
     </div>
     """
   end
@@ -54,6 +59,11 @@ defmodule FullstackWeb.ChatLive do
   @impl true
   def handle_info(%{event: "new_message", payload: income_message}, socket) do
     {:noreply, assign(socket, messages: [income_message])}
+  end
+
+  @impl true
+  def handle_info(%{event: "presence_diff", payload: payload}, socket) do
+    {:noreply, assign(socket, :users_count, get_users_count())}
   end
 
   @impl true
@@ -98,6 +108,11 @@ defmodule FullstackWeb.ChatLive do
   defp tmp_id(%{"_csrf_token" => token}) do
     tmpid = token |> String.downcase() |> String.slice(1..14)
 
+    Presence.track(self(), "chat:presence", "main", %{
+      tmp_id: tmpid,
+      online_at: DateTime.utc_now()
+    })
+
     broadcast_message(%{
       id: :rand.uniform(100),
       from: "Fullstack",
@@ -121,6 +136,16 @@ defmodule FullstackWeb.ChatLive do
       {:ok, nil} ->
         Cachex.put(@cache, "chat", [])
         []
+    end
+  end
+
+  defp get_users_count do
+    case Presence.list("chat:presence") do
+      %{"main" => %{metas: items}} ->
+        Enum.count(items)
+
+      _other ->
+        0
     end
   end
 
