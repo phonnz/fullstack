@@ -8,17 +8,17 @@ defmodule FullstackWeb.ChatLive do
       FullstackWeb.Endpoint.subscribe("chat")
     end
 
-    tmp_id = session |> Map.get("_csrf_token") |> String.downcase() |> String.slice(1..12)
-
     {
       :ok,
       socket
-      |> assign(:tmp_id, tmp_id)
-      |> assign(:form, to_form(%{"message" => ""}, as: :form))
+      |> assign(:text_value, nil)
+      |> assign(:tmp_id, tmp_id(session))
+      |> assign(:form, to_form(%{"message" => ""}, as: :form ))
       |> assign(:messages, load_messages()),
       temporary_assigns: [messages: []]
     }
   end
+
 
   @impl true
   def render(assigns) do
@@ -30,23 +30,32 @@ defmodule FullstackWeb.ChatLive do
       </.header>
       <section phx-update="append" id="messages-list">
         <p :for={message <- @messages} id={"m-#{message.id}"} class="border p-4 italic rounded-lg">
-          <span class="bg-slate-100 text-gray p-2"><%= message.from %>:</span> <%= message.text %>
+          <.message_line message={message}></.message_line>
         </p>
       </section>
       <section class="">
-        <.simple_form for={@form} phx-submit="save">
-          <.input field={@form[:message]} placeholder="Say something!" />
-        </.simple_form>
+        <.simple_form for={@form} phx-change="change" phx-submit="save">
+          <.input field={@form[:message]} value={@text_value} phx-mounted={JS.focus()} placeholder="Say something!" />
+            </.simple_form>
       </section>
     </div>
     """
   end
 
+  @impl true 
+  def handle_params(params, _uri, socket) do
+    {:noreply, socket}
+  end
   @impl true
   def handle_info(%{event: "new_message", payload: income_message}, socket) do
     {:noreply, assign(socket, messages: [income_message])}
   end
 
+  @impl true
+  def handle_event("change", %{"form" => %{"message" => value}}, socket) do
+  socket = assign(socket, :text_value, value)
+  {:noreply, socket}
+end
   @impl true
   def handle_event("save", %{"form" => %{"message" => message}}, socket) do
     new_message = %{
@@ -55,16 +64,45 @@ defmodule FullstackWeb.ChatLive do
       text: message
     }
 
-    FullstackWeb.Endpoint.broadcast("chat", "new_message", new_message)
-    save_message(new_message)
+      new_message
+      |> save_message
+      |> broadcast_message
+
 
     {:noreply,
-     assign(socket, :messages, [new_message])
-     |> assign(:form, to_form(%{"message" => ""}, as: :form))}
+      socket
+     |> assign(:messages, [new_message])
+     |> assign(:text_value, nil)
+    }
   end
 
+  def message_line(%{message: %{from: "Fullstack"}} = assigns) do
+    ~H"""
+    <span class="bg-slate-100 text-gray p-2"><%= assigns.message.text %></span>
+    """
+  end
+
+  def message_line(assigns) do
+    ~H"""
+    <span class="bg-slate-100 text-gray p-2">
+      <%= assigns.message.from %>: <%= assigns.message.text %>
+    </span>
+    """
+  end
+
+  defp tmp_id(%{"_csrf_token" => token}) do
+        tmpid = token |>  String.downcase() |> String.slice(1..14)
+    broadcast_message( %{id: :rand.uniform(100), from: "Fullstack", text: "#{tmpid} joined the room!"})
+    tmpid
+  end
+
+  defp tmp_id(_session), do: nil
+
+  defp broadcast_message(message) do
+    FullstackWeb.Endpoint.broadcast("chat", "new_message", message)
+    end
+
   def load_messages() do
-    messages =
       case Cachex.get(@cache, "chat") do
         {:ok, messages} when is_list(messages) ->
           Enum.reverse(messages)
@@ -73,8 +111,6 @@ defmodule FullstackWeb.ChatLive do
           Cachex.put(@cache, "chat", [])
           []
       end
-
-    [%{id: :rand.uniform(100), from: "Fullstack", text: "Welcome!"} | messages]
   end
 
   defp get_form(params, action \\ :subimt) do
@@ -95,10 +131,18 @@ defmodule FullstackWeb.ChatLive do
 
   defp save_message(message) do
     Cachex.transaction!(@cache, ["chat"], fn cache ->
-      {:ok, previous_msg} = Cachex.get(cache, "chat")
-      messages = [message | previous_msg] |> Enum.take(11)
+messages = case Cachex.get(cache, "chat") do
+        {:ok, previous_msg} when is_list(previous_msg) ->
+          [message | Enum.reverse(previous_msg)]
+
+        {:ok, nil} ->
+          Cachex.put(@cache, "chat", [])
+          []
+      end
+         |> Enum.take(11)
       Cachex.put!(cache, "chat", messages)
-      messages
+      :ok
     end)
+    message
   end
 end
