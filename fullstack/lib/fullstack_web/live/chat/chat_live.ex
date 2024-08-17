@@ -18,7 +18,7 @@ defmodule FullstackWeb.ChatLive do
       |> assign(:tmp_id, tmp_id(session))
       |> assign(:form, to_form(%{"message" => ""}, as: :form))
       |> assign(:messages, load_messages())
-      |> assign(:users_count, get_users_count()),
+      |> set_users_count(),
       temporary_assigns: [messages: []]
     }
   end
@@ -46,13 +46,15 @@ defmodule FullstackWeb.ChatLive do
           />
         </.simple_form>
       </section>
-      <span><%= @users_count %> users connected</span>
+      <span class="text-gray-500">
+        <%= @users_count %> users with <%= @connections %> connections
+      </span>
     </div>
     """
   end
 
   @impl true
-  def handle_params(params, _uri, socket) do
+  def handle_params(_params, _uri, socket) do
     {:noreply, socket}
   end
 
@@ -63,7 +65,14 @@ defmodule FullstackWeb.ChatLive do
 
   @impl true
   def handle_info(%{event: "presence_diff", payload: payload}, socket) do
-    {:noreply, assign(socket, :users_count, get_users_count())}
+    socket =
+      socket
+      |> handle_joins(payload)
+      |> handle_leaves(payload)
+      |> handle_typing(payload)
+      |> set_users_count()
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -90,6 +99,12 @@ defmodule FullstackWeb.ChatLive do
      |> assign(:text_value, nil)}
   end
 
+  def message_line(%{message: %{from: sender}, tmp_id: me} = assigns) when sender == me do
+    ~H"""
+    <span class="bg-slate-400 text-gray-500 p-2 right"><%= assigns.message.text %></span>
+    """
+  end
+
   def message_line(%{message: %{from: "Fullstack"}} = assigns) do
     ~H"""
     <span class="bg-slate-100 text-gray p-2"><%= assigns.message.text %></span>
@@ -113,12 +128,6 @@ defmodule FullstackWeb.ChatLive do
       online_at: DateTime.utc_now()
     })
 
-    broadcast_message(%{
-      id: :rand.uniform(100),
-      from: "Fullstack",
-      text: "#{tmpid} joined the room!"
-    })
-
     tmpid
   end
 
@@ -139,14 +148,25 @@ defmodule FullstackWeb.ChatLive do
     end
   end
 
-  defp get_users_count do
+  defp set_users_count(socket) do
     case Presence.list("chat:presence") do
       %{"main" => %{metas: items}} ->
-        Enum.count(items)
+        socket
+        |> assign(:connections, Enum.count(items))
+        |> assign(:users_count, find_uniq_users(items))
 
       _other ->
-        0
+        socket
+        |> assign(:users_count, 0)
+        |> assign(:connections, 0)
     end
+  end
+
+  defp find_uniq_users(items) do
+    items
+    |> Enum.map(& &1.tmp_id)
+    |> Enum.uniq()
+    |> Enum.count()
   end
 
   defp get_form(params, action \\ :subimt) do
@@ -183,5 +203,59 @@ defmodule FullstackWeb.ChatLive do
     end)
 
     message
+  end
+
+  defp find_from_diff(payload, list) do
+    case Map.get(payload, list) do
+      joins when joins == %{} ->
+        []
+
+      joins when is_map(joins) ->
+        joins
+        |> get_in(["main", :metas])
+        |> Enum.map(& &1.tmp_id)
+    end
+  end
+
+  defp handle_joins(socket, payload) do
+    joins = find_from_diff(payload, :joins)
+
+    messages =
+      socket.assigns.messages ++
+        Enum.map(
+          joins,
+          &%{
+            id: :rand.uniform(100),
+            from: "Fullstack",
+            text: "#{&1} joined the room!"
+          }
+        )
+
+    assign(socket, :messages, messages)
+  end
+
+  defp handle_leaves(socket, payload) do
+    joins = find_from_diff(payload, :leaves)
+
+    messages =
+      socket.assigns.messages ++
+        Enum.map(
+          joins,
+          &%{
+            id: :rand.uniform(100),
+            from: "Fullstack",
+            text: "#{&1} left the room!"
+          }
+        )
+
+    assign(socket, :messages, messages)
+  end
+
+  defp handle_count(socket, payload) do
+    set_users_count(socket)
+  end
+
+  defp handle_typing(socket, payload) do
+    socket
   end
 end
