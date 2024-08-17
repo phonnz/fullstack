@@ -1,8 +1,7 @@
 name: Deploying
 on: 
   push:
-    branches:
-      - main
+    branches: ["main"]
 
 env: 
   FLY_API_TOKEN: ${{ secrets.FLYIO_API_TOKEN}}
@@ -13,10 +12,11 @@ jobs:
     name: Deploy Fullsatack
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
-      - working-directory: fullstack
+    - uses: actions/checkout@v4
+    - uses: superfly/flyctl-actions/setup-flyctl@master
+    - name: Deploy
+      run: flyctl deploy --remote-only
+      working-directory: fullstack
 
 
 
