@@ -17,6 +17,7 @@ defmodule FullstackWeb.ChatLive do
       |> assign(:text_value, nil)
       |> assign(:tmp_id, tmp_id(session))
       |> assign(:form, to_form(%{"message" => ""}, as: :form))
+      |> assign(:typing, false)
       |> assign(:messages, load_messages())
       |> set_users_count(),
       temporary_assigns: [messages: []]
@@ -26,17 +27,37 @@ defmodule FullstackWeb.ChatLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-4">
+    <div class="h-screen flex-1">
       <.header>
-        Hooah! This is your identifier:
-        <span class="bg-slate-200 p-2 rounded-sm"><%= assigns.tmp_id %></span>
+        Hooah!<br/> This is your identifier:
+        <span class="bg-slate-200 p-2 rounded-lg"><%= assigns.tmp_id %></span>
       </.header>
-      <section phx-update="append" id="messages-list">
-        <p :for={message <- @messages} id={"m-#{message.id}"} class="border p-4 italic rounded-lg">
-          <.message_line message={message}></.message_line>
-        </p>
-      </section>
-      <section class="">
+      <div class="h-2/3 max-h-2/3 pt-8 pb-4" style="-ms-overflow-style: none;scrollbar-width:none">
+        <div
+          class="h-full "
+          style="overflow: scroll;  max-height: 100%;  display: flex;  flex-direction: column-reverse;"
+        >
+          <div
+          phx-update="append"
+          id="messages"
+          class="height:500px;width: 100%;  color: #001f3f;  background: #3D9970;padding: 5px"
+        >
+          <div
+            :for={message <- @messages}
+            id={"m-#{message.id}"}
+            class={"flex mb-4 " <> if message.from == @tmp_id, do: "justify-end", else: ""}
+          >
+            <.message_line message={message} tmp_id={@tmp_id}></.message_line>
+          </div>
+        </div>
+
+        </div>
+      </div>
+      <section class="fixed bottom-0 left-0 right-0 w-full p-4">
+        <span class="text-gray-500">
+          <%= @users_count %> users with <%= @connections %> connections
+        </span>
+        <span class="text-gray-500"></span>
         <.simple_form for={@form} phx-change="change" phx-submit="save">
           <.input
             field={@form[:message]}
@@ -46,15 +67,12 @@ defmodule FullstackWeb.ChatLive do
           />
         </.simple_form>
       </section>
-      <span class="text-gray-500">
-        <%= @users_count %> users with <%= @connections %> connections
-      </span>
     </div>
     """
   end
 
   @impl true
-  def handle_params(_params, _uri, socket) do
+  def handle_params(params, _uri, socket) do
     {:noreply, socket}
   end
 
@@ -65,6 +83,7 @@ defmodule FullstackWeb.ChatLive do
 
   @impl true
   def handle_info(%{event: "presence_diff", payload: payload}, socket) do
+
     socket =
       socket
       |> handle_joins(payload)
@@ -77,7 +96,13 @@ defmodule FullstackWeb.ChatLive do
 
   @impl true
   def handle_event("change", %{"form" => %{"message" => value}}, socket) do
-    socket = assign(socket, :text_value, value)
+    typing = if value == "", do: false, else: true
+
+    socket =
+      socket
+      |> assign(:typing, typing)
+      |> assign(:text_value, value)
+
     {:noreply, socket}
   end
 
@@ -101,22 +126,34 @@ defmodule FullstackWeb.ChatLive do
 
   def message_line(%{message: %{from: sender}, tmp_id: me} = assigns) when sender == me do
     ~H"""
-    <span class="bg-slate-400 text-gray-500 p-2 right"><%= assigns.message.text %></span>
+    <div class="flex justify-end mb-4 cursor-pointer">
+      <div class="flex max-w-40 bg-indigo-500 text-white rounded-lg p-3 gap-3">
+        <p class="text-white"><%= assigns.message.text %></p>
+      </div>
+    </div>
     """
   end
 
   def message_line(%{message: %{from: "Fullstack"}} = assigns) do
     ~H"""
-    <span class="bg-slate-100 text-gray p-2"><%= assigns.message.text %></span>
+    <div class="flex mb-4 cursor-pointer">
+      <div class="flex max-w-96 bg-white rounded-lg p-3 gap-3">
+        <p class="bg-slate-100 text-gray p-2"><%= assigns.message.text %></p>
+      </div>
+    </div>
     """
   end
 
   def message_line(assigns) do
     ~H"""
-    <span class="bg-slate-100 text-gray p-2">
-      <%= assigns.message.from %>:
-    </span>
-    <%= assigns.message.text %>
+    <div class="flex mb-4 cursor-pointer">
+      <div class="max-w-2/3 rounded-lg flex items-center justify-center px-2 mr-2 bg-slate-400 text-gray-700">
+        <%= assigns.message.from %>:
+      </div>
+      <div class="flex max-w-96 bg-white rounded-lg p-3 gap-3">
+        <p class="text-gray-700"><%= assigns.message.text %></p>
+      </div>
+    </div>
     """
   end
 
