@@ -17,9 +17,9 @@ defmodule FullstackWeb.ChatLive do
       |> assign(:text_value, nil)
       |> assign(:tmp_id, tmp_id(session))
       |> assign(:form, to_form(%{"message" => ""}, as: :form))
-      |> assign(:typing, false)
+      |> assign(:typing_users, [])
       |> assign(:messages, load_messages())
-      |> set_users_count(),
+      |> set_users_state(),
       temporary_assigns: [messages: []]
     }
   end
@@ -29,7 +29,7 @@ defmodule FullstackWeb.ChatLive do
     ~H"""
     <div class="h-screen flex-1">
       <.header>
-        Hooah!<br/> This is your identifier:
+        Hooah!<br /> This is your identifier:
         <span class="bg-slate-200 p-2 rounded-lg"><%= assigns.tmp_id %></span>
       </.header>
       <div class="h-2/3 max-h-2/3 pt-8 pb-4" style="-ms-overflow-style: none;scrollbar-width:none">
@@ -38,25 +38,27 @@ defmodule FullstackWeb.ChatLive do
           style="overflow: scroll;  max-height: 100%;  display: flex;  flex-direction: column-reverse;"
         >
           <div
-          phx-update="append"
-          id="messages"
-          class="height:500px;width: 100%;  color: #001f3f;  background: #3D9970;padding: 5px"
-        >
-          <div
-            :for={message <- @messages}
-            id={"m-#{message.id}"}
-            class={"flex mb-4 " <> if message.from == @tmp_id, do: "justify-end", else: ""}
+            phx-update="append"
+            id="messages"
+            class="height:500px;width: 100%;  color: #001f3f;  background: #3D9970;padding: 5px"
           >
-            <.message_line message={message} tmp_id={@tmp_id}></.message_line>
+            <div
+              :for={message <- @messages}
+              id={"m-#{message.id}"}
+              class={"flex mb-4 " <> if message.from == @tmp_id, do: "justify-end", else: ""}
+            >
+              <.message_line message={message} tmp_id={@tmp_id}></.message_line>
+            </div>
           </div>
-        </div>
-
         </div>
       </div>
       <section class="fixed bottom-0 left-0 right-0 w-full p-4">
-        <span class="text-gray-500">
+        <p class="text-gray-500">
           <%= @users_count %> users with <%= @connections %> connections
-        </span>
+        </p>
+        <p class="text-gray-500">
+          <%= @typing_users %> typing...
+        </p>
         <span class="text-gray-500"></span>
         <.simple_form for={@form} phx-change="change" phx-submit="save">
           <.input
@@ -83,13 +85,10 @@ defmodule FullstackWeb.ChatLive do
 
   @impl true
   def handle_info(%{event: "presence_diff", payload: payload}, socket) do
-
     socket =
       socket
       |> handle_joins(payload)
-      |> handle_leaves(payload)
-      |> handle_typing(payload)
-      |> set_users_count()
+      |> set_users_state()
 
     {:noreply, socket}
   end
@@ -97,6 +96,10 @@ defmodule FullstackWeb.ChatLive do
   @impl true
   def handle_event("change", %{"form" => %{"message" => value}}, socket) do
     typing = if value == "", do: false, else: true
+
+    Presence.update(self(), "chat:presence", socket.assigns.tmp_id, %{
+      typing: typing
+    })
 
     socket =
       socket
@@ -117,6 +120,10 @@ defmodule FullstackWeb.ChatLive do
     new_message
     |> save_message
     |> broadcast_message
+
+    Presence.update(self(), "chat:presence", socket.assigns.tmp_id, %{
+      typing: false 
+    })
 
     {:noreply,
      socket
@@ -158,20 +165,23 @@ defmodule FullstackWeb.ChatLive do
   end
 
   defp tmp_id(%{"_csrf_token" => token}) do
-    tmpid = token |> String.downcase() |> String.slice(1..14)
+    tmp_id = token |> String.downcase() |> String.slice(1..14)
 
-    Presence.track(self(), "chat:presence", "main", %{
-      tmp_id: tmpid,
-      online_at: DateTime.utc_now()
+    Presence.track(self(), "chat:presence", tmp_id, %{
+      typing: false
     })
 
-    tmpid
+    tmp_id
   end
 
   defp tmp_id(_session), do: nil
 
   defp broadcast_message(message) do
     FullstackWeb.Endpoint.broadcast("chat", "new_message", message)
+  end
+
+  defp broadcast_typing(user) do
+    FullstackWeb.Endpoint.broadcast("chat", "typing_user", user)
   end
 
   def load_messages() do
@@ -185,23 +195,22 @@ defmodule FullstackWeb.ChatLive do
     end
   end
 
-  defp set_users_count(socket) do
-    case Presence.list("chat:presence") do
-      %{"main" => %{metas: items}} ->
-        socket
-        |> assign(:connections, Enum.count(items))
-        |> assign(:users_count, find_uniq_users(items))
+  defp set_users_state(socket) do
+    users = Presence.list("chat:presence")
 
-      _other ->
-        socket
-        |> assign(:users_count, 0)
-        |> assign(:connections, 0)
-    end
+    socket
+    |> assign(:connections, count_total_connections(users))
+    |> assign(:users_count, find_uniq_users(users))
+    |> assign(:typing_users, find_typing_users(users))
+  end
+
+  defp count_total_connections(users) do
+    Enum.reduce(users, 0, fn {user, value}, connections -> Enum.count(value.metas) + connections end)
   end
 
   defp find_uniq_users(items) do
     items
-    |> Enum.map(& &1.tmp_id)
+    |> Map.keys()
     |> Enum.uniq()
     |> Enum.count()
   end
@@ -242,18 +251,6 @@ defmodule FullstackWeb.ChatLive do
     message
   end
 
-  defp find_from_diff(payload, list) do
-    case Map.get(payload, list) do
-      joins when joins == %{} ->
-        []
-
-      joins when is_map(joins) ->
-        joins
-        |> get_in(["main", :metas])
-        |> Enum.map(& &1.tmp_id)
-    end
-  end
-
   defp handle_joins(socket, payload) do
     joins = find_from_diff(payload, :joins)
 
@@ -264,35 +261,32 @@ defmodule FullstackWeb.ChatLive do
           &%{
             id: :rand.uniform(100),
             from: "Fullstack",
-            text: "#{&1} joined the room!"
+            text: "#{&1} joined the chat!"
           }
         )
 
     assign(socket, :messages, messages)
   end
 
-  defp handle_leaves(socket, payload) do
-    joins = find_from_diff(payload, :leaves)
-
-    messages =
-      socket.assigns.messages ++
-        Enum.map(
-          joins,
-          &%{
-            id: :rand.uniform(100),
-            from: "Fullstack",
-            text: "#{&1} left the room!"
-          }
-        )
-
-    assign(socket, :messages, messages)
+  defp find_typing_users(connections) do
+    connections
+    |> Enum.filter(fn {_k, v} ->
+      %{metas: [%{typing: typing} | _]} = v
+      typing == true
+    end)
+    |> Enum.into(%{})
+    |> Map.keys()
+    |> Enum.uniq()
+    |> Enum.join(", ")
   end
 
-  defp handle_count(socket, payload) do
-    set_users_count(socket)
-  end
+  defp find_from_diff(payload, list) do
+    case Map.get(payload, list) do
+      joins when joins == %{} ->
+        joins
 
-  defp handle_typing(socket, payload) do
-    socket
+      joins when is_map(joins) ->
+        Map.keys(joins)
+    end
   end
 end
