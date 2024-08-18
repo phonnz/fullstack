@@ -56,7 +56,7 @@ defmodule FullstackWeb.ChatLive do
         <p class="text-gray-500">
           <%= @users_count %> users with <%= @connections %> connections
         </p>
-        <p class="text-gray-500">
+        <p :if={@typing_users != "" } class="text-gray-500">
           <%= @typing_users %> typing...
         </p>
         <span class="text-gray-500"></span>
