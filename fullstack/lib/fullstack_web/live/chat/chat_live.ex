@@ -74,23 +74,13 @@ defmodule FullstackWeb.ChatLive do
   end
 
   @impl true
-  def handle_params(params, _uri, socket) do
-    {:noreply, socket}
-  end
-
-  @impl true
   def handle_info(%{event: "new_message", payload: income_message}, socket) do
     {:noreply, assign(socket, messages: [income_message])}
   end
 
   @impl true
   def handle_info(%{event: "presence_diff", payload: payload}, socket) do
-    socket =
-      socket
-      |> handle_joins(payload)
-      |> set_users_state()
-
-    {:noreply, socket}
+    {:noreply, set_users_state(socket)}
   end
 
   @impl true
@@ -171,6 +161,12 @@ defmodule FullstackWeb.ChatLive do
       typing: false
     })
 
+    broadcast_message(%{
+      id: :rand.uniform(1000),
+      from: "Fullstack",
+      text: "#{tmp_id} joined the chat!"
+    })
+
     tmp_id
   end
 
@@ -249,23 +245,6 @@ defmodule FullstackWeb.ChatLive do
     end)
 
     message
-  end
-
-  defp handle_joins(socket, payload) do
-    joins = find_from_diff(payload, :joins)
-
-    messages =
-      socket.assigns.messages ++
-        Enum.map(
-          joins,
-          &%{
-            id: :rand.uniform(100),
-            from: "Fullstack",
-            text: "#{&1} joined the chat!"
-          }
-        )
-
-    assign(socket, :messages, messages)
   end
 
   defp find_typing_users(connections) do
