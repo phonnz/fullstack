@@ -32,10 +32,10 @@ defmodule FullstackWeb.ChatLive do
         Hooah!<br /> This is your identifier:
         <span class="bg-slate-200 p-2 rounded-lg"><%= assigns.tmp_id %></span>
       </.header>
-      <div class="h-2/3 max-h-2/3 pt-8 pb-4" style="-ms-overflow-style: none;scrollbar-width:none">
+      <div class="h-2/3 max-h-2/3 pt-8 pb-4" >
         <div
           class="h-full "
-          style="overflow: scroll;  max-height: 100%;  display: flex;  flex-direction: column-reverse;"
+          style="overflow: scroll;  max-height: 100%;  display: flex;  flex-direction: column-reverse;-ms-overflow-style: none;scrollbar-width:none"
         >
           <div
             phx-update="append"
