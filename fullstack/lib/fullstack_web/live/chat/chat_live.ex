@@ -32,7 +32,7 @@ defmodule FullstackWeb.ChatLive do
         Hooah!<br /> This is your identifier:
         <span class="bg-slate-200 p-2 rounded-lg"><%= assigns.tmp_id %></span>
       </.header>
-      <div class="h-2/3 max-h-2/3 pt-8 pb-4" >
+      <div class="h-2/3 max-h-2/3 pt-8 pb-4">
         <div
           class="h-full "
           style="overflow: scroll;  max-height: 100%;  display: flex;  flex-direction: column-reverse;-ms-overflow-style: none;scrollbar-width:none"
@@ -56,7 +56,7 @@ defmodule FullstackWeb.ChatLive do
         <p class="text-gray-500">
           <%= @users_count %> users with <%= @connections %> connections
         </p>
-        <p :if={@typing_users != "" } class="text-gray-500">
+        <p :if={@typing_users != ""} class="text-gray-500">
           <%= @typing_users %> typing...
         </p>
         <span class="text-gray-500"></span>
@@ -79,7 +79,7 @@ defmodule FullstackWeb.ChatLive do
   end
 
   @impl true
-  def handle_info(%{event: "presence_diff", payload: payload}, socket) do
+  def handle_info(%{event: "presence_diff"}, socket) do
     {:noreply, set_users_state(socket)}
   end
 
@@ -112,7 +112,7 @@ defmodule FullstackWeb.ChatLive do
     |> broadcast_message
 
     Presence.update(self(), "chat:presence", socket.assigns.tmp_id, %{
-      typing: false 
+      typing: false
     })
 
     {:noreply,
@@ -176,10 +176,6 @@ defmodule FullstackWeb.ChatLive do
     FullstackWeb.Endpoint.broadcast("chat", "new_message", message)
   end
 
-  defp broadcast_typing(user) do
-    FullstackWeb.Endpoint.broadcast("chat", "typing_user", user)
-  end
-
   def load_messages() do
     case Cachex.get(@cache, "chat") do
       {:ok, messages} when is_list(messages) ->
@@ -201,7 +197,9 @@ defmodule FullstackWeb.ChatLive do
   end
 
   defp count_total_connections(users) do
-    Enum.reduce(users, 0, fn {user, value}, connections -> Enum.count(value.metas) + connections end)
+    Enum.reduce(users, 0, fn {_user, value}, connections ->
+      Enum.count(value.metas) + connections
+    end)
   end
 
   defp find_uniq_users(items) do
@@ -257,15 +255,5 @@ defmodule FullstackWeb.ChatLive do
     |> Map.keys()
     |> Enum.uniq()
     |> Enum.join(", ")
-  end
-
-  defp find_from_diff(payload, list) do
-    case Map.get(payload, list) do
-      joins when joins == %{} ->
-        joins
-
-      joins when is_map(joins) ->
-        Map.keys(joins)
-    end
   end
 end
