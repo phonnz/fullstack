@@ -7,8 +7,6 @@ defmodule FullstackWeb.HomeLive.Index do
 
   @impl true
   def mount(params, _, socket) do
-    IO.inspect(params, label: :PARAMS)
-
     socket =
       socket
       |> assign(:feature, random_feature())
@@ -24,7 +22,6 @@ defmodule FullstackWeb.HomeLive.Index do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    dbg(params)
     {:noreply, socket}
   end
 

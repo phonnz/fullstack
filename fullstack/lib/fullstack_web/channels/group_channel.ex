@@ -5,9 +5,6 @@ defmodule FullstackWeb.GroupChannel do
 
   @impl true
   def join("group:main", payload, socket) do
-    IO.inspect(payload, label: :payload)
-    IO.inspect(socket.assigns, label: :join_assigns)
-
     if authorized?(socket.assigns) do
       send(self(), :after_join)
       {:ok, socket}
@@ -39,14 +36,12 @@ defmodule FullstackWeb.GroupChannel do
   # broadcast to everyone in the current topic (group:lobby).
   @impl true
   def handle_in("shout", payload, socket) do
-    IO.inspect(payload, label: :to_broadcast)
     broadcast(socket, "shout", payload)
     {:noreply, socket}
   end
 
   # Add authorization logic here as required.
   defp authorized?(%{:mac_addr => _macc_adrr} = payload) do
-    IO.inspect(payload, label: :authorizing)
     true
   end
 end

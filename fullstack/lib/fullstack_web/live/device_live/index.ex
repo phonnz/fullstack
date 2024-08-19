@@ -46,7 +46,6 @@ defmodule FullstackWeb.DeviceLive.Index do
   end
 
   def update(whatever) do
-    IO.inspect(whatever, label: :GENERIC)
     {:ok, whatever}
   end
 
