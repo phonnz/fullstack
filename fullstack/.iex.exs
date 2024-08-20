@@ -1,3 +1,3 @@
 alias Fullstack.Repo
 alias Fullstack.Customers.Customer
-alias Fullstack.Customers
+alias Fullstack.Services.Counters
