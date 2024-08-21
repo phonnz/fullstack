@@ -20,7 +20,8 @@ defmodule Fullstack.Application do
         FullstackWeb.ChatPresence,
         FullstackWeb.Presence,
         {Cachex, [name: :chat]},
-        Fullstack.Servers.OperationsSupervisor
+        Fullstack.Servers.OperationsSupervisor,
+        Fullstack.Services.Counters
       ] ++ prod_child()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
