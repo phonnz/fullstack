@@ -7,22 +7,22 @@ defmodule FullstackWeb.HomeLive.Index do
 
   @impl true
   def mount(_params, session, socket) do
-       socket =
+    socket =
       socket
       |> assign(:tmp_id, tmp_id(session))
       |> assign(:feature, random_feature())
       |> assign(:transactions_count, transactions_count())
       |> assign(:customers_count, customers_count())
       |> assign(:devices_count, 0)
-|> assign(:local, 0)
-      |> assign(:identified, 0 )
+      |> assign(:local, 0)
+      |> assign(:identified, 0)
       |> assign(:centralized, init_counter(:centralized))
 
     {:ok, socket}
   end
 
   @impl true
-  def handle_params(params, _uri, socket) do
+  def handle_params(_params, _uri, socket) do
     {:noreply, socket}
   end
 
@@ -40,37 +40,41 @@ defmodule FullstackWeb.HomeLive.Index do
 
   @impl true
   def handle_info({:set_identified_counter, tmp_id}, socket) do
-{:noreply, assign(socket, :identified, init_counter(:identified, String.to_atom(tmp_id)))}
+    {:noreply, assign(socket, :identified, init_counter(:identified, String.to_atom(tmp_id)))}
   end
-defp init_counter(counter_id, user_id \\ :none) when counter_id in [:identified, :centralized] do
-    {_counter, value} = Counters.get(user_id, counter_id)
-  value
-end
 
- defp increase(counter_id, socket) when counter_id in ["identified", "centralized"] do
-     Counters.increase(String.to_atom(socket.assigns.tmp_id), String.to_atom(counter_id) )
- end
- defp decrease(counter_id, socket) when counter_id in ["identified", "centralized"] do
-     Counters.decrease(String.to_atom(socket.assigns.tmp_id), String.to_atom(counter_id))
- end
+  defp init_counter(counter_id, user_id \\ :none)
+       when counter_id in [:identified, :centralized] do
+    {_counter, value} = Counters.get(user_id, counter_id)
+    value
+  end
+
+  defp increase(counter_id, socket) when counter_id in ["identified", "centralized"] do
+    Counters.increase(String.to_atom(socket.assigns.tmp_id), String.to_atom(counter_id))
+  end
 
   defp increase(counter_id, socket) do
-    dbg()
     counter = String.to_existing_atom(counter_id)
+
     value =
       socket
-    |> get_in([Access.key!(:assigns), counter])
-    |> Kernel.+(1)
+      |> get_in([Access.key!(:assigns), counter])
+      |> Kernel.+(1)
 
     {counter, value}
   end
 
+  defp decrease(counter_id, socket) when counter_id in ["identified", "centralized"] do
+    Counters.decrease(String.to_atom(socket.assigns.tmp_id), String.to_atom(counter_id))
+  end
+
   defp decrease(counter_id, socket) when counter_id == "local" do
     counter = String.to_existing_atom(counter_id)
+
     value =
       socket
-    |> get_in([Access.key!(:assigns), counter])
-    |> Kernel.+(-1)
+      |> get_in([Access.key!(:assigns), counter])
+      |> Kernel.+(-1)
 
     {counter, value}
   end
@@ -82,8 +86,6 @@ end
   end
 
   defp tmp_id(_session), do: nil
-
-
 
   defp random_feature(), do: "real-time"
   defp transactions_count(), do: Financial.transactions_count()
