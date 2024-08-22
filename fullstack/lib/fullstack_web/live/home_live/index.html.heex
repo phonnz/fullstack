@@ -8,7 +8,6 @@
             <div class="p-12 sm:flex sm:justify-center sm:mt-24 lg:justify-start">
               <img class="" src="/assets/img/logo.svg" />
             </div>
-
             <a
               class="inline-flex px-1 py-1 gap-x-2 rounded-xl border border-gray-400 border-2 hover:border-orange-500 items-center text-sm font-semibold text-gray-600 space-x-1"
               href="#"
@@ -54,14 +53,6 @@
               </span>
               <p class="text-orange-600 md:block"></p>
             </h1>
-          </div>
-          <div class="mt-10 sm:flex sm:justify-center lg:justify-start">
-            <button class="inline-flex items-center text-white bg-orange-500 justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full sm:w-auto">
-              Get started now
-            </button>
-            <button class="inline-flex hover:ring-gray-400 hover:bg-gray-100 items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 mt-3 w-full sm:mt-0 sm:ml-3 sm:w-auto">
-              Request access
-            </button>
           </div>
         </div>
       </div>
@@ -137,7 +128,7 @@
                     >
                       -
                     </span>
-                    <%= @centralized%>
+                    <%= @centralized %>
                     <span
                       phx-click={:inc}
                       phx-value-id={:centralized}
@@ -148,8 +139,6 @@
                   </p>
                 </div>
               </div>
-              <!-- <div class="mt-3 sm:mt-0 sm:ml-3">
-                </div> -->
             </div>
           </div>
         </div>
@@ -164,8 +153,6 @@
                   <p class="text-4xl font-bold text-gray-900"><%= @devices_count %></p>
                 </div>
               </div>
-              <!-- <div class="mt-3 sm:mt-0 sm:ml-3">
-                </div> -->
             </div>
             <div class="text-center sm:flex sm:items-center sm:justify-center">
               <div class="sm:flex-shrink-0">
@@ -176,8 +163,6 @@
                   <p class="text-4xl font-bold text-gray-900"><%= @customers_count %></p>
                 </div>
               </div>
-              <!-- <div class="mt-3 sm:mt-0 sm:ml-3">
-                  </div> -->
             </div>
             <div class="text-center sm:flex sm:items-center sm:justify-center">
               <div class="sm:flex-shrink-0">
@@ -188,17 +173,26 @@
                   <p class="text-4xl font-bold ml-4 text-gray-900"><%= @transactions_count %></p>
                 </div>
               </div>
-              <!-- <div class="mt-3 sm:mt-0 sm:ml-3">
-                </div> -->
             </div>
           </div>
+        </div>
+        <div class="mt-10 sm:flex sm:justify-center lg:justify-start">
+          <button
+            phx-click="crash"
+            class="inline-flex items-center text-white bg-red-500 justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full sm:w-auto"
+          >
+            Crash the Browser!
+          </button>
+          <button class="inline-flex hover:ring-gray-400 hover:bg-gray-100 items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 mt-3 w-full sm:mt-0 sm:ml-3 sm:w-auto">
+            Request access
+          </button>
         </div>
         <div class="mt-12 flex justify-center space-x-3">
           <img
             :for={logo <- 1..5}
-            id="logo-#{logo}"
+            id={"l-#{logo}"}
             class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full"
-            src="https://images.unsplash.com/photo-1527718641255-324f8e2d0421?q=80&w=1965&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+            src="https://avatar.iran.liara.run/public"
             alt="5"
           />
         </div>

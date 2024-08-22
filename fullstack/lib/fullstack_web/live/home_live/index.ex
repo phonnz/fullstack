@@ -83,8 +83,6 @@ end
 
   defp tmp_id(_session), do: nil
 
-
-
   defp random_feature(), do: "real-time"
   defp transactions_count(), do: Financial.transactions_count()
   defp customers_count(), do: Customers.customers_count()
