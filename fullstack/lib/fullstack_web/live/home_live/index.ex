@@ -44,6 +44,12 @@ defmodule FullstackWeb.HomeLive.Index do
   end
 
   @impl true
+  def handle_event("destroy", _, socket) do
+    Counters.destroy()
+    {:noreply, put_flash(socket, :error, "Centralized counter was destroyed :(")}
+  end
+
+  @impl true
   def handle_info({:set_identified_counter, tmp_id}, socket) do
     {:noreply, assign(socket, :identified, init_counter(:identified, String.to_atom(tmp_id)))}
   end

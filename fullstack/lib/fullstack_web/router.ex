@@ -22,7 +22,6 @@ defmodule FullstackWeb.Router do
 
     ## get "/", PageController, :home
     live "/chat", ChatLive
-    live "/home/:arcade", HomeLive.Index, :index
     live "/", HomeLive.Index, :index
 
     live "/devices", DeviceLive.Index, :index

@@ -16,7 +16,7 @@ defmodule Fullstack.Services.Counters do
         :ets.insert_new(@table_name, {counter_name, 0})
         0
 
-      [{counter_name, value} | _] when is_integer(value) ->
+      [{_counter_name, value} | _] when is_integer(value) ->
         value
     end
   end
@@ -33,6 +33,12 @@ defmodule Fullstack.Services.Counters do
     updated_counter = GenServer.call(__MODULE__, {:dec, counter_name})
     FullstackWeb.Endpoint.broadcast("centralized_counter", "updated_counter", updated_counter)
     updated_counter
+  end
+
+  def destroy() do
+    :ets.delete(:counters, :centralized)
+
+    #    FullstackWeb.Endpoint.broadcast("centralized_counter", "updated_counter", {:centralized, 0})
   end
 
   def start_link(args) do
