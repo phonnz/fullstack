@@ -14,21 +14,25 @@ defmodule Fullstack.Services.Counters do
     case :ets.lookup(@table_name, counter_name) do
       [] ->
         :ets.insert_new(@table_name, {counter_name, 0})
-         0
+        0
 
       [{counter_name, value} | _] when is_integer(value) ->
-         value
+        value
     end
   end
 
   def increase(user_id, counter_id) do
     counter_name = if counter_id == :centralized, do: :centralized, else: user_id
-    GenServer.call(__MODULE__, {:inc, counter_name})
+    updated_counter = GenServer.call(__MODULE__, {:inc, counter_name})
+    FullstackWeb.Endpoint.broadcast("centralized_counter", "updated_counter", updated_counter)
+    updated_counter
   end
 
   def decrease(user_id, counter_id) do
     counter_name = if counter_id == :centralized, do: :centralized, else: user_id
-    GenServer.call(__MODULE__, {:dec, counter_name})
+    updated_counter = GenServer.call(__MODULE__, {:dec, counter_name})
+    FullstackWeb.Endpoint.broadcast("centralized_counter", "updated_counter", updated_counter)
+    updated_counter
   end
 
   def start_link(args) do

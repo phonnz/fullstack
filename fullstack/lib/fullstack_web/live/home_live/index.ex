@@ -8,6 +8,7 @@ defmodule FullstackWeb.HomeLive.Index do
   @impl true
   def mount(_params, session, socket) do
     if connected?(socket) do
+      Phoenix.PubSub.subscribe(Fullstack.PubSub, "centralized_counter")
       Phoenix.PubSub.subscribe(Fullstack.PubSub, "transactions")
     end
 
@@ -50,6 +51,20 @@ defmodule FullstackWeb.HomeLive.Index do
   @impl true
   def handle_info(%{event: "new_transaction"}, socket) do
     {:noreply, assign(socket, :transactions_count, socket.assigns.transactions_count + 1)}
+  end
+
+  @impl true
+  def handle_info(%{event: "updated_counter", payload: {counter, value}}, socket) do
+    case Atom.to_string(counter) do
+      "centralized" ->
+        {:noreply, assign(socket, counter, value)}
+
+      counter_name when counter_name == socket.assigns.tmp_id ->
+        {:noreply, assign(socket, :identified, value)}
+
+      counter_name when is_binary(counter_name) ->
+        {:noreply, socket}
+    end
   end
 
   defp init_counter(counter_id, user_id \\ :none)
