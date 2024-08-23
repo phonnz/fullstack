@@ -10,7 +10,7 @@ module.exports = {
     "./js/**/*.js",
     "../lib/*_web.ex",
     "../lib/*_web/**/*.*ex",
-    '../deps/live_toast/lib/**/*.*ex',
+    "../deps/live_toast/lib/**/*.*ex"
   ],
   theme: {
     extend: {

@@ -21,10 +21,13 @@ import "phoenix_html"
 import { Socket } from "phoenix"
 import { LiveSocket } from "phoenix_live_view"
 import topbar from "../vendor/topbar"
+import { createLiveToastHook } from 'live_toast'
 // import VegaLite from "../vendor/vegalite"
 
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
-let hooks = {} //{ VegaLite }
+let hooks = {
+  LiveToast: createLiveToastHook()
+} //{ VegaLite }
 let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfToken }, hooks })
 
 

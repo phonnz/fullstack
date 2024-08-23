@@ -34,7 +34,7 @@ defmodule FullstackWeb.HomeLive.Index do
   @impl true
   def handle_event("inc", %{"id" => counter_id}, socket) do
     {_counter, value} = increase(counter_id, socket)
-    LiveToast.send_toast(:info, "Upload successful.", [title: "Toasting!"])
+
     {:noreply, assign(socket, String.to_atom(counter_id), value)}
   end
 
@@ -47,7 +47,7 @@ defmodule FullstackWeb.HomeLive.Index do
   @impl true
   def handle_event("destroy", _, socket) do
     Counters.destroy()
-    {:noreply, put_flash(socket, :error, "Centralized counter was destroyed.")}
+    {:noreply, LiveToast.put_toast(socket, :error, "Centralized counter was destroyed.")}
   end
 
   @impl true
