@@ -34,6 +34,7 @@ defmodule FullstackWeb.HomeLive.Index do
   @impl true
   def handle_event("inc", %{"id" => counter_id}, socket) do
     {_counter, value} = increase(counter_id, socket)
+    LiveToast.send_toast(:info, "Upload successful.", [title: "Toasting!"])
     {:noreply, assign(socket, String.to_atom(counter_id), value)}
   end
 

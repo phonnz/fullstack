@@ -21,8 +21,7 @@ defmodule Fullstack.Application do
         FullstackWeb.Presence,
         {Cachex, [name: :chat]},
         Fullstack.Servers.OperationsSupervisor,
-        Fullstack.Services.Counters,
-        {Fullstack.Servers.Generators.Transactions, []}
+        Fullstack.Services.Counters
       ] ++ prod_child()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -34,6 +33,7 @@ defmodule Fullstack.Application do
   defp prod_child() do
     if Application.get_env(:fullstack, :env) == :prod do
       [
+        {Fullstack.Servers.Generators.Transactions, []},
         {Fullstack.Servers.Generators.Customers, []}
       ]
     else

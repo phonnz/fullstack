@@ -63,7 +63,8 @@ defmodule Fullstack.MixProject do
       {:plug_cowboy, "~> 2.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:vega_lite, "~> 0.1.9"},
-      {:cachex, "~> 3.6.0"}
+      {:cachex, "~> 3.6.0"},
+      {:live_toast, "~> 0.6.4"}
     ]
   end
 
