@@ -4,6 +4,7 @@ defmodule Fullstack.Financial do
   """
 
   import Ecto.Query, warn: false
+  alias Phoenix.PubSub
   alias Fullstack.Repo
 
   alias Fullstack.Financial.Pos
@@ -187,6 +188,7 @@ defmodule Fullstack.Financial do
     %Transaction{}
     |> Transaction.changeset(new_trx)
     |> Repo.insert()
+    |> broadcast_transaction()
   end
 
   @doc """
@@ -252,5 +254,10 @@ defmodule Fullstack.Financial do
   """
   def change_transaction(%Transaction{} = transaction, attrs \\ %{}) do
     Transaction.changeset(transaction, attrs)
+  end
+
+  defp broadcast_transaction({:ok, transaction} = result) do
+    FullstackWeb.Endpoint.broadcast("transactions", "new_transaction", transaction)
+    result
   end
 end

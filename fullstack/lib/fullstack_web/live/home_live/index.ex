@@ -7,6 +7,10 @@ defmodule FullstackWeb.HomeLive.Index do
 
   @impl true
   def mount(_params, session, socket) do
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Fullstack.PubSub, "transactions")
+    end
+
     socket =
       socket
       |> assign(:tmp_id, tmp_id(session))
@@ -41,6 +45,11 @@ defmodule FullstackWeb.HomeLive.Index do
   @impl true
   def handle_info({:set_identified_counter, tmp_id}, socket) do
     {:noreply, assign(socket, :identified, init_counter(:identified, String.to_atom(tmp_id)))}
+  end
+
+  @impl true
+  def handle_info(%{event: "new_transaction"}, socket) do
+    {:noreply, assign(socket, :transactions_count, socket.assigns.transactions_count + 1)}
   end
 
   defp init_counter(counter_id, user_id \\ :none)
