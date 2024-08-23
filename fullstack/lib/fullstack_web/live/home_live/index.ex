@@ -1,6 +1,6 @@
 defmodule FullstackWeb.HomeLive.Index do
   alias Fullstack.Financial
-  use Phoenix.LiveView
+  use FullstackWeb, :live_view
 
   alias Fullstack.{Customers, Financial}
   alias Fullstack.Services.Counters
@@ -34,7 +34,8 @@ defmodule FullstackWeb.HomeLive.Index do
   @impl true
   def handle_event("inc", %{"id" => counter_id}, socket) do
     {_counter, value} = increase(counter_id, socket)
-    {:noreply, assign(socket, String.to_atom(counter_id), value)}
+    {:noreply, assign(socket, String.to_atom(counter_id), value) |> put_flash(:info, "Counter updated successfully")
+}
   end
 
   @impl true
