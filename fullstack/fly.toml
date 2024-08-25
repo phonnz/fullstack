@@ -29,6 +29,9 @@ type = 'connections'
 hard_limit = 1000
 soft_limit = 1000
 
+[[statics]]
+guest_path = "/app/priv/static"
+url_prefix = "/static"
 
 [[vm]]
 memory = '1gb'
