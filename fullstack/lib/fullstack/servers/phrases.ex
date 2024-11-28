@@ -1,7 +1,16 @@
 defmodule Fullstack.Servers.Generators.Phrases do
   use GenServer
   require Logger
-  @phrases ["This", "is", "a", "random", "word"]
+
+  @phrases [
+    "dynamic",
+    "functional",
+    "scalable",
+    "maintainable",
+    "rich",
+    "interactive",
+    "quickly"
+  ]
 
   def get_state() do
     GenServer.call(__MODULE__, :get_state)
@@ -34,7 +43,7 @@ defmodule Fullstack.Servers.Generators.Phrases do
   def handle_info(:work, state) do
     schedule_work()
     new_phrase = Enum.random(@phrases)
-    dbg(new_phrase)
+    notify_subscribers(new_phrase)
     {:noreply, %{phrase: new_phrase}}
   end
 
@@ -71,11 +80,22 @@ defmodule Fullstack.Servers.Generators.Phrases do
 
   @impl true
   def terminate({:shutdown, :closed}, state) do
-    dbg("SHUTDOWN <==========")
     {:noreply, Map.put(state, :idle?, true)}
   end
 
-  defp schedule_work(after_seconds \\ 2_000) do
+  defp schedule_work(after_seconds \\ 3_500) do
     Process.send_after(self(), :work, after_seconds)
+  end
+
+  defp notify_subscribers(words) do
+    Phoenix.PubSub.broadcast(Fullstack.PubSub, "phrases", {:new_string, ""})
+    Process.sleep(400)
+
+    words
+    |> String.graphemes()
+    |> Enum.each(fn c ->
+      Process.sleep(50)
+      Phoenix.PubSub.broadcast(Fullstack.PubSub, "phrases", {:new_char, c})
+    end)
   end
 end
