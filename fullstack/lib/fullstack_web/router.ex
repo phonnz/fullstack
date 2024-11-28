@@ -20,7 +20,7 @@ defmodule FullstackWeb.Router do
   scope "/", FullstackWeb do
     pipe_through :browser
 
-    ## get "/", PageController, :home
+    resources "/about", AboutController, only: [:index]
     live "/chat", ChatLive
     live "/", HomeLive.Index, :index
 
