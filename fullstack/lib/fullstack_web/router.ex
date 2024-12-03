@@ -22,8 +22,9 @@ defmodule FullstackWeb.Router do
 
     resources "/about", AboutController, only: [:index]
     live "/chat", ChatLive
-    live "/", HomeLive.Index, :index
+    live "/u/:key", HomeLive.Urls, :index
 
+    live "/", HomeLive.Index, :index
     live "/devices", DeviceLive.Index, :index
     live "/devices/new", DeviceLive.Index, :new
     live "/devices/:id/edit", DeviceLive.Index, :edit
