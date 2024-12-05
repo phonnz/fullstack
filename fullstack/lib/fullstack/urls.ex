@@ -38,7 +38,13 @@ defmodule Fullstack.Urls do
   def get_url!(id), do: Repo.get!(Url, id)
 
   def find_url(origin) do
-    Repo.get_by!(Url, origin: origin)
+    case Repo.get_by(Url, origin: origin) do
+      nil ->
+        {:error, :not_found}
+
+      %Url{destiny: destiny} ->
+        {:ok, destiny}
+    end
   end
 
   @doc """
