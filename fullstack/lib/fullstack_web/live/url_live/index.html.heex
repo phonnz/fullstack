@@ -1,0 +1,43 @@
+<.header>
+  Listing Ulrs
+  <:actions>
+    <.link patch={~p"/urls/new"}>
+      <.button>New Url</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table
+  id="ulrs"
+  rows={@streams.ulrs}
+  row_click={fn {_id, url} -> JS.navigate(~p"/urls/#{url}") end}
+>
+  <:col :let={{_id, url}} label="Origin"><%= url.origin %></:col>
+  <:col :let={{_id, url}} label="Destiny"><%= url.destiny %></:col>
+  <:col :let={{_id, url}} label="Visit count"><%= url.visit_count %></:col>
+  <:action :let={{_id, url}}>
+    <div class="sr-only">
+      <.link navigate={~p"/urls/#{url}"}>Show</.link>
+    </div>
+    <.link patch={~p"/urls/#{url}/edit"}>Edit</.link>
+  </:action>
+  <:action :let={{id, url}}>
+    <.link
+      phx-click={JS.push("delete", value: %{id: url.id}) |> hide("##{id}")}
+      data-confirm="Are you sure?"
+    >
+      Delete
+    </.link>
+  </:action>
+</.table>
+
+<.modal :if={@live_action in [:new, :edit]} id="url-modal" show on_cancel={JS.patch(~p"/urls")}>
+  <.live_component
+    module={FullstackWeb.UrlLive.FormComponent}
+    id={@url.id || :new}
+    title={@page_title}
+    action={@live_action}
+    url={@url}
+    patch={~p"/urls"}
+  />
+</.modal>

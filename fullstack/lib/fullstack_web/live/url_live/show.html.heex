@@ -1,0 +1,28 @@
+<.header>
+  Url <%= @url.id %>
+  <:subtitle>This is a url record from your database.</:subtitle>
+  <:actions>
+    <.link patch={~p"/urls/#{@url}/show/edit"} phx-click={JS.push_focus()}>
+      <.button>Edit url</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Origin"><%= @url.origin %></:item>
+  <:item title="Destiny"><%= @url.destiny %></:item>
+  <:item title="Visit count"><%= @url.visit_count %></:item>
+</.list>
+
+<.back navigate={~p"/urls"}>Back to ulrs</.back>
+
+<.modal :if={@live_action == :edit} id="url-modal" show on_cancel={JS.patch(~p"/urls/#{@url}")}>
+  <.live_component
+    module={FullstackWeb.UrlLive.FormComponent}
+    id={@url.id}
+    title={@page_title}
+    action={@live_action}
+    url={@url}
+    patch={~p"/urls/#{@url}"}
+  />
+</.modal>

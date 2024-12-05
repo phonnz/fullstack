@@ -24,13 +24,20 @@ defmodule FullstackWeb.Router do
     live "/chat", ChatLive
     live "/u/:key", HomeLive.Urls, :index
 
-    live "/", HomeLive.Index, :index
     live "/devices", DeviceLive.Index, :index
     live "/devices/new", DeviceLive.Index, :new
     live "/devices/:id/edit", DeviceLive.Index, :edit
 
     live "/devices/:id", DeviceLive.Show, :show
     live "/devices/:id/show/edit", DeviceLive.Show, :edit
+
+    live "/urls", UrlLive.Index, :index
+    live "/urls/new", UrlLive.Index, :new
+    live "/urls/:id/edit", UrlLive.Index, :edit
+
+    live "/urls/:id", UrlLive.Show, :show
+    live "/urls/:id/show/edit", UrlLive.Show, :edit
+    live "/", HomeLive.Index, :index
   end
 
   # Other scopes may use custom stacks.
