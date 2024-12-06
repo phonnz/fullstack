@@ -11,7 +11,6 @@ defmodule FullstackWeb.UrlRedirectController do
         |> redirect(to: "/")
 
       {:ok, destiny} ->
-        ## Task.start(fn -> ShortLinks.increment_hit_count(short_link) end)
         redirect(conn, external: destiny)
     end
   end

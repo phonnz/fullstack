@@ -1,21 +1,33 @@
 defmodule FullstackWeb.HomeLive.Urls do
   use FullstackWeb, :live_view
+  alias Fullstack.Urls
 
   @impl true
   def mount(params, _session, socket) do
-    dbg(params)
-    dbg(socket)
+    case Urls.find_url(params["key"]) do
+      {:ok, destiny} ->
+        {:ok, push_navigate(socket, to: destiny)}
 
-    {:ok, socket}
+      {:error, :not_found} ->
+        {:ok, redirect(socket, to: ~p"/urls")}
+    end
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <h1>redirection</h1>
-    <prev>
+    <pre>
       <%= inspect(assigns, pretty: true) %>
-    </prev>
+    </pre>
+
+    <pre>
+      defmodule  Some  do
+          def code(x)   do
+            x +  1
+          end
+        end
+    </pre>
     """
   end
 

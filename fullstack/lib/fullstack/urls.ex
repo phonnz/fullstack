@@ -24,7 +24,7 @@ defmodule Fullstack.Urls do
   @doc """
   Gets a single url.
 
-  Raises `Ecto.NoResultsError` if the Url does not exist.
+  Raises `Ecto.NoResultsError` if the Url does not exist
 
   ## Examples
 
@@ -42,7 +42,10 @@ defmodule Fullstack.Urls do
       nil ->
         {:error, :not_found}
 
-      %Url{destiny: destiny} ->
+      %Url{destiny: destiny, id: url_id} ->
+        {:ok, _increment_count_id} =
+          Task.start_link(fn -> increment_visits(url_id) end)
+
         {:ok, destiny}
     end
   end
@@ -66,21 +69,42 @@ defmodule Fullstack.Urls do
   end
 
   @doc """
-  Updates a url.
+  updates a url.
 
-  ## Examples
+  ## examples
 
       iex> update_url(url, %{field: new_value})
-      {:ok, %Url{}}
+      {:ok, %url{}}
 
       iex> update_url(url, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
+      {:error, %ecto.changeset{}}
 
   """
   def update_url(%Url{} = url, attrs) do
     url
     |> Url.changeset(attrs)
     |> Repo.update()
+  end
+
+  @doc """
+  increments the url count.
+
+  ## examples
+
+      iex> increment_visits(url_id)
+      {:ok, %url{}}
+
+      iex> increment_visits(unexistent_url_id)
+      {:error, :not_found}
+
+  """
+  def increment_visits(url_id) do
+    %Url{id: url_id, visit_count: 1}
+    |> Repo.insert(
+      returning: [:visit_count],
+      conflict_target: :id,
+      on_conflict: [inc: [visit_count: 1]]
+    )
   end
 
   @doc """
