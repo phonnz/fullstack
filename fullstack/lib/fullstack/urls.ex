@@ -99,12 +99,9 @@ defmodule Fullstack.Urls do
 
   """
   def increment_visits(url_id) do
-    %Url{id: url_id, visit_count: 1}
-    |> Repo.insert(
-      returning: [:visit_count],
-      conflict_target: :id,
-      on_conflict: [inc: [visit_count: 1]]
-    )
+    Url
+    |> where([u], u.id == ^url_id)
+    |> Repo.update_all(inc: [visit_count: 1])
   end
 
   @doc """

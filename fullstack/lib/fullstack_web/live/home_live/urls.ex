@@ -6,10 +6,10 @@ defmodule FullstackWeb.HomeLive.Urls do
   def mount(params, _session, socket) do
     case Urls.find_url(params["key"]) do
       {:ok, destiny} ->
-        {:ok, push_navigate(socket, to: destiny)}
+        {:ok, redirect(socket, external: destiny)}
 
       {:error, :not_found} ->
-        {:ok, redirect(socket, to: ~p"/urls")}
+        {:ok, push_navigate(socket, to: ~p"/urls")}
     end
   end
 
