@@ -36,6 +36,11 @@ defmodule FullstackWeb.HomeLive.Index do
   end
 
   @impl true
+  def handle_event("inc", %{"id" => "local"}, socket) do
+    {:noreply, update(socket, :local, &(&1 + 1))}
+  end
+
+  @impl true
   def handle_event("inc", %{"id" => counter_id}, socket) do
     {_counter, value} = increase(counter_id, socket)
 
@@ -91,13 +96,6 @@ defmodule FullstackWeb.HomeLive.Index do
     end
   end
 
-  # @impl true
-  # def terminate(reason,  %{assigns: %{phrases_id: phrases_id}} = _socket) do
-  #   dbg(reason)
-  #   Phrases.finish_tasks(phrases_id)
-  #   :ok
-  # end
-
   defp start_or_connect_phrases_service(socket) do
     if connected?(socket) do
       case Phrases.start_link([]) do
@@ -123,17 +121,6 @@ defmodule FullstackWeb.HomeLive.Index do
 
   defp increase(counter_id, socket) when counter_id in ["identified", "centralized"] do
     Counters.increase(String.to_atom(socket.assigns.tmp_id), String.to_atom(counter_id))
-  end
-
-  defp increase(counter_id, socket) do
-    counter = String.to_existing_atom(counter_id)
-
-    value =
-      socket
-      |> get_in([Access.key!(:assigns), counter])
-      |> Kernel.+(1)
-
-    {counter, value}
   end
 
   defp decrease(counter_id, socket) when counter_id in ["identified", "centralized"] do
