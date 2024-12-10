@@ -54,6 +54,12 @@ defmodule FullstackWeb.HomeLive.Index do
   end
 
   @impl true
+  def handle_event("crash", _, socket) do
+    raise "Crashing the server in purpouse"
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_event("destroy", _, socket) do
     Counters.destroy()
     {:noreply, LiveToast.put_toast(socket, :error, "Centralized counter was destroyed.")}
