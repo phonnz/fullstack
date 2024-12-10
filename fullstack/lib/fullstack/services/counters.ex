@@ -38,7 +38,7 @@ defmodule Fullstack.Services.Counters do
   def destroy() do
     :ets.delete(:counters, :centralized)
 
-    #    FullstackWeb.Endpoint.broadcast("centralized_counter", "updated_counter", {:centralized, 0})
+    FullstackWeb.Endpoint.broadcast("centralized_counter", "updated_counter", {:centralized, 0})
   end
 
   def start_link(args) do
