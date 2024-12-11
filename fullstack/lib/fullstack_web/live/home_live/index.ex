@@ -18,6 +18,7 @@ defmodule FullstackWeb.HomeLive.Index do
       socket
       |> assign(:tmp_id, tmp_id(session))
       |> assign(:feature, random_feature())
+      |> assign(:logos, list_logos())
       |> assign(:transactions_count, transactions_count())
       |> assign(:customers_count, customers_count())
       |> assign(:devices_count, 0)
@@ -152,7 +153,21 @@ defmodule FullstackWeb.HomeLive.Index do
 
   defp tmp_id(_session), do: nil
 
-  defp random_feature(), do: "real-time"
+  defp random_feature(), do: "..."
+  defp list_logos, do: Fullstack.EcosystemLogos.list()
   defp transactions_count(), do: Financial.transactions_count()
   defp customers_count(), do: Customers.customers_count()
+
+  attr :logo, Fullstack.EcosystemLogo, required: true
+
+  def ecosystem_logo(assigns) do
+    ~H"""
+    <img
+      id={@logo.id}
+      class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full"
+      src="https://avatar.iran.liara.run/public"
+      alt={@logo.name}
+    />
+    """
+  end
 end
