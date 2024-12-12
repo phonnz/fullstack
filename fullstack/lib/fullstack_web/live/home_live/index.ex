@@ -162,12 +162,9 @@ defmodule FullstackWeb.HomeLive.Index do
 
   def ecosystem_logo(assigns) do
     ~H"""
-    <img
-      id={@logo.id}
-      class="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full"
-      src="https://avatar.iran.liara.run/public"
-      alt={@logo.name}
-    />
+    <a href={@logo.link} target="_blank">
+      <img id={@logo.id} class="ecosystem-logo" src={@logo.logo_path} alt={@logo.name} />
+    </a>
     """
   end
 end

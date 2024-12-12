@@ -3,3 +3,7 @@
 @import "tailwindcss/utilities";
 
 /* This file is for your main application CSS */
+
+.ecosystem-logo{
+	@apply relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full
+}
