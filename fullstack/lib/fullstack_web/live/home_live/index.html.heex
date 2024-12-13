@@ -27,6 +27,7 @@
                   class="h-6 w-6 text-orange-400"
                 >
                   <path d="m3 11 18-5v12L3 14v-3z"></path>
+
                   <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
                 </svg>
               </span>
@@ -59,9 +60,17 @@
         </div>
       </div>
       <div class="pt-0 m:mt-16 m-4 lg:mt-18 lg:py-18 lg:col-span-5">
-        <p class="text-base mt-16 m-4 text-gray-600 sm:text-xl lg:text-lg xl:text-xl">
-          This is a simple demo of Phoenix Liveview capabilities
-        </p>
+        <.subheader>
+          <h3 class="text-base mt-16 m-4 text-gray-700 text-xl ">
+            This is a simple demo of
+          </h3>
+          <:sublines>
+            Phoenix Liveview
+          </:sublines>
+          <:sublines :let={emoji}>
+            <%= emoji %>
+          </:sublines>
+        </.subheader>
         <div class="mt-6">
           <div class="grid grid-cols-3 gap-1 lg:gap-6 xl:gap-8">
             <div class="text-center sm:flex sm:items-center sm:justify-center ">
