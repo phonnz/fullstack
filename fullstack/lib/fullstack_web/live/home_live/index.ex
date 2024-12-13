@@ -163,9 +163,9 @@ defmodule FullstackWeb.HomeLive.Index do
 
   def ecosystem_logo(assigns) do
     ~H"""
-    <a href={@logo.link} target="_blank">
+    <.link href={@logo.link} target="_blank">
       <img id={@logo.id} class="ecosystem-logo" src={@logo.logo_path} alt={@logo.name} />
-    </a>
+    </.link>
     """
   end
 end

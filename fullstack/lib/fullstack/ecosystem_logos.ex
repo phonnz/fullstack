@@ -20,14 +20,14 @@ defmodule Fullstack.EcosystemLogos do
       %Fullstack.EcosystemLogo{
         id: "nerves",
         name: "Nerves",
-        logo_path: "/img/livebook.svg",
-        link: "https://phoenixframework.org"
+        logo_path: "https://hexdocs.pm/nerves/assets/logo.png",
+        link: "https://nerves-project.org"
       },
       %Fullstack.EcosystemLogo{
         id: "livebook",
         name: "Livebook",
         logo_path: "/img/livebook.svg",
-        link: "https://phoenixframework.org"
+        link: "https://livebook.dev"
       }
     ]
   end
