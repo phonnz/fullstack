@@ -5,6 +5,7 @@ defmodule FullstackWeb.HomeLive.Index do
   alias Fullstack.{Customers, Financial}
   alias Fullstack.Services.Counters
   alias Fullstack.Servers.Generators.Phrases
+  import FullstackWeb.CustomComponents
 
   @impl true
   def mount(_params, session, socket) do

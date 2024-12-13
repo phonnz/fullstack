@@ -181,18 +181,19 @@
           </div>
         </div>
         <div class="mt-10 sm:flex sm:justify-center lg:justify-start">
-          <button
+          <.custom_button
             phx-click="crash"
-            class="inline-flex items-center text-white bg-orange-500 justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full sm:w-auto"
+            clas="inline-flex items-center text-white  justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full sm:w-auto"
           >
-            Crash the Browser!
-          </button>
-          <button
+            <.icon name="hero-exclamation-triangle" /> Crash the Browser!
+          </.custom_button>
+          <.custom_button
             phx-click="destroy"
-            class="inline-flex text-white hover:ring-red-900 bg-red-700 hover:bg-red-600 items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 mt-3 w-full sm:mt-0 sm:ml-3 sm:w-auto"
+            btn_type="error"
+            clas="inline-flex text-white hover:ring-red-900 bg-red-700 hover:bg-red-600 items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 mt-3 w-full sm:mt-0 sm:ml-3 sm:w-auto"
           >
-            Destroy Centralized!
-          </button>
+            <.icon name="hero-x-mark" /> Destroy Centralized!
+          </.custom_button>
         </div>
         <div class="mt-12 flex justify-center space-x-3">
           <.ecosystem_logo :for={logo <- @logos} logo={logo} />
