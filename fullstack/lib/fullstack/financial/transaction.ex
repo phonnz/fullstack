@@ -8,6 +8,24 @@ defmodule Fullstack.Financial.Transaction do
   @foreign_key_type :binary_id
   schema "transactions" do
     field :amount, :integer, default: 0
+
+    field :status, Ecto.Enum,
+      values: [
+        :inserted,
+        :started,
+        :on_going,
+        :ended,
+        :uploading,
+        :failed,
+        :processing,
+        :inferred,
+        :outstanding,
+        :paid,
+        :rejected,
+        :cancelled
+      ],
+      default: :started
+
     belongs_to :customer, Customer
     belongs_to :pos, Pos
 
