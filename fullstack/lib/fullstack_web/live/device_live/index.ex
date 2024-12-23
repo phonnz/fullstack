@@ -6,8 +6,19 @@ defmodule FullstackWeb.DeviceLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    socket = socket |> assign(:char_data, [])
-    {:ok, stream(socket, :devices, Devices.list_devices())}
+    socket =
+      socket
+      # |> assign(:char_data, [])
+      |> stream(:devices, Devices.list_devices())
+      |> assign(:form, to_form(%{}))
+
+    ##    socket =
+    ##      socket
+    ##      |> attach_hook(:devices, :after_render, fn ->
+    ##        IO.inspect(socket.assigns.devices, label: :devices_after)
+    ##      end)
+
+    {:ok, socket, layout: {FullstackWeb.Layouts, :devices}}
   end
 
   @impl true
@@ -29,24 +40,13 @@ defmodule FullstackWeb.DeviceLive.Index do
 
   defp apply_action(socket, :index, _params) do
     socket
-    |> assign(:page_title, "Listing Devices")
+    |> assign(:page_title, "Devices")
     |> assign(:device, nil)
   end
 
   @impl true
   def handle_info({FullstackWeb.DeviceLive.FormComponent, {:saved, device}}, socket) do
     {:noreply, stream_insert(socket, :devices, device)}
-  end
-
-  @impl true
-  def update(assigns, socket) do
-    # opts = update_assigns(assigns)
-    # unless assigns[:timer], do: start_timer(opts)
-    {:ok, socket}
-  end
-
-  def update(whatever) do
-    {:ok, whatever}
   end
 
   @impl true

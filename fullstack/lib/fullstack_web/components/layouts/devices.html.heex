@@ -1,0 +1,14 @@
+<main class="px-4 py-10 sm:px-4 lg:px-8">
+  <div class="mx-auto max-w-xl">
+    <.flash_group flash={@flash} />
+  </div>
+ <.header>
+  <.icon name="hero-box-solid" /> <%= @page_title %>
+  <:actions>
+    <.link patch={~p"/devices/new"}>
+      <.button>New Device</.button>
+    </.link>
+  </:actions>
+</.header>
+  <%= @inner_content %>
+</main>

@@ -1,18 +1,22 @@
-<.header>
-  Listing Devices
-  <:actions>
-    <.link patch={~p"/devices/new"}>
-      <.button>New Device</.button>
-    </.link>
-  </:actions>
-</.header>
-<div></div>
+<div>
+  <.form for={@form}>
+    <.input field={@form[:query]} placeholder="Filter..." autocomplete="off" />
+
+    <.input
+      type="select"
+      field={@form[:enabled]}
+      prompt="Availability"
+      options={[:enabled, :disabled]}
+    />
+    <.input type="select" field={@form[:status]} prompt="Status" options={[:online, :offline]} />
+  </.form>
+</div>
 <.table
   id="devices"
   rows={@streams.devices}
   row_click={fn {_id, device} -> JS.navigate(~p"/devices/#{device}") end}
 >
-  <:col :let={{_id, device}} label="Wlan mac address"><%= device.wlan_mac_address %></:col>
+  <:col :let={{_id, device}} label="wlan mac address"><%= device.wlan_mac_address %></:col>
   <:col :let={{_id, device}} label="Eth mac address"><%= device.eth_mac_address %></:col>
   <:col :let={{_id, device}} label="Enabled"><%= device.enabled %></:col>
   <:action :let={{_id, device}}>
