@@ -24,6 +24,6 @@ defmodule Fullstack.Servers.Generators.Transactions do
   end
 
   defp schedule_work do
-    Process.send_after(self(), :work, 60_000)
+    Process.send_after(self(), :work, Enum.random(1..5) * 1_000)
   end
 end
