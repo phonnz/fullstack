@@ -28,6 +28,7 @@ defmodule FullstackWeb.Router do
 
     live "/devices/:id", DeviceLive.Show, :show
     live "/devices/:id/show/edit", DeviceLive.Show, :edit
+    live "/transactions", Public.TransactionsLive.PublicTransactions, :public_trasactions
 
     live "/urls", UrlLive.Index, :index
     live "/urls/new", UrlLive.Index, :new
