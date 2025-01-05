@@ -5,6 +5,25 @@ defmodule Fullstack.Financial do
   alias Fullstack.Financial.{Transaction, Transactions}
   alias Fullstack.Customers
 
+  #  defdelegate transactions_count(), to: Transactions.transactions_count()
+
+  def build_transactions_analytics do
+    %Transactions{}
+    |> Map.put(:transactions, Transactions.list_transactions(%{}))
+    |> Map.put(:transactions_count, Transactions.transactions_count())
+    |> Map.put(:total_amount, &set_transactions_total_amount(&1, :x))
+  end
+
+  def set_transactions_count(_transactions) do
+    Transactions.transactions_count()
+  end
+
+  def set_transactions_total_amount(transactions, _X) do
+    dbg(transactions)
+    # Enum.reduce(&1, 0, fn trx, acc -> trx.amount + acc end)
+    10_1234
+  end
+
   def stream_trx() do
     query =
       from(t in Transaction,
@@ -40,7 +59,8 @@ defmodule Fullstack.Financial do
     new_trx =
       %{
         customer_id: Customers.random_customer_id(),
-        pos_id: random_pos_id()
+        pos_id: random_pos_id(),
+        amount: Enum.random(100..10_000)
       }
 
     %Transaction{}

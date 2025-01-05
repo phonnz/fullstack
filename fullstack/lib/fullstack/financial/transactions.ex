@@ -1,4 +1,15 @@
 defmodule Fullstack.Financial.Transactions do
+  defstruct [
+    :transactions,
+    :transactions_count,
+    :total_amount,
+    :year_amount_avg,
+    :month_amount_current_year_avg,
+    :biggest_tickets,
+    :top_customers,
+    :last_customers
+  ]
+
   @moduledoc """
   The Financial context.
   """
@@ -8,6 +19,55 @@ defmodule Fullstack.Financial.Transactions do
 
   alias Fullstack.Financial.Transaction
   def transactions_count, do: Repo.aggregate(Transaction, :count, :id)
+
+  @doc """
+  Returns the list of transactions.
+
+  ## Examples
+
+      iex> list_transactions()
+      [%Transaction{}, ...]
+
+  """
+  def list_transactions(params) do
+    Transaction
+    |> with_date_range(params)
+    |> with_status(params)
+    |> with_amount_range(params)
+    |> from_customer(params)
+    |> from_pos(params)
+    |> Repo.all()
+  end
+
+  defp with_date_range(query, %{"dates" => %{"from" => from, "upto" => upto}}) do
+    query
+  end
+
+  defp with_date_range(query, _params), do: query
+
+  defp with_status(query, %{"status" => status}) do
+    where(query, status: ^status)
+  end
+
+  defp with_status(query, _params), do: query
+
+  defp with_amount_range(query, %{"amount_range" => %{"from" => from, "upto" => upto}}) do
+    where(query, [t], t.amount >= ^from and t.amount <= ^upto)
+  end
+
+  defp with_amount_range(query, _params), do: query
+
+  defp from_customer(query, %{"customer_id" => customer_id}) do
+    where(query, [t], t.customer_id == ^customer_id)
+  end
+
+  defp from_customer(query, _params), do: query
+
+  defp from_pos(query, %{"pos_id" => pos_id}) do
+    where(query, [t], t.pos_id == ^pos_id)
+  end
+
+  defp from_pos(query, _params), do: query
 
   @doc """
   Returns the list of transactions.
