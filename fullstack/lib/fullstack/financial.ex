@@ -8,20 +8,27 @@ defmodule Fullstack.Financial do
   #  defdelegate transactions_count(), to: Transactions.transactions_count()
 
   def build_transactions_analytics do
+    transactions = Transactions.list_transactions(%{})
+
     %Transactions{}
-    |> Map.put(:transactions, Transactions.list_transactions(%{}))
-    |> Map.put(:transactions_count, Transactions.transactions_count())
-    |> Map.put(:total_amount, &set_transactions_total_amount(&1, :x))
+    |> Map.put(:transactions, transactions)
+    |> Map.put(:transactions_count, Enum.count(transactions))
+    |> Map.put(:total_amount, set_transactions_total_amount(transactions))
   end
 
-  def set_transactions_count(_transactions) do
-    Transactions.transactions_count()
+  def set_transactions_count(transactions) do
+    {:ok, task_transaction} =
+      Task.start(
+        Transactions,
+        :count_transactions,
+        transactions: transactions
+      )
+
+    task_transaction
   end
 
-  def set_transactions_total_amount(transactions, _X) do
-    dbg(transactions)
-    # Enum.reduce(&1, 0, fn trx, acc -> trx.amount + acc end)
-    10_1234
+  def set_transactions_total_amount(transactions) do
+    Enum.reduce(transactions, 0, fn trx, acc -> trx.amount + acc end)
   end
 
   def stream_trx() do
