@@ -21,11 +21,7 @@ defmodule Fullstack.Financial.Transactions do
   def transactions_count, do: Repo.aggregate(Transaction, :count, :id)
 
   def count_transactions({_, transactions}) do
-    IO.inspect("=================")
-    IO.puts("Start transactions")
-    trx_count = Enum.count(transactions)
-    IO.puts("Transactions couted #{trx_count}")
-    trx_count
+    Enum.count(transactions)
   end
 
   @doc """
@@ -39,6 +35,7 @@ defmodule Fullstack.Financial.Transactions do
   """
   def list_transactions(params) do
     Transaction
+    |> order_by(desc: :inserted_at)
     |> with_date_range(params)
     |> with_status(params)
     |> with_amount_range(params)

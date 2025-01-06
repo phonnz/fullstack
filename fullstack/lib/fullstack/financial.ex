@@ -14,6 +14,13 @@ defmodule Fullstack.Financial do
     |> Map.put(:transactions, transactions)
     |> Map.put(:transactions_count, Enum.count(transactions))
     |> Map.put(:total_amount, set_transactions_total_amount(transactions))
+    |> Map.put(:last_transactions, set_latest_transactions(transactions))
+    |> Map.put(:biggest_tickets, set_biggest_transactions(transactions))
+  end
+
+  def to_transaction(transaction) do
+    transaction
+    |> Map.take([:id, :inserted_at, :status, :amount, :customer_id])
   end
 
   def set_transactions_count(transactions) do
@@ -29,6 +36,18 @@ defmodule Fullstack.Financial do
 
   def set_transactions_total_amount(transactions) do
     Enum.reduce(transactions, 0, fn trx, acc -> trx.amount + acc end)
+  end
+
+  def set_biggest_transactions(transactions) do
+    transactions
+    |> Enum.sort_by(& &1.amount, :desc)
+    |> Enum.take(5)
+    |> Enum.map(&to_transaction/1)
+  end
+
+  defp set_latest_transactions(transactions) do
+    Enum.take(transactions, 5)
+    |> Enum.map(&to_transaction/1)
   end
 
   def stream_trx() do
