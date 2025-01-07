@@ -4,6 +4,7 @@ defmodule Fullstack.Financial do
 
   alias Fullstack.Financial.{Transaction, Transactions}
   alias Fullstack.Customers
+  alias Fullstack.Customers.Customer
 
   #  defdelegate transactions_count(), to: Transactions.transactions_count()
 
@@ -16,11 +17,27 @@ defmodule Fullstack.Financial do
     |> Map.put(:total_amount, set_transactions_total_amount(transactions))
     |> Map.put(:last_transactions, set_latest_transactions(transactions))
     |> Map.put(:biggest_tickets, set_biggest_transactions(transactions))
+    |> set_last_customers()
+    |> set_top_transactions()
   end
 
   def to_transaction(transaction) do
     transaction
     |> Map.take([:id, :inserted_at, :status, :amount, :customer_id])
+  end
+
+  def set_last_customers(%{last_transactions: transactions} = data) do
+    customers = transactions |> Enum.map(& &1.customer_id) |> get_customers
+    Map.put(data, :last_customers, customers)
+  end
+
+  def set_top_transactions(%{transactions: transactions} = data) do
+    top_transactions =
+      transactions
+      |> Enum.sort_by( fn %{amount: x}, %{amount: y} -> :lt == Date.compare(x, y) end)desc: :amount)
+      |> Enum.take(5)
+
+    Map.put(data, :biggest_tickets, top_transactions)
   end
 
   def set_transactions_count(transactions) do
@@ -98,6 +115,21 @@ defmodule Fullstack.Financial do
   defp broadcast_transaction({:ok, transaction} = result) do
     FullstackWeb.Endpoint.broadcast("transactions", "new_transaction", transaction)
     result
+  end
+
+  ## customers
+  def get_customers(customer_ids) when is_list(customer_ids) do
+    Customer
+    |> where([c], c.id in ^customer_ids)
+    |> select([c], c.email)
+    |> Repo.all()
+    |> Enum.map(&to_customer/1)
+  end
+
+  defp to_customer(customer_email) when is_binary(customer_email) do
+    customer_email
+    |> String.split("@")
+    |> Enum.map_join(&("***" <> String.slice(&1, -4, 4)))
   end
 
   ## POS
