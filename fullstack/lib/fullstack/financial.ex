@@ -19,6 +19,7 @@ defmodule Fullstack.Financial do
     |> Map.put(:biggest_tickets, set_biggest_transactions(transactions))
     |> set_last_customers()
     |> set_top_transactions()
+    |> set_top_customers()
   end
 
   def to_transaction(transaction) do
@@ -34,10 +35,20 @@ defmodule Fullstack.Financial do
   def set_top_transactions(%{transactions: transactions} = data) do
     top_transactions =
       transactions
-      |> Enum.sort_by( fn %{amount: x}, %{amount: y} -> :lt == Date.compare(x, y) end)desc: :amount)
+      |> Enum.sort_by(& &1.amount, :desc)
       |> Enum.take(5)
+      |> Enum.map(&to_transaction/1)
 
     Map.put(data, :biggest_tickets, top_transactions)
+  end
+
+  def set_top_customers(%{biggest_tickets: transactions} = data) do
+    top_customers =
+      transactions
+      |> Enum.map(& &1.customer_id)
+      |> get_customers()
+
+    Map.put(data, :top_customers, top_customers)
   end
 
   def set_transactions_count(transactions) do
@@ -129,7 +140,7 @@ defmodule Fullstack.Financial do
   defp to_customer(customer_email) when is_binary(customer_email) do
     customer_email
     |> String.split("@")
-    |> Enum.map_join(&("***" <> String.slice(&1, -4, 4)))
+    |> Enum.map_join("@", &("***" <> String.slice(&1, -4, 4)))
   end
 
   ## POS
