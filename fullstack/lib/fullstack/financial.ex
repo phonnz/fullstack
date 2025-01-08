@@ -6,7 +6,7 @@ defmodule Fullstack.Financial do
   alias Fullstack.Customers
   alias Fullstack.Customers.Customer
 
-  #  defdelegate transactions_count(), to: Transactions.transactions_count()
+  defdelegate transactions_count, to: Transactions
 
   def build_transactions_analytics do
     transactions = Transactions.list_transactions(%{})
