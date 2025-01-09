@@ -6,20 +6,22 @@ defmodule Fullstack.Financial do
   alias Fullstack.Customers
   alias Fullstack.Customers.Customer
 
-  defdelegate transactions_count, to: Transactions
+  defdelegate count_transactions, to: Transactions
+  defdelegate count_transactions(transactions), to: Transactions
 
-  def build_transactions_analytics do
-    transactions = Transactions.list_transactions(%{})
+  def build_transactions_analytics(params) do
+    transactions = Transactions.list_transactions(params)
 
     %Transactions{}
     |> Map.put(:transactions, transactions)
-    |> Map.put(:transactions_count, Enum.count(transactions))
+    |> Map.put(:transactions_count, count_transactions())
     |> Map.put(:total_amount, set_transactions_total_amount(transactions))
     |> Map.put(:last_transactions, set_latest_transactions(transactions))
     |> Map.put(:biggest_tickets, set_biggest_transactions(transactions))
     |> set_last_customers()
     |> set_top_transactions()
     |> set_top_customers()
+    |> Map.delete(:transactions)
   end
 
   def to_transaction(transaction) do

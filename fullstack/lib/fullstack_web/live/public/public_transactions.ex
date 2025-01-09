@@ -15,12 +15,10 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    content = Financial.build_transactions_analytics()
-
     socket =
       socket
-      # |> assign(:transactions, content.transactions)
-      |> assign(:info, Map.reject(content, fn {k, _v} -> k == :transactions end))
+      |> assign(:info, Financial.build_transactions_analytics(params))
+      |> assign(:form, to_form(params))
 
     {:noreply, socket}
   end

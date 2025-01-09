@@ -20,7 +20,7 @@ defmodule FullstackWeb.HomeLive.Index do
       |> assign(:tmp_id, tmp_id(session))
       |> assign(:feature, random_feature())
       |> assign(:logos, list_logos())
-      |> assign(:transactions_count, transactions_count())
+      |> assign(:transactions_count, count_transactions())
       |> assign(:customers_count, customers_count())
       |> assign(:devices_count, 0)
       |> assign(:local, 0)
@@ -156,7 +156,7 @@ defmodule FullstackWeb.HomeLive.Index do
 
   defp random_feature(), do: "..."
   defp list_logos, do: Fullstack.EcosystemLogos.list()
-  defp transactions_count(), do: Financial.transactions_count()
+  defp count_transactions(), do: Financial.count_transactions()
   defp customers_count(), do: Customers.customers_count()
 
   attr :logo, Fullstack.EcosystemLogo, required: true

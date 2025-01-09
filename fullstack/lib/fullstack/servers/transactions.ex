@@ -4,8 +4,8 @@ defmodule Fullstack.Servers.Generators.Transactions do
   alias Fullstack.Financial
   @generate_every_default Enum.random(1..5) * 1_000
 
-  def start_link(args) do
-    time_to_generate = Keyword.get(get_env(), :time_to_generate)
+  def start_link(_args) do
+    time_to_generate = Keyword.get(get_env(), :time_to_generate, @generate_every_default)
     GenServer.start_link(__MODULE__, %{generate_after: time_to_generate}, name: __MODULE__)
   end
 

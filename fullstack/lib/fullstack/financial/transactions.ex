@@ -18,11 +18,12 @@ defmodule Fullstack.Financial.Transactions do
   alias Fullstack.Repo
 
   alias Fullstack.Financial.Transaction
-  def transactions_count, do: Repo.aggregate(Transaction, :count, :id)
 
-  def count_transactions({_, transactions}) do
+  def count_transactions(transactions) do
     Enum.count(transactions)
   end
+
+  def count_transactions, do: Repo.aggregate(Transaction, :count, :id)
 
   @doc """
   Returns the list of transactions.
