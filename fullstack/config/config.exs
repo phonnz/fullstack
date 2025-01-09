@@ -10,7 +10,8 @@ config :fullstack, env: Mix.env()
 
 config :fullstack,
   ecto_repos: [Fullstack.Repo],
-  generators: [binary_id: true]
+  generators: [binary_id: true],
+  transactions: [start: true, time_to_generate: 5 * 60_000]
 
 # Configures the endpoint
 config :fullstack, FullstackWeb.Endpoint,
