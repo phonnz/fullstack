@@ -21,6 +21,8 @@ defmodule Fullstack.Financial do
     |> set_last_customers()
     |> set_top_transactions()
     |> set_top_customers()
+    |> set_transactions_per_month()
+    |> set_transactions_per_day()
     |> Map.delete(:transactions)
   end
 
@@ -62,6 +64,57 @@ defmodule Fullstack.Financial do
       )
 
     task_transaction
+  end
+
+  def set_transactions_per_month(%{transactions: transactions} = data) do
+    [current_year, _m, _d] = Date.utc_today() |> parse_date()
+
+    grouped_transactions =
+      transactions
+      |> Enum.filter(&year_filter(&1.inserted_at, current_year))
+      |> Enum.group_by(&month_year_transactions_grouper/1)
+
+    Map.put(data, :monthly_transactions, grouped_transactions)
+  end
+
+  defp year_filter(transaction_date, current_year) do
+    [y, _m, _d] = parse_date(transaction_date)
+    y == current_year
+  end
+
+  defp month_year_transactions_grouper(transaction) do
+    [trx_year, trx_month, _d] =
+      transaction
+      |> Map.fetch!(:inserted_at)
+      |> parse_date()
+
+    {trx_year, trx_month}
+  end
+
+  defp set_transactions_per_day(%{monthly_transactions: transactions} = data) do
+    [current_year, current_month, _d] = Date.utc_today() |> parse_date()
+
+    grouped_transactions =
+      transactions
+      |> Map.get({current_year, current_month})
+      |> Enum.group_by(&day_month_transactions_grouper/1)
+
+    Map.put(data, :daily_transactions, grouped_transactions)
+  end
+
+  defp day_month_transactions_grouper(transaction) do
+    [_y, trx_month, trx_day] =
+      transaction
+      |> Map.fetch!(:inserted_at)
+      |> parse_date()
+
+    {trx_month, trx_day}
+  end
+
+  defp parse_date(date) do
+    date
+    |> Date.to_string()
+    |> String.split("-")
   end
 
   def set_transactions_total_amount(transactions) do
