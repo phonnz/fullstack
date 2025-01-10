@@ -23,7 +23,7 @@ defmodule Fullstack.Financial do
     |> set_top_customers()
     |> set_transactions_per_month()
     |> set_transactions_per_day()
-    |> Map.delete(:transactions)
+    |> Map.drop([:transactions, :monthly_transactions, :daily_transactions])
   end
 
   def to_transaction(transaction) do
@@ -74,7 +74,16 @@ defmodule Fullstack.Financial do
       |> Enum.filter(&year_filter(&1.inserted_at, current_year))
       |> Enum.group_by(&month_year_transactions_grouper/1)
 
-    Map.put(data, :monthly_transactions, grouped_transactions)
+    data
+    |> Map.put(:monthly_transactions, grouped_transactions)
+    |> Map.put(:monthly_data, parse_chart_data(grouped_transactions))
+  end
+
+  defp parse_chart_data(transactions) do
+    transactions
+    |> Enum.map(fn {k, v} ->
+      {k, Enum.reduce(v, {0, 0}, fn trx, {count, amount} -> {count + 1, trx.amount + amount} end)}
+    end)
   end
 
   defp year_filter(transaction_date, current_year) do
@@ -99,7 +108,9 @@ defmodule Fullstack.Financial do
       |> Map.get({current_year, current_month})
       |> Enum.group_by(&day_month_transactions_grouper/1)
 
-    Map.put(data, :daily_transactions, grouped_transactions)
+    data
+    |> Map.put(:daily_transactions, grouped_transactions)
+    |> Map.put(:daily_data, parse_chart_data(grouped_transactions))
   end
 
   defp day_month_transactions_grouper(transaction) do
