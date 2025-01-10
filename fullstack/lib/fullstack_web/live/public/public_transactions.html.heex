@@ -4,6 +4,9 @@
   <%= make_plot(@test_data) %>
   <%= make_red_plot(@test_data) %>
   <pre>
-    <%= inspect(@info, pretty: true ) %>
+   <%= inspect(@info.transactions_count) %>
+   <%= inspect(@info.total_amount) %>
+   <%= inspect(@info.top_customers) %>
+   <%= inspect(@info.last_customers) %>
   </pre>
 </div>
