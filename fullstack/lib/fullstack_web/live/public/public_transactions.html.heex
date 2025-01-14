@@ -1,8 +1,8 @@
 <LiveToast.toast_group flash={@flash} connected={assigns[:socket] != nil} corner={:top_right} />
 <div class="bg-white h-screen font-sans flex flex-col items-center justify-start">
   <h1>Sales</h1>
-  <%= make_plot(@test_data) %>
-  <%= make_red_plot(@test_data) %>
+  <%= make_plot(@data, @bar_options, @selected_bar) %>
+  <!-- make_red_plot(@test_data) -->
   <pre>
    <%= inspect(@info.transactions_count) %>
    <%= inspect(@info.total_amount) %>

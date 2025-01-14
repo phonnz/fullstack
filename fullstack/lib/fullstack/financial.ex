@@ -82,7 +82,12 @@ defmodule Fullstack.Financial do
   defp parse_chart_data(transactions) do
     transactions
     |> Enum.map(fn {k, v} ->
-      {k, Enum.reduce(v, {0, 0}, fn trx, {count, amount} -> {count + 1, trx.amount + amount} end)}
+      {count, amount} =
+        Enum.reduce(v, {0, 0}, fn trx, {count, amount} ->
+          {count + 1, trx.amount + amount}
+        end)
+
+      %{category: "Month #{elem(k, 1)}", x: count, y: amount}
     end)
   end
 
