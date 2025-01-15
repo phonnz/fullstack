@@ -14,8 +14,6 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
         number_of_points: 50
       })
       |> assign(:process_counts, [0])
-      |> assign(:bar_options, %{})
-      |> assign(bar_clicked: "Click a bar. Any bar", selected_bar: nil)
 
     if connected?(socket) do
       Process.send_after(self(), :tick, socket.assigns.chart_options.refresh_rate)
@@ -31,7 +29,28 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       |> assign(:info, Financial.build_transactions_analytics(params))
       |> assign(:form, to_form(params))
       |> make_test_data()
-      |> make_data()
+      |> assign(
+        bar_options: [
+          type: :grouped,
+          orientation: :vertical,
+          show_data_labels: "yes",
+          show_selected: "no",
+          show_axislabels: "no",
+          custom_value_scale: "no",
+          title: nil,
+          subtitle: nil,
+          colour_scheme: "themed",
+          legend_setting: "legend_none",
+          mapping: %{category_col: "Category", value_cols: ["Series 1", "Series 2", "Series 3"]},
+          type: :grouped,
+          data_labels: true,
+          orientation: :vertical,
+          phx_event_handler: "chart1_bar_clicked",
+          colour_palette: :default
+        ]
+      )
+      |> assign(bar_clicked: "Click a bar. Any bar", selected_bar: nil)
+      |> make_transactions_data()
 
     {:noreply, socket}
   end
@@ -48,24 +67,58 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   end
 
   defp make_plot(data, bar_options, selected_bar) do
-    cols = ["x", "y"]
+    dbg(data)
 
     options = [
-      mapping: %{category_col: "Month", value_cols: cols},
-      type: "grouped",
-      data_labels: true,
+      type: :grouped,
       orientation: :vertical,
+      show_data_labels: "yes",
+      show_selected: "no",
+      show_axislabels: "yes",
+      custom_value_scale: "no",
+      title: "Sales",
+      subtitle: "Month",
+      colour_scheme: :default,
+      legend_setting: :legend_right,
+      mapping: %{category_col: "Category", value_cols: ["Series 1", "Series 2", "Series 3"]},
+      data_labels: true,
       phx_event_handler: "chart1_bar_clicked",
       colour_palette: :default
     ]
 
-    dbg(data)
-
     Plot.new(data, BarChart, 500, 400, options)
-    |> Plot.titles("title", "Subtitle")
-    |> Plot.axis_labels("x-axis", "y_axis")
-    |> Plot.plot_options(%{legend_setting: :legend_right})
+    |> Plot.axis_labels("Day", "Count / Amount")
     |> Plot.to_svg()
+  end
+
+  defp make_transactions_data(socket) do
+    options = Map.new(socket.assigns.bar_options)
+    # options.series
+    series = 3
+    # options.categories
+    categories = 10
+
+    data =
+      1..categories
+      |> Enum.map(fn cat ->
+        series_data =
+          for _ <- 1..series do
+            random_within_range(10.0, 100.0)
+          end
+
+        ["Category #{cat}" | series_data]
+      end)
+
+    series_cols =
+      for i <- 1..series do
+        "Series #{i}"
+      end
+
+    test_data = Dataset.new(data, ["Category" | series_cols])
+
+    options = Map.put(options, :series_columns, series_cols)
+
+    assign(socket, data: test_data, bar_options: options)
   end
 
   defp make_red_plot(data) do
@@ -89,19 +142,5 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   defp random_within_range(min, max) do
     diff = max - min
     :rand.uniform() * diff + min
-  end
-
-  defp make_data(socket) do
-    options = socket.assigns.bar_options
-    series_cols = ["x", "y"]
-    2
-    categories = Enum.count(socket.assigns.info.daily_data)
-    test_data = Dataset.new(socket.assigns.info.daily_data)
-
-    options = %{
-      series_columns: series_cols
-    }
-
-    assign(socket, data: test_data, bar_options: options)
   end
 end
