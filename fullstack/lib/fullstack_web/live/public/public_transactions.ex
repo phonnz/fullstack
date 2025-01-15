@@ -50,7 +50,8 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
         ]
       )
       |> assign(bar_clicked: "Click a bar. Any bar", selected_bar: nil)
-      |> make_transactions_data()
+
+    # |> make_transactions_data()
 
     {:noreply, socket}
   end
@@ -67,7 +68,8 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   end
 
   defp make_plot(data, bar_options, selected_bar) do
-    dbg(data)
+    series_cols = ["Count", "Amount"]
+    test_data = Dataset.new(data, ["Day" | series_cols])
 
     options = [
       type: :grouped,
@@ -75,57 +77,27 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       show_data_labels: "yes",
       show_selected: "no",
       show_axislabels: "yes",
-      custom_value_scale: "no",
+      # custom_value_scale: "no",
       title: "Sales",
       subtitle: "Month",
       colour_scheme: :default,
       legend_setting: :legend_right,
-      mapping: %{category_col: "Category", value_cols: ["Series 1", "Series 2", "Series 3"]},
+      mapping: %{category_col: "Day", value_cols: series_cols},
       data_labels: true,
       phx_event_handler: "chart1_bar_clicked",
       colour_palette: :default
     ]
 
-    Plot.new(data, BarChart, 500, 400, options)
+    Plot.new(test_data, BarChart, 500, 400, options)
     |> Plot.axis_labels("Day", "Count / Amount")
     |> Plot.to_svg()
-  end
-
-  defp make_transactions_data(socket) do
-    options = Map.new(socket.assigns.bar_options)
-    # options.series
-    series = 3
-    # options.categories
-    categories = 10
-
-    data =
-      1..categories
-      |> Enum.map(fn cat ->
-        series_data =
-          for _ <- 1..series do
-            random_within_range(10.0, 100.0)
-          end
-
-        ["Category #{cat}" | series_data]
-      end)
-
-    series_cols =
-      for i <- 1..series do
-        "Series #{i}"
-      end
-
-    test_data = Dataset.new(data, ["Category" | series_cols])
-
-    options = Map.put(options, :series_columns, series_cols)
-
-    assign(socket, data: test_data, bar_options: options)
   end
 
   defp make_red_plot(data) do
     Sparkline.new(data)
     |> Sparkline.colours("#fad48e", "#ff9838")
-    |> Map.update!(:height, fn _ -> 300 end)
-    |> Map.update!(:width, fn _ -> 600 end)
+    |> Map.update!(:height, fn _ -> 100 end)
+    |> Map.update!(:width, fn _ -> 200 end)
     |> Sparkline.draw()
   end
 
@@ -137,10 +109,5 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       |> Enum.map(fn _ -> :rand.uniform(50) - 100 end)
 
     assign(socket, test_data: result)
-  end
-
-  defp random_within_range(min, max) do
-    diff = max - min
-    :rand.uniform() * diff + min
   end
 end

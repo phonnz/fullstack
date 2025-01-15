@@ -1,12 +1,64 @@
 <LiveToast.toast_group flash={@flash} connected={assigns[:socket] != nil} corner={:top_right} />
-<div class="bg-white h-screen font-sans flex flex-col items-center justify-start">
-  <h1>Sales</h1>
-  <%= make_plot(@data, @bar_options, @selected_bar) %>
-  <!-- make_red_plot(@test_data) -->
+<div class="bg-white h-screen font-sans flex flex-col ">
+  <div class="flex flex-wrap ">
+    <div class="md:p-2 p-1 w-1/2">
+      <%= make_plot(@info.daily_data, @bar_options, @selected_bar) %>
+    </div>
+    <div class="md:p-2 p-1 w-1/2">
+      <%= make_plot(@info.daily_data, @bar_options, @selected_bar) %>
+    </div>
+    <div class="md:p-2 p-1 w-2/4">
+      <%= make_red_plot(@test_data) %>
+    </div>
+    <div class="md:p-2 p-1 w-1/4">
+      <h2 class="font-medium title-font tracking-widest text-gray-900 mb-4 text-sm text-center sm:text-left">
+        TOP CUSTOMERS
+      </h2>
+      <nav class="flex flex-col sm:items-start sm:text-left text-center items-center -mb-1 space-y-2.5">
+        <a :for={customer <- @info.top_customers} id={customer}>
+          <span class="bg-yellow-100 text-yellow-500 w-4 h-4 mr-2 rounded-full inline-flex items-center justify-center">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="3"
+              class="w-3 h-3"
+              viewBox="0 0 24 24"
+            >
+              <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+          </span>
+          <%= customer %>
+        </a>
+      </nav>
+    </div>
+    <div class="md:p-2 p-1 w-1/4">
+      <h2 class="font-medium title-font tracking-widest text-gray-900 mb-4 text-sm text-center sm:text-left">
+        LAST CUSTOMERS
+      </h2>
+      <nav class="flex flex-col sm:items-start sm:text-left text-center items-center -mb-1 space-y-2.5">
+        <a :for={customer <- @info.last_customers} id={customer}>
+          <span class="bg-yellow-100 text-yellow-500 w-4 h-4 mr-2 rounded-full inline-flex items-center justify-center">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="3"
+              class="w-3 h-3"
+              viewBox="0 0 24 24"
+            >
+              <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+          </span>
+          <%= customer %>
+        </a>
+      </nav>
+    </div>
+  </div>
   <pre>
    <%= inspect(@info.transactions_count) %>
    <%= inspect(@info.total_amount) %>
-   <%= inspect(@info.top_customers) %>
-   <%= inspect(@info.last_customers) %>
   </pre>
 </div>

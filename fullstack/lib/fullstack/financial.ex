@@ -87,7 +87,7 @@ defmodule Fullstack.Financial do
           {count + 1, trx.amount + amount}
         end)
 
-      %{category: "Month #{elem(k, 1)}", x: count, y: amount}
+      ["Month #{elem(k, 1)}", count, amount / 100_000]
     end)
   end
 
