@@ -1,6 +1,7 @@
 defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   use FullstackWeb, :live_view
 
+  alias Fullstack.Devices
   alias Fullstack.Financial
   alias Contex.{BarChart, Plot, Dataset, Sparkline}
   alias Contex
@@ -27,6 +28,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
     socket =
       socket
       |> assign(:info, Financial.build_transactions_analytics(params))
+      |> assign(:devices, Devices.list_devices())
       |> assign(:form, to_form(params))
       |> make_test_data()
       |> assign(
@@ -96,8 +98,8 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   defp make_red_plot(data) do
     Sparkline.new(data)
     |> Sparkline.colours("#fad48e", "#ff9838")
-    |> Map.update!(:height, fn _ -> 100 end)
-    |> Map.update!(:width, fn _ -> 200 end)
+    |> Map.update!(:height, fn _ -> 60 end)
+    |> Map.update!(:width, fn _ -> 150 end)
     |> Sparkline.draw()
   end
 

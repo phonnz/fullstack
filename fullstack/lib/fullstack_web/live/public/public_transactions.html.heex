@@ -7,8 +7,35 @@
     <div class="md:p-2 p-1 w-1/2">
       <%= make_plot(@info.daily_data, @bar_options, @selected_bar) %>
     </div>
-    <div class="md:p-2 p-1 w-2/4">
-      <%= make_red_plot(@test_data) %>
+    <div class="flex flex-wrap md:p-2 p-1 w-3/4">
+      <div class="p-1 w-full">
+        <div class="mx-auto max-w-screen-xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+          <dl class="mt-6 grid grid-cols-1 gap-4 sm:mt-8 sm:grid-cols-1 lg:grid-cols-2">
+            <div class="flex flex-col rounded-lg bg-blue-50 px-4 py-8 text-center">
+              <dt class="order-last text-lg font-medium text-gray-500">Total Transactions</dt>
+              <dd class="text-xl font-extrabold text-blue-600 md:text-3xl">
+                <%= @info.transactions_count %>
+              </dd>
+            </div>
+            <div class="flex flex-col rounded-lg bg-blue-50 px-4 py-8 text-center">
+              <dt class="order-last text-lg font-medium text-gray-500">Total Sales</dt>
+
+              <dd class="text-xl font-extrabold text-blue-600 md:text-2xl">
+                $ <%= @info.total_amount %>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+      <div class="md:p-2 p-1 w-full">
+        <.table id="devices" rows={@devices}>
+          <:col :let={device} label="Identifier"><%= device.id %></:col>
+          <:col :let={device} label="AVG speed">1 Mb</:col>
+          <:col :let={device} label="">
+            <%= make_red_plot(@test_data) %>
+          </:col>
+        </.table>
+      </div>
     </div>
     <div class="md:p-2 p-1 w-1/4">
       <h2 class="font-medium title-font tracking-widest text-gray-900 mb-4 text-sm text-center sm:text-left">
@@ -32,9 +59,7 @@
           <%= customer %>
         </a>
       </nav>
-    </div>
-    <div class="md:p-2 p-1 w-1/4">
-      <h2 class="font-medium title-font tracking-widest text-gray-900 mb-4 text-sm text-center sm:text-left">
+      <h2 class="font-medium title-font tracking-widest text-gray-900 mt-10 mb-4 text-sm text-center sm:text-left">
         LAST CUSTOMERS
       </h2>
       <nav class="flex flex-col sm:items-start sm:text-left text-center items-center -mb-1 space-y-2.5">
@@ -57,8 +82,10 @@
       </nav>
     </div>
   </div>
-  <pre>
-   <%= inspect(@info.transactions_count) %>
-   <%= inspect(@info.total_amount) %>
+  <div class="items-center ">
+    <pre class="text-gray-300 bg-gray-800 code p-4 rounded-md whitespace-pre overflow-x-auto">
+<code>   <%= inspect(@info.daily_data, pretty: true) %>
+      </code>
   </pre>
+  </div>
 </div>
