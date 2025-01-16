@@ -3,7 +3,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
 
   alias Fullstack.Devices
   alias Fullstack.Financial
-  alias Contex.{BarChart, Plot, Dataset, Sparkline}
+  alias Contex.{BarChart, Plot, Dataset, Sparkline, PointPlot}
   alias Contex
 
   @impl true
@@ -91,6 +91,32 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
     ]
 
     Plot.new(test_data, BarChart, 500, 400, options)
+    |> Plot.axis_labels("Day", "Count / Amount")
+    |> Plot.to_svg()
+  end
+
+  defp make_point_plot(data, bar_options, selected_bar) do
+    series_cols = ["Count", "Amount"]
+    test_data = Dataset.new(data, ["Day" | series_cols])
+
+    options = [
+      type: :line,
+      orientation: :vertical,
+      show_data_labels: "yes",
+      show_selected: "no",
+      show_axislabels: "yes",
+      # custom_value_scale: "no",
+      title: "Sales",
+      subtitle: "Month",
+      colour_scheme: :default,
+      legend_setting: :legend_right,
+      mapping: %{category_col: "Day", value_cols: series_cols},
+      data_labels: true,
+      phx_event_handler: "chart1_bar_clicked",
+      colour_palette: :default
+    ]
+
+    Plot.new(test_data, PointPlot, 500, 400, options)
     |> Plot.axis_labels("Day", "Count / Amount")
     |> Plot.to_svg()
   end
