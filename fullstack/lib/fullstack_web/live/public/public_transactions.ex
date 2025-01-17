@@ -3,7 +3,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
 
   alias Fullstack.Devices
   alias Fullstack.Financial
-  alias Contex.{BarChart, Plot, Dataset, Sparkline, PointPlot}
+  alias Contex.{BarChart, Plot, Dataset, Sparkline, LinePlot}
   alias Contex
 
   @impl true
@@ -52,8 +52,8 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
         ]
       )
       |> assign(bar_clicked: "Click a bar. Any bar", selected_bar: nil)
-
-    # |> make_transactions_data()
+      |> assign(prev_series: 0, prev_points: 0, prev_time_series: nil)
+      |> make_point_data
 
     {:noreply, socket}
   end
@@ -137,5 +137,118 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       |> Enum.map(fn _ -> :rand.uniform(50) - 100 end)
 
     assign(socket, test_data: result)
+  end
+
+  def build_pointplot(dataset, chart_options) do
+    module =
+      case chart_options.type do
+        "line" -> LinePlot
+        _ -> PointPlot
+      end
+
+    # custom_x_scale = make_custom_x_scale(chart_options)
+    # custom_y_scale = make_custom_y_scale(chart_options)
+
+    options = [
+      mapping: %{x_col: "X", y_cols: chart_options.series_columns},
+      colour_palette: :defatult,
+      #    custom_x_scale: custom_x_scale,
+      # custom_y_scale: custom_y_scale,
+      #  custom_y_formatter: y_tick_formatter,
+      smoothed: chart_options.smoothed == "yes"
+    ]
+
+    plot_options =
+      case chart_options.legend_setting do
+        "legend_right" -> %{legend_setting: :legend_right}
+        "legend_top" -> %{legend_setting: :legend_top}
+        "legend_bottom" -> %{legend_setting: :legend_bottom}
+        _ -> %{}
+      end
+
+    plot =
+      Plot.new(dataset, module, 600, 400, options)
+      |> Plot.titles(chart_options.title, nil)
+      |> Plot.plot_options(plot_options)
+
+    Plot.to_svg(plot)
+  end
+
+  @date_min ~N{2019-10-01 10:00:00}
+  @interval_seconds 600
+  defp calc_x(x, _, false), do: x
+
+  defp calc_x(_, i, _) do
+    NaiveDateTime.add(@date_min, i * @interval_seconds)
+  end
+
+  defp make_point_data(socket) do
+    options =
+      %{
+        series: 4,
+        points: 30,
+        title: nil,
+        type: "line",
+        smoothed: "yes",
+        colour_scheme: "default",
+        legend_setting: "legend_none",
+        custom_x_scale: "no",
+        custom_y_scale: "no",
+        custom_y_ticks: "no",
+        time_series: "no"
+      }
+
+    time_series = options.time_series == "yes"
+    prev_series = socket.assigns.prev_series
+    prev_points = socket.assigns.prev_points
+    prev_time_series = socket.assigns.prev_time_series
+    series = options.series
+    points = options.points
+
+    needs_update =
+      prev_series != series or prev_points != points or prev_time_series != time_series
+
+    data =
+      for i <- 1..points do
+        x = i * 5 + random_within_range(0.0, 3.0)
+
+        series_data =
+          for s <- 1..series do
+            val = s * 8.0 + random_within_range(x * (0.1 * s), x * (0.35 * s))
+            # simulate nils in data
+            case s == 2 and ((i > 3 and i < 6) or (i > 7 and i < 10)) do
+              true -> nil
+              _ -> val
+            end
+          end
+
+        [calc_x(x, i, time_series) | series_data]
+      end
+
+    series_cols =
+      for s <- 1..series do
+        "Series #{s}"
+      end
+
+    test_data =
+      case needs_update do
+        true -> Dataset.new(data, ["X" | series_cols])
+        _ -> socket.assigns.test_data
+      end
+
+    options = Map.put(options, :series_columns, series_cols)
+
+    assign(socket,
+      point_data: test_data,
+      point_options: options,
+      prev_series: series,
+      prev_points: points,
+      prev_time_series: time_series
+    )
+  end
+
+  defp random_within_range(min, max) do
+    diff = max - min
+    :rand.uniform() * diff + min
   end
 end
