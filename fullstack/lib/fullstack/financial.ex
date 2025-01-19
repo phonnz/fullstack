@@ -85,7 +85,21 @@ defmodule Fullstack.Financial do
 
   defp parse_chart_data([%Customer{} | _] = customers) do
     customers
-    |> Enum.map(fn c -> "c #{c.id}" end)
+    |> Enum.reduce(%{}, fn c, acc ->
+      acc
+      |> Map.update(
+        c.inserted_at
+        |> NaiveDateTime.to_date()
+        |> to_string()
+        |> String.split("-")
+        |> Enum.take(2),
+        1,
+        &(&1 + 1)
+      )
+    end)
+    |> Enum.map(fn {[_, m], value} ->
+      [Timex.month_name(String.to_integer(m)), value]
+    end)
   end
 
   defp parse_chart_data(transactions) do

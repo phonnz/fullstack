@@ -2,7 +2,7 @@
 <div class="bg-white h-screen font-sans flex flex-col ">
   <div class="flex flex-wrap ">
     <div class="md:p-2 p-1 w-1/2">
-      <%= make_plot(@info.daily_data, @bar_options, @selected_bar) %>
+      <%= make_plot(@customers, @bar_options, @selected_bar) %>
     </div>
     <div class="md:p-2 p-1 w-1/2">
       <%= build_pointplot(@point_data, @point_options) %>

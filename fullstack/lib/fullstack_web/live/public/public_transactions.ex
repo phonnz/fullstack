@@ -28,6 +28,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
     socket =
       socket
       |> assign(:info, Financial.build_transactions_analytics(params))
+      |> assign(:customers, Financial.build_customers_analytics(params))
       |> assign(:devices, Devices.list_devices())
       |> assign(:form, to_form(params))
       |> make_test_data()
@@ -70,8 +71,8 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   end
 
   defp make_plot(data, bar_options, selected_bar) do
-    series_cols = ["Count", "Amount"]
-    test_data = Dataset.new(data, ["Day" | series_cols])
+    series_cols = ["customers"]
+    test_data = Dataset.new(data, ["Month" | series_cols])
 
     options = [
       type: :grouped,
@@ -80,18 +81,18 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       show_selected: "no",
       show_axislabels: "yes",
       # custom_value_scale: "no",
-      title: "Sales",
-      subtitle: "Month",
+      title: "New Customers",
+      subtitle: "Per Month",
       colour_scheme: :default,
       legend_setting: :legend_right,
-      mapping: %{category_col: "Day", value_cols: series_cols},
+      mapping: %{category_col: "Month", value_cols: series_cols},
       data_labels: true,
       phx_event_handler: "chart1_bar_clicked",
       colour_palette: :default
     ]
 
     Plot.new(test_data, BarChart, 500, 400, options)
-    |> Plot.axis_labels("Day", "Count / Amount")
+    |> Plot.axis_labels("Month", "New Customers")
     |> Plot.to_svg()
   end
 
@@ -139,6 +140,14 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
     assign(socket, test_data: result)
   end
 
+  def format_trx_period(value) when value <= 0.0, do: ""
+
+  def format_trx_period(value) do
+    value
+    |> round()
+    |> Timex.month_name()
+  end
+
   def build_pointplot(dataset, chart_options) do
     module =
       case chart_options.type do
@@ -154,6 +163,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       colour_palette: :defatult,
       #    custom_x_scale: custom_x_scale,
       # custom_y_scale: custom_y_scale,
+      custom_x_formatter: &format_trx_period/1,
       #  custom_y_formatter: y_tick_formatter,
       smoothed: chart_options.smoothed == "yes"
     ]
@@ -185,17 +195,17 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   defp make_point_data(socket) do
     options =
       %{
-        series: 4,
-        points: 30,
-        title: nil,
+        series: 2,
+        points: 12,
+        title: "Sales / Transactions",
         type: "line",
         smoothed: "yes",
         colour_scheme: "default",
-        legend_setting: "legend_none",
-        custom_x_scale: "no",
+        legend_setting: "legend_right",
+        custom_x_scale: "yes",
         custom_y_scale: "no",
         custom_y_ticks: "no",
-        time_series: "no"
+        time_series: "yes"
       }
 
     time_series = options.time_series == "yes"
@@ -214,21 +224,21 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
 
         series_data =
           for s <- 1..series do
-            val = s * 8.0 + random_within_range(x * (0.1 * s), x * (0.35 * s))
-            # simulate nils in data
-            case s == 2 and ((i > 3 and i < 6) or (i > 7 and i < 10)) do
-              true -> nil
-              _ -> val
-            end
+            s * 8.0 + random_within_range(x * (0.1 * s), x * (0.35 * s))
           end
 
-        [calc_x(x, i, time_series) | series_data]
+        [i | series_data]
+        ##        [calc_x(x, i, time_series) | series_data]
       end
+
+    dbg(data)
 
     series_cols =
       for s <- 1..series do
         "Series #{s}"
       end
+
+    dbg(series_cols)
 
     test_data =
       case needs_update do
