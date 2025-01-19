@@ -19,7 +19,7 @@ defmodule Fullstack.MixProject do
   def application do
     [
       mod: {Fullstack.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :timex]
     ]
   end
 
@@ -65,7 +65,8 @@ defmodule Fullstack.MixProject do
       {:vega_lite, "~> 0.1.9"},
       {:cachex, "~> 3.6.0"},
       {:live_toast, "~> 0.6.4"},
-      {:contex, "0.5.0"}
+      {:contex, "0.5.0"},
+      {:timex, "~>3.7.11"}
     ]
   end
 

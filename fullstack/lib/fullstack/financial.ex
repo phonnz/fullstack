@@ -26,9 +26,13 @@ defmodule Fullstack.Financial do
     |> Map.drop([:transactions, :monthly_transactions, :daily_transactions])
   end
 
+  def build_customers_analytics(params \\ %{}) do
+    Customers.list_customers(%{"only" => [:id, :inserted_at]})
+    |> parse_chart_data
+  end
+
   def to_transaction(transaction) do
-    transaction
-    |> Map.take([:id, :inserted_at, :status, :amount, :customer_id])
+    Map.take(transaction, [:id, :inserted_at, :status, :amount, :customer_id])
   end
 
   def set_last_customers(%{last_transactions: transactions} = data) do
@@ -79,6 +83,11 @@ defmodule Fullstack.Financial do
     |> Map.put(:monthly_data, parse_chart_data(grouped_transactions))
   end
 
+  defp parse_chart_data([%Customer{} | _] = customers) do
+    customers
+    |> Enum.map(fn c -> "c #{c.id}" end)
+  end
+
   defp parse_chart_data(transactions) do
     transactions
     |> Enum.map(fn {k, v} ->
@@ -87,7 +96,7 @@ defmodule Fullstack.Financial do
           {count + 1, trx.amount + amount}
         end)
 
-      ["Month #{elem(k, 1)}", count, amount / 100_000]
+      [" #{elem(k, 1)}", count, amount / 100_000]
     end)
   end
 

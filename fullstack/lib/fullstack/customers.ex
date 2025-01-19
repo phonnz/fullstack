@@ -18,8 +18,33 @@ defmodule Fullstack.Customers do
       [%Customer{}, ...]
 
   """
-  def list_customers do
-    Repo.all(Customer)
+  def list_customers(params \\ %{}) do
+    from(c in Customer)
+    |> maybe_from_created_range(params)
+    |> maybe_select_fields(params)
+    |> Repo.all()
+  end
+
+  defp default_date_range() do
+    until = DateTime.utc_now()
+    from = Timex.shift(until, years: -1)
+    %{"from" => from, "until" => until}
+  end
+
+  defp maybe_select_fields(query, %{"only" => only_fields} = _params) when is_list(only_fields) do
+    select(query, ^only_fields)
+  end
+
+  defp maybe_select_fields(query, _params), do: query
+
+  defp maybe_from_created_range(query, params) do
+    date_range = Map.merge(default_date_range(), params)
+
+    where(
+      query,
+      [c],
+      c.inserted_at >= ^date_range["from"] and c.inserted_at <= ^date_range["until"]
+    )
   end
 
   @doc """
