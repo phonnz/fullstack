@@ -9,6 +9,7 @@ defmodule FullstackWeb.AboutHTML do
     <ul>
       <li><a href="/">FullStack Phoenix Project</a></li>
       <li><a href={~p"/chat"}> Chat application</a></li>
+      <li><a href={~p"/transactions"}> Basic Dashboard Sample</a></li>
     </ul>
     """
   end
