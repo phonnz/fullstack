@@ -10,7 +10,14 @@ defmodule Fullstack.Financial do
   defdelegate count_transactions, to: Transactions
   defdelegate count_transactions(transactions), to: Transactions
 
+  def update_transactions() do
+    Transaction
+    |> where([t], t.amount <= 999)
+    |> Repo.update_all(set: [amount: Enum.random(1000..100_000)])
+  end
+
   def build_transactions_analytics(params) do
+    Task.start(fn -> update_transactions() end)
     transactions = Transactions.list_transactions(params)
 
     %Transactions{}
@@ -149,7 +156,7 @@ defmodule Fullstack.Financial do
       %{
         customer_id: Customers.random_customer_id(),
         pos_id: random_pos_id(),
-        amount: Enum.random(100..10_000)
+        amount: Enum.random(1_000..10_000)
       }
 
     %Transaction{}

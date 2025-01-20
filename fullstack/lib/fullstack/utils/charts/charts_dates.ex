@@ -42,7 +42,7 @@ defmodule Fullstack.Utils.Charts.ChartsDates do
       [
         month,
         count,
-        Float.ceil(amount / 10_000, 2)
+        Float.ceil(amount / 100_000, 2)
       ]
     end)
   end

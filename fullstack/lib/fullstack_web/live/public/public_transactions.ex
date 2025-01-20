@@ -223,22 +223,9 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
     needs_update =
       prev_series != series or prev_points != points or prev_time_series != time_series
 
-    data =
-      for i <- 1..points do
-        x = i * 5 + random_within_range(0.0, 3.0)
-
-        series_data =
-          for s <- 1..series do
-            s * 8.0 + random_within_range(x * (0.1 * s), x * (0.35 * s))
-          end
-
-        [i | series_data]
-        ##        [calc_x(x, i, time_series) | series_data]
-      end
-
     data = socket.assigns.info.monthly_data
 
-    series_cols = ["Count", "$ *100"]
+    series_cols = ["Count", "$ k"]
 
     test_data =
       case needs_update do
