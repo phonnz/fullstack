@@ -42,6 +42,7 @@ defmodule Fullstack.Financial.Transactions do
     |> with_amount_range(params)
     |> from_customer(params)
     |> from_pos(params)
+    |> maybe_select_fields(params)
     |> Repo.all()
   end
 

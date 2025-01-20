@@ -36,11 +36,13 @@ defmodule Fullstack.Utils.Charts.ChartsDates do
 
       Map.put(acc, key, values)
     end)
-    |> Enum.map(fn {[_, m], %{count: count, amount: amount}} ->
+    |> Enum.map(fn {[y, m], %{count: count, amount: amount}} ->
+      month = if y == "2025", do: String.to_integer(m) + 12, else: String.to_integer(m)
+
       [
-        String.to_integer(m),
+        month,
         count,
-        Float.ceil(amount / 100_000, 2)
+        Float.ceil(amount / 10_000, 2)
       ]
     end)
   end

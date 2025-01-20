@@ -93,7 +93,12 @@ defmodule Fullstack.Financial do
   ##  end
 
   def set_transactions_total_amount(transactions) do
-    Enum.reduce(transactions, 0, fn trx, acc -> trx.amount + acc end)
+    sum =
+      transactions
+      |> Enum.reduce(0.0, fn trx, acc -> trx.amount + acc end)
+      |> :erlang.float_to_binary(decimals: 2)
+
+    "$ #{sum}"
   end
 
   def set_biggest_transactions(transactions) do

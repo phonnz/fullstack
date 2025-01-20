@@ -97,7 +97,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   end
 
   defp make_point_plot(data, bar_options, selected_bar) do
-    series_cols = ["Count", "Amount"]
+    series_cols = ["Count", "$ k"]
     test_data = Dataset.new(data, ["Day" | series_cols])
 
     options = [
@@ -125,7 +125,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   defp make_red_plot(data) do
     Sparkline.new(data)
     |> Sparkline.colours("#fad48e", "#ff9838")
-    |> Map.update!(:height, fn _ -> 60 end)
+    |> Map.update!(:height, fn _ -> 30 end)
     |> Map.update!(:width, fn _ -> 150 end)
     |> Sparkline.draw()
   end
@@ -145,7 +145,12 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   def format_trx_period(value) do
     value
     |> round()
+    |> fix_over_year()
     |> Timex.month_name()
+  end
+
+  defp fix_over_year(value) do
+    if value > 12, do: value - 12, else: value
   end
 
   def build_pointplot(dataset, chart_options) do
@@ -233,7 +238,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
 
     data = socket.assigns.info.monthly_data
 
-    series_cols = ["Count", "Amount"]
+    series_cols = ["Count", "$ *100"]
 
     test_data =
       case needs_update do
