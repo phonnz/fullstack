@@ -5,8 +5,9 @@ defmodule Fullstack.Customers do
 
   import Ecto.Query, warn: false
   alias Fullstack.Repo
-
   alias Fullstack.Customers.Customer
+  alias Fullstack.Utils.Charts.ChartsDates
+
   def customers_count, do: Repo.aggregate(Customer, :count, :id)
 
   @doc """
@@ -25,12 +26,6 @@ defmodule Fullstack.Customers do
     |> Repo.all()
   end
 
-  defp default_date_range() do
-    until = DateTime.utc_now()
-    from = Timex.shift(until, years: -1)
-    %{"from" => from, "until" => until}
-  end
-
   defp maybe_select_fields(query, %{"only" => only_fields} = _params) when is_list(only_fields) do
     select(query, ^only_fields)
   end
@@ -38,7 +33,7 @@ defmodule Fullstack.Customers do
   defp maybe_select_fields(query, _params), do: query
 
   defp maybe_from_created_range(query, params) do
-    date_range = Map.merge(default_date_range(), params)
+    date_range = Map.merge(ChartsDates.default_date_range(), params)
 
     where(
       query,

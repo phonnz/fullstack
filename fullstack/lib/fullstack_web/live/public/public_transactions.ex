@@ -231,14 +231,9 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
         ##        [calc_x(x, i, time_series) | series_data]
       end
 
-    dbg(data)
+    data = socket.assigns.info.monthly_data
 
-    series_cols =
-      for s <- 1..series do
-        "Series #{s}"
-      end
-
-    dbg(series_cols)
+    series_cols = ["Count", "Amount"]
 
     test_data =
       case needs_update do

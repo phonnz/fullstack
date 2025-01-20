@@ -5,6 +5,7 @@ defmodule Fullstack.Financial do
   alias Fullstack.Financial.{Transaction, Transactions}
   alias Fullstack.Customers
   alias Fullstack.Customers.Customer
+  alias Fullstack.Utils.Charts.ChartsDates
 
   defdelegate count_transactions, to: Transactions
   defdelegate count_transactions(transactions), to: Transactions
@@ -22,13 +23,13 @@ defmodule Fullstack.Financial do
     |> set_top_transactions()
     |> set_top_customers()
     |> set_transactions_per_month()
-    |> set_transactions_per_day()
+    # |> set_transactions_per_day()
     |> Map.drop([:transactions, :monthly_transactions, :daily_transactions])
   end
 
   def build_customers_analytics(params \\ %{}) do
     Customers.list_customers(%{"only" => [:id, :inserted_at]})
-    |> parse_chart_data
+    |> ChartsDates.parse_chart_data()
   end
 
   def to_transaction(transaction) do
@@ -71,90 +72,25 @@ defmodule Fullstack.Financial do
   end
 
   def set_transactions_per_month(%{transactions: transactions} = data) do
-    [current_year, _m, _d] = Date.utc_today() |> parse_date()
-
-    grouped_transactions =
-      transactions
-      |> Enum.filter(&year_filter(&1.inserted_at, current_year))
-      |> Enum.group_by(&month_year_transactions_grouper/1)
+    grouped_transactions = ChartsDates.parse_chart_data(transactions)
 
     data
     |> Map.put(:monthly_transactions, grouped_transactions)
-    |> Map.put(:monthly_data, parse_chart_data(grouped_transactions))
+    |> Map.put(:monthly_data, grouped_transactions)
   end
 
-  defp parse_chart_data([%Customer{} | _] = customers) do
-    customers
-    |> Enum.reduce(%{}, fn c, acc ->
-      acc
-      |> Map.update(
-        c.inserted_at
-        |> NaiveDateTime.to_date()
-        |> to_string()
-        |> String.split("-")
-        |> Enum.take(2),
-        1,
-        &(&1 + 1)
-      )
-    end)
-    |> Enum.map(fn {[_, m], value} ->
-      [Timex.month_name(String.to_integer(m)), value]
-    end)
-  end
-
-  defp parse_chart_data(transactions) do
-    transactions
-    |> Enum.map(fn {k, v} ->
-      {count, amount} =
-        Enum.reduce(v, {0, 0}, fn trx, {count, amount} ->
-          {count + 1, trx.amount + amount}
-        end)
-
-      [" #{elem(k, 1)}", count, amount / 100_000]
-    end)
-  end
-
-  defp year_filter(transaction_date, current_year) do
-    [y, _m, _d] = parse_date(transaction_date)
-    y == current_year
-  end
-
-  defp month_year_transactions_grouper(transaction) do
-    [trx_year, trx_month, _d] =
-      transaction
-      |> Map.fetch!(:inserted_at)
-      |> parse_date()
-
-    {trx_year, trx_month}
-  end
-
-  defp set_transactions_per_day(%{monthly_transactions: transactions} = data) do
-    [current_year, current_month, _d] = Date.utc_today() |> parse_date()
-
-    grouped_transactions =
-      transactions
-      |> Map.get({current_year, current_month})
-      |> Enum.group_by(&day_month_transactions_grouper/1)
-
-    data
-    |> Map.put(:daily_transactions, grouped_transactions)
-    |> Map.put(:daily_data, parse_chart_data(grouped_transactions))
-  end
-
-  defp day_month_transactions_grouper(transaction) do
-    [_y, trx_month, trx_day] =
-      transaction
-      |> Map.fetch!(:inserted_at)
-      |> parse_date()
-
-    {trx_month, trx_day}
-  end
-
-  defp parse_date(date) do
-    date
-    |> Date.to_string()
-    |> String.split("-")
-  end
+  ##  defp set_transactions_per_day(%{monthly_transactions: transactions} = data) do
+  ##    [current_year, current_month, _d] = Date.utc_today() |> parse_date()
+  ##
+  ##    grouped_transactions =
+  ##      transactions
+  ##      |> Map.get({current_year, current_month})
+  ##      |> Enum.group_by(&day_month_transactions_grouper/1)
+  ##
+  ##    data
+  ##    |> Map.put(:daily_transactions, grouped_transactions)
+  ##    |> Map.put(:daily_data, ChartsDates.parse_chart_data(grouped_transactions))
+  ##  end
 
   def set_transactions_total_amount(transactions) do
     Enum.reduce(transactions, 0, fn trx, acc -> trx.amount + acc end)
