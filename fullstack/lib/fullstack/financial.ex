@@ -175,7 +175,7 @@ defmodule Fullstack.Financial do
   defp to_customer(customer_email) when is_binary(customer_email) do
     customer_email
     |> String.split("@")
-    |> Enum.map_join("@", &("***" <> String.slice(&1, -4, 4)))
+    |> Enum.map_join("@", &("***" <> String.slice(&1, -6, 6)))
   end
 
   ## POS
