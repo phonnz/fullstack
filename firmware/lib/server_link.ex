@@ -4,16 +4,20 @@ defmodule Firmware.ServerLink do
 
   """
   use Slipstream,
-    restart: :temporary
+    restart: :transient
 
   require Logger
   alias Firmware.Control
 
-  @endpoint "ws://192.168.1.203:4000/socket/websocket?"
-  @mac_addr "e4:5f:01:a1:aa:76"
-  @main_topic "group:main"
-  @topic "group:#{String.replace(@mac_addr, ":", "")}"
-  @interval for x <- 500..60_000//500, do: x
+  @default_args [
+    uri: "ws://192.168.1.203:4000/socket/websocket?",
+    port: 4000,
+    mac_addr: "e4:5f:01:a1:aa:76",
+    main_topic: "group:main",
+    interval: for(x <- 500..60_000//500, do: x),
+    reconnect_after_msec: [1_000, 5_000, 10_000],
+    rejoin_after_msec: [1_000, 3_000, 5_000, 10_000]
+  ]
 
   def start(args), do: Slipstream.start_link(__MODULE__, args, name: __MODULE__)
   def start_ping, do: send(self(), :start_ping)
@@ -26,6 +30,7 @@ defmodule Firmware.ServerLink do
   end
 
   def start_link(args) do
+    args = Keyword.merge(@default_args, args)
     Slipstream.start_link(__MODULE__, args, name: __MODULE__)
   end
 
@@ -33,17 +38,12 @@ defmodule Firmware.ServerLink do
   def init(config) do
     Logger.info(config)
 
-    opts = [
-      uri: host_uri,
-      reconnect_after_msec: [1_000, 5_000, 10_000],
-      rejoin_after_msec: [1_000, 3_000, 5_000, 10_000]
-    ]
-
     socket =
-      connect!(opts)
-      |> assign(:port, port)
-      |> assign(:vending_id, mac_addr)
-      |> assign(:mac_addr, mac_addr)
+      connect!(validate_options(config))
+      |> assign(:port, Keyword.get(config, :port))
+      |> assign(:vending_id, Keyword.get(config, :mac_addr))
+      |> assign(:mac_addr, Keyword.get(config, :mac_addr))
+      |> assign(:main_topic, "group:main")
 
     {:ok, socket}
   end
@@ -52,7 +52,11 @@ defmodule Firmware.ServerLink do
   def handle_connect(socket) do
     Logger.info("#{inspect(socket.assigns)}")
     IO.inspect(connected?(socket), label: :connection_status)
-    {:ok, join(socket, @main_topic, %{:join_message => "This is a joinning message"})}
+
+    {:ok,
+     join(socket, socket.assigns.main_topic, %{
+       :join_message => "Joining as #{socket.assigns.mac_addr}"
+     })}
   end
 
   @impl Slipstream
@@ -61,7 +65,7 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
-  def handle_join(@topic, join_response, socket) do
+  def handle_join("group:main", topic, join_response, socket) do
     Logger.info("Join_response => #{inspect(join_response)}")
     # an asynchronous push with no reply:
     #    push(socket, @topic, "handshake", %{:hello => :world})
@@ -88,7 +92,7 @@ defmodule Firmware.ServerLink do
   def handle_info(:ping_server, socket) do
     # we will asynchronously receive a reply and handle it in the
     # handle_reply/3 implementation below
-    {:ok, ref} = push(socket, @main_topic, "ping", %{format: "json"})
+    {:ok, ref} = push(socket, "group:main", "ping", %{format: "json"})
 
     {:noreply, assign(socket, :last_ping, ref)}
   end
@@ -126,7 +130,7 @@ defmodule Firmware.ServerLink do
   end
 
   @impl Slipstream
-  def handle_message(@topic, "action", payload, socket) do
+  def handle_message(some_topic, "action", payload, socket) do
     Control.exec(payload)
 
     {:ok, socket}
@@ -152,5 +156,21 @@ defmodule Firmware.ServerLink do
         if Map.has_key?(socket.assigns, :timer), do: :timer.cancel(socket.assigns.ping_timer)
         {:stop, reason, socket}
     end
+  end
+
+  defp validate_options(options) do
+    options
+    |> Keyword.take([
+      :uri,
+      :heartbeat_interval_msec,
+      :headers,
+      :serializer,
+      :json_parser,
+      :reconnect_after_msec,
+      :rejoin_after_msec,
+      :mint_opts,
+      :extensions,
+      :test_mode?
+    ])
   end
 end

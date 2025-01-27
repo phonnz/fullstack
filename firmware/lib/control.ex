@@ -1,4 +1,4 @@
-defmodule Firmware.Ccontrol do
+defmodule Firmware.Control do
   require Logger
   use GenServer
 

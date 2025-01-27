@@ -11,7 +11,6 @@ defmodule Firmware.Counter do
 
   @impl true
   def init(counter) do
-    dbg(counter)
     {:ok, counter, {:continue, :work}}
   end
 
@@ -34,7 +33,7 @@ defmodule Firmware.Counter do
   end
 
   defp schedule_work do
-    IO.puts("scheduling work")
+    IO.puts("Counter scheduling work")
     Process.send_after(self(), :work, 5_000)
   end
 end
