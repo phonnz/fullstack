@@ -33,7 +33,7 @@ defmodule Firmware.Counter do
   end
 
   defp schedule_work do
-    IO.puts("Counter scheduling work")
+    # IO.puts("Counter scheduling work")
     Process.send_after(self(), :work, 5_000)
   end
 end

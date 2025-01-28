@@ -45,7 +45,14 @@ defmodule Firmware.ServerLink do
       |> assign(:mac_addr, Keyword.get(config, :mac_addr))
       |> assign(:main_topic, "group:main")
 
-    {:ok, socket}
+    {:ok, socket, {:continue, :start_ping}}
+  end
+
+  @impl Slipstream
+  def handle_continue(:start_ping, socket) do
+    timer = :timer.send_interval(1000, self(), :request_metrics)
+
+    {:noreply, assign(socket, :ping_timer, timer)}
   end
 
   @impl Slipstream
@@ -68,33 +75,27 @@ defmodule Firmware.ServerLink do
   def handle_join("group:main", topic, join_response, socket) do
     Logger.info("Join_response => #{inspect(join_response)}")
     # an asynchronous push with no reply:
-    #    push(socket, @topic, "handshake", %{:hello => :world})
-    ## something = send(self(), :start_ping)
-    ## IO.inspect("sent interval #{inspect(something)}")
+    push(socket, "group:main", "handshake", %{:hello => :world})
     {:ok, socket}
   end
 
   @impl Slipstream
-  def handle_info(:start_ping, socket) do
-    case connected?(socket) do
-      true ->
-        timer = :timer.send_interval(10_000, self(), :ping_server)
-        IO.inspect(timer, label: :TIMER)
-        {:noreply, assign(socket, :ping_timer, timer)}
+  def handle_info(:request_metrics, socket) do
+    # we will asynchronously receive a reply and handle it in the
+    # handle_reply/3 implementation below
+    {:ok, ref} = push(socket, "group:main", "get_metrics", %{format: "json"})
 
-      false ->
-        IO.puts("Ping not available due socket conn down")
-        :timer.send_after(self(), :start_ping, 1_000)
-    end
+    {:noreply, assign(socket, :metrics_request, ref)}
   end
 
   @impl Slipstream
-  def handle_info(:ping_server, socket) do
-    # we will asynchronously receive a reply and handle it in the
-    # handle_reply/3 implementation below
-    {:ok, ref} = push(socket, "group:main", "ping", %{format: "json"})
+  def handle_reply(ref, metrics, socket) do
+    if ref == socket.assigns.metrics_request do
+      Logger.info("Do some metrics #{inspect(metrics)}")
+      # :ok = MyApp.MetricsPublisher.publish(metrics)
+    end
 
-    {:noreply, assign(socket, :last_ping, ref)}
+    {:ok, socket}
   end
 
   @impl Slipstream
@@ -108,7 +109,7 @@ defmodule Firmware.ServerLink do
   def handle_info(:disconnect, socket) do
     IO.inspect("Disconect")
     ## result = :timer.cancel(socket.assigns.ping_timer)
-    ## IO.inspect(result, label: :RESULT)
+    # IO.inspect(result, label: :RESULT)
 
     {:ok, socket} =
       socket
