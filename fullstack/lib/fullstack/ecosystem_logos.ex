@@ -15,7 +15,7 @@ defmodule Fullstack.EcosystemLogos do
         id: "nx",
         name: "Nx",
         logo_path: "https://avatars.githubusercontent.com/u/74903619?s=200&v=4",
-        link: "https://phoenixframework.org"
+        link: "https://github.com/elixir-nx"
       },
       %Fullstack.EcosystemLogo{
         id: "nerves",
