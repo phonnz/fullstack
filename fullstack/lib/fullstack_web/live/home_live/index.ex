@@ -1,4 +1,5 @@
 defmodule FullstackWeb.HomeLive.Index do
+  alias Phoenix.LiveView.AsyncResult
   alias Fullstack.Financial
   use FullstackWeb, :live_view
 
@@ -26,6 +27,8 @@ defmodule FullstackWeb.HomeLive.Index do
       |> assign(:local, 0)
       |> assign(:identified, 0)
       |> assign(:centralized, init_counter(:centralized))
+      |> assign(:fib_form, to_form(%{"from" => 3}))
+      |> assign_async(:fib_result, fn -> {:ok, %{fib_result: get_fib(3)}} end)
       |> assign(:phrase, "")
       |> start_or_connect_phrases_service()
 
@@ -68,6 +71,16 @@ defmodule FullstackWeb.HomeLive.Index do
   end
 
   @impl true
+  def handle_event("get_fib", %{"from" => value}, socket) do
+    socket =
+      socket
+      |> assign_async(:fib_result, fn -> {:ok, %{fib_result: get_fib(value)}} end)
+      |> assign(:fib_result, AsyncResult.loading())
+
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info({:set_identified_counter, tmp_id}, socket) do
     {:noreply, assign(socket, :identified, init_counter(:identified, String.to_atom(tmp_id)))}
   end
@@ -103,6 +116,20 @@ defmodule FullstackWeb.HomeLive.Index do
         {:noreply, assign(socket, :phrase, current_phrase <> value)}
     end
   end
+
+  #  @impl true
+  #  def handle_async(:compute_fib, {:ok, fib_result}, socket) do
+  #    # %{org: org} = socket.assigns
+  #    dbg()
+  #    {:noreply, assign(socket, :fib_result, 1000)}
+  #  end
+  #
+  #  @impl true
+  #  def handle_async(:my_task, {:exit, reason}, socket) do
+  #    # %{org: org} = socket.assigns
+  #    dbg()
+  #    {:noreply, assign(socket, :fib_result, AsyncResult.failed(:fib_result, {:exit, reason}))}
+  #  end
 
   defp start_or_connect_phrases_service(socket) do
     if connected?(socket) do
@@ -158,6 +185,26 @@ defmodule FullstackWeb.HomeLive.Index do
   defp list_logos, do: Fullstack.EcosystemLogos.list()
   defp count_transactions(), do: Financial.count_transactions()
   defp customers_count(), do: Customers.customers_count()
+
+  defp get_fib(value) do
+    AsyncResult.ok(compute_fib(value))
+  end
+
+  defp compute_fib(value) when is_binary(value) do
+    value
+    |> String.to_integer()
+    |> compute_fib()
+  end
+
+  defp compute_fib(value) when value in [0, 1], do: value
+
+  defp compute_fib(value) when value <= 50 do
+    compute_fib(value - 1) + compute_fib(value - 2)
+  end
+
+  defp compute_fib(_value) do
+    "Too big that value!"
+  end
 
   attr :logo, Fullstack.EcosystemLogo, required: true
 
