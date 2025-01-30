@@ -208,34 +208,38 @@
             <.icon name="hero-x-mark" /> Destroy Centralized!
           </.custom_button>
         </div>
-        <div class="mt-10 sm:flex sm:justify-center lg:justify-start">
-          <.simple_form for={@fib_form} phx-submit="get_fib" class="inline-flex items-center">
-            <.input
-              field={@fib_form[:from]}
-              phx-mounted={JS.focus()}
-              placeholder="fibonacci of..."
-            />
-          </.simple_form>
-          <.async_result
-            :let={fib_result}
-            assign={@fib_result}
-            class="inline-flex items-center pt-10"
-          >
-            <:loading>
-              <span class="mt-14 ml-2">
-                computing...
-              </span>
-            </:loading>
-            <:failed :let={_failure}>Something went wrong!</:failed>
-            <%= if fib_result do %>
-              <span class="mt-14 ml-2">
-                = <%= fib_result.result %>
-              </span>
-            <% else %>
-              {fib_result.reason}
-            <% end %>
-          </.async_result>
+        <div class="grid grid-cols-3 grid-rows-1 gap-0">
+          <div class="col-start-1 inline-block align-middle pt-14">
+            Fibonacci
+          </div>
+          <div class="col-start-2 ">
+            <.simple_form for={@fib_form} phx-submit="get_fib" class="inline-flex items-center">
+              <.input
+                field={@fib_form[:from]}
+                phx-mounted={JS.focus()}
+                placeholder="fibonacci of..."
+              />
+            </.simple_form>
+          </div>
+          <div class="pt-14">
+            <.async_result
+              :let={fib_result}
+              assign={@fib_result}
+              class="inline-flex items-center pt-10"
+            >
+              <:loading>
+                &nbsp; computing...
+              </:loading>
+              <:failed :let={_failure}>Something went wrong!</:failed>
+              <%= if fib_result do %>
+                &nbsp; = <%= fib_result.result %>
+              <% else %>
+                <%= fib_result.reason %>
+              <% end %>
+            </.async_result>
+          </div>
         </div>
+
         <div class="mt-12 flex justify-center space-x-3">
           <.ecosystem_logo :for={logo <- @logos} logo={logo} />
         </div>

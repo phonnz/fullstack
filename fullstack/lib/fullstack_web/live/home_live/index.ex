@@ -27,8 +27,8 @@ defmodule FullstackWeb.HomeLive.Index do
       |> assign(:local, 0)
       |> assign(:identified, 0)
       |> assign(:centralized, init_counter(:centralized))
-      |> assign(:fib_form, to_form(%{"from" => 3}))
-      |> assign_async(:fib_result, fn -> {:ok, %{fib_result: get_fib(3)}} end)
+      |> assign(:fib_form, to_form(%{"from" => 40}))
+      |> assign_async(:fib_result, fn -> {:ok, %{fib_result: get_fib(40)}} end)
       |> assign(:phrase, "")
       |> start_or_connect_phrases_service()
 
@@ -117,20 +117,6 @@ defmodule FullstackWeb.HomeLive.Index do
     end
   end
 
-  #  @impl true
-  #  def handle_async(:compute_fib, {:ok, fib_result}, socket) do
-  #    # %{org: org} = socket.assigns
-  #    dbg()
-  #    {:noreply, assign(socket, :fib_result, 1000)}
-  #  end
-  #
-  #  @impl true
-  #  def handle_async(:my_task, {:exit, reason}, socket) do
-  #    # %{org: org} = socket.assigns
-  #    dbg()
-  #    {:noreply, assign(socket, :fib_result, AsyncResult.failed(:fib_result, {:exit, reason}))}
-  #  end
-
   defp start_or_connect_phrases_service(socket) do
     if connected?(socket) do
       case Phrases.start_link([]) do
@@ -198,12 +184,12 @@ defmodule FullstackWeb.HomeLive.Index do
 
   defp compute_fib(value) when value in [0, 1], do: value
 
-  defp compute_fib(value) when value <= 50 do
+  defp compute_fib(value) when value < 50 do
     compute_fib(value - 1) + compute_fib(value - 2)
   end
 
   defp compute_fib(_value) do
-    "Too big that value!"
+    "Only under 50 values"
   end
 
   attr :logo, Fullstack.EcosystemLogo, required: true
