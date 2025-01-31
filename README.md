@@ -13,6 +13,7 @@ I have seen lot of times this table from "Elixir in Action" book, and want to sh
 ![plot](./static/idea.png)
 Elixir, Erlang, OTP,the BEAM,Phoenix & Liveview and Nerves, is an amazing stack to build a rea-time distributed IoT platform.
 
+## Key components from the Web Framework
 ```mermaid
 flowchart TD
     J["Endpoint"] <--> F["Router"]
@@ -20,7 +21,7 @@ flowchart TD
     A["LiveView (reactive controller)"] <-- Monitor current Connections --> B["Presence"]
     E("PubSub - (Message Queue)") --> A
     A <-- serves --> C
-    A <--> D["Buisiness Logic API Layer"]
+    A <--> D["Business Logic API Layer"]
     E <-- broadcast --> D
     D <-- Caches Data --> H("ETS - (In-Memory Key-Value Store)")
     D <-- Handles --> G("GenServers - (Background Job)") & I("Task - (Long Running Request)")
