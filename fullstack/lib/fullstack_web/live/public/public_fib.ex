@@ -34,6 +34,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
           name="value"
           field={@form[:value]}
           value="3"
+          required={true}
           placeholder="number"
           class="px-10 py-3 w-full "
           autocomplete="off"
@@ -69,9 +70,9 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         Memoized
       </button>
       <button
-        :if={@task}
+        :if={@task || @task_m}
         type="button"
-        phx-action="cancel"
+        phx-click="cancel"
         class="span-col-1 focus:outline-none text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-900"
       >
         Cancel
@@ -119,7 +120,8 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
 
   @impl true
   def handle_event("compute", %{"option" => option, "value" => value} = params, socket)
-      when option in ["simple", "both", "memoized"] do
+      when option in ["simple", "both", "memoized"] and
+             value not in [nil, ""] do
     pid_from = self()
 
     socket =
@@ -159,8 +161,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
     {:noreply, socket}
   end
 
-  def handle_event("cancel", params, socket) do
-    dbg(params)
+  def handle_event("cancel", _, socket) do
     task_id = socket.assigns.task
     task_m_id = socket.assigns.task_m
 
@@ -169,6 +170,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         Process.exit(task_id, :kill)
         # display it was cancelled.
         Process.exit(task_m_id, :kill)
+        dbg()
 
         socket
         |> assign(:task, nil)
