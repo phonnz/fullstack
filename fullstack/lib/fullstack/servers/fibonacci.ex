@@ -6,7 +6,6 @@ defmodule Fullstack.Servers.Fibonacci.Fibonacci do
   end
 
   def fibm(from, value) when is_binary(value) do
-    dbg()
     start()
 
     value =
@@ -39,7 +38,7 @@ defmodule Fullstack.Servers.Fibonacci.Fibonacci do
       |> String.to_integer()
 
     r = fib(from, value)
-    Process.send(from, {:new_message, %{message: "#{value} = #{r}"}}, [])
+    Process.send(from, {:new_message, %{message: "=> Fib for #{value} = #{r}"}}, [])
 
     :ok
   end
@@ -47,7 +46,7 @@ defmodule Fullstack.Servers.Fibonacci.Fibonacci do
   def fib(_from, value) when value in [0, 1], do: value
 
   def fib(from, value) when value < 50 do
-    Process.send(from, {:new_message, %{message: "for #{value}"}}, [])
+    Process.send(from, {:new_message, %{message: "#{value}"}}, [])
 
     fib(from, value - 1) + fib(from, value - 2)
   end

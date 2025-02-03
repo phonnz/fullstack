@@ -33,6 +33,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
           type="text"
           name="value"
           field={@form[:value]}
+          value="3"
           placeholder="number"
           class="px-10 py-3 w-full "
           autocomplete="off"
@@ -79,12 +80,18 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
     <div class="grid grid-cols-2 gap-10 max-h-[150px]">
       <div class="h-full max-h-1/3">
         <h3>Simple</h3>
-        <span :for={_message <- @messages} class="font-size-8">. </span>
+        <span :for={message <- @messages} class="font-size-8">
+          <%= if String.starts_with?(message, "=>") do %>
+            <b><%= message %></b> <br />
+          <% else %>
+            .
+          <% end %>
+        </span>
       </div>
       <div class="max-h-1/3">
         <h3>Memoization</h3>
         <article :for={message <- @memo_messages} class="column-2">
-          <%= message %>
+          <b><%= message %></b>
         </article>
       </div>
     </div>
@@ -113,7 +120,6 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
   @impl true
   def handle_event("compute", %{"option" => option, "value" => value} = params, socket)
       when option in ["simple", "both", "memoized"] do
-    dbg(params)
     pid_from = self()
 
     socket =
@@ -153,7 +159,8 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
     {:noreply, socket}
   end
 
-  def handle_event("cancel", _params, socket) do
+  def handle_event("cancel", params, socket) do
+    dbg(params)
     task_id = socket.assigns.task
     task_m_id = socket.assigns.task_m
 
