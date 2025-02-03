@@ -19,6 +19,7 @@ defmodule FullstackWeb.Router do
 
   scope "/", FullstackWeb do
     pipe_through :browser
+    live "/fibonacci", Public.FibonacciLive.Index, :index
 
     resources "/about", AboutController, only: [:index]
     live "/chat", ChatLive
