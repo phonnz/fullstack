@@ -42,7 +42,8 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
       <button
         :if={is_nil(@task)}
         type="submit"
-        phx-action="compute"
+        name="option"
+        value="simple"
         class="span-col-1 text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
       >
         Simple
@@ -50,7 +51,9 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
       <button
         :if={is_nil(@task)}
         type="submit"
-        phx-action="compute"
+        name="option"
+        value="both"
+        phx-action="both"
         class="span-col-1 focus:outline-none text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800"
       >
         Both
@@ -58,15 +61,16 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
       <button
         :if={is_nil(@task)}
         type="submit"
-        phx-action="compute"
+        name="option"
+        value="memoized"
         class="span-col-1 focus:outline-none text-white bg-purple-700 hover:bg-purple-800 focus:ring-4 focus:ring-purple-300 font-medium rounded-lg text-sm px-5 py-2.5 mb-2 dark:bg-purple-600 dark:hover:bg-purple-700 dark:focus:ring-purple-900"
       >
         Memoized
       </button>
       <button
         :if={@task}
-        type="submit"
-        phx-action="compute"
+        type="button"
+        phx-action="cancel"
         class="span-col-1 focus:outline-none text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-900"
       >
         Cancel
@@ -107,22 +111,44 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
   end
 
   @impl true
-  def handle_event("compute", %{"value" => value}, socket) do
+  def handle_event("compute", %{"option" => option, "value" => value} = params, socket)
+      when option in ["simple", "both", "memoized"] do
+    dbg(params)
     pid_from = self()
-    #    {:ok, task} = Task.start_link(fn -> Fibonacci.fib(pid_from, value) end)
-    {:ok, task} =
-      Task.start_link(fn ->
-        Fibonacci.fib(value, pid_from)
-      end)
-
-    {:ok, task_m} = Task.start_link(fn -> Fibonacci.fibm(pid_from, value) end)
 
     socket =
-      socket
-      |> assign(:messages, [])
-      |> assign(:memo_messages, [])
-      |> assign(:task, task)
-      |> assign(:task_m, task_m)
+      case option do
+        "simple" ->
+          {:ok, task} =
+            Task.start_link(fn ->
+              Fibonacci.fib(value, pid_from)
+            end)
+
+          socket
+          |> assign(:messages, [])
+          |> assign(:task, task)
+
+        "both" ->
+          {:ok, task} =
+            Task.start_link(fn ->
+              Fibonacci.fib(value, pid_from)
+            end)
+
+          {:ok, task_m} = Task.start_link(fn -> Fibonacci.fibm(pid_from, value) end)
+
+          socket
+          |> assign(:messages, [])
+          |> assign(:memo_messages, [])
+          |> assign(:task, task)
+          |> assign(:task_m, task_m)
+
+        "memoized" ->
+          {:ok, task_m} = Task.start_link(fn -> Fibonacci.fibm(pid_from, value) end)
+
+          socket
+          |> assign(:memo_messages, [])
+          |> assign(:task_m, task_m)
+      end
 
     {:noreply, socket}
   end

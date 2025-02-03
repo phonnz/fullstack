@@ -6,6 +6,7 @@ defmodule Fullstack.Servers.Fibonacci.Fibonacci do
   end
 
   def fibm(from, value) when is_binary(value) do
+    dbg()
     start()
 
     value =
