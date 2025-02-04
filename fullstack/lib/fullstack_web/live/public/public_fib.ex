@@ -162,31 +162,20 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
   end
 
   def handle_event("cancel", _, socket) do
-    task_id = socket.assigns.task
-    task_m_id = socket.assigns.task_m
+    if is_pid(socket.assigns.task), do: Process.exit(socket.assigns.task, :kill)
+    if is_pid(socket.assigns.task_m), do: Process.exit(socket.assigns.task_m, :kill)
 
     socket =
-      if task_id do
-        Process.exit(task_id, :kill)
-        # display it was cancelled.
-        Process.exit(task_m_id, :kill)
-        dbg()
-
-        socket
-        |> assign(:task, nil)
-        |> assign(:task_m, nil)
-        |> put_flash(:info, "Cancelled")
-      else
-        socket
-      end
+      socket
+      |> assign(:task, nil)
+      |> assign(:task_m, nil)
+      |> put_flash(:info, "Cancelled")
 
     {:noreply, socket}
   end
 
   @impl true
   def handle_info({:EXIT, pid, reason} = args, socket) do
-    dbg(args)
-
     socket =
       cond do
         pid == socket.assigns.task ->
@@ -194,9 +183,6 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
 
         pid == socket.assigns.task_m ->
           assign(socket, :task_m, nil)
-
-        true ->
-          socket
       end
 
     {:noreply, socket}
