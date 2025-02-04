@@ -2,7 +2,7 @@ defmodule Fullstack.Servers.Generators.Transactions do
   use GenServer
 
   alias Fullstack.Financial
-  @generate_every_default Enum.random(1..5) * 1_000
+  @generate_every_default Enum.random(1..3) * 1_000
 
   def start_link(_args) do
     time_to_generate = Keyword.get(get_env(), :time_to_generate, @generate_every_default)
