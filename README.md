@@ -3,9 +3,10 @@
 After been building infrastructure for millions of IoT devices connected to a Phoenix Backend, sending data and enable people to track everything soft real-time with Liveview and provide services to third-parties from APIs, I decided to share the knowledge with the community.
 
 I had the chance to work in several Elixir projects, but most of the experience and knowledge came from building a product and the journey was shared at ElixirConf US 2023
-[![ElixirConf US 2023]](https://www.youtube.com/watch?v=YWDCXbjircQ)
+[ElixirConf US 2023](https://www.youtube.com/watch?v=YWDCXbjircQ)
 
-[![Watch the demo](./static/thumbnail.jpg)](https://www.youtube.com/watch?v=ZMFXT9YDu-o)
+Whatch the demo on Youtube
+[![Watch the demo](./static/thumbnail.png)](https://www.youtube.com/watch?v=ZMFXT9YDu-o)
 
 I have seen lot of times this table from "Elixir in Action" book, and want to show how wasy is to enable this features in a real system. 
 
