@@ -2,20 +2,25 @@
 
 After been building infrastructure for millions of IoT devices connected to a Phoenix Backend, sending data and enable people to track everything soft real-time with Liveview and provide services to third-parties from APIs, I decided to share the knowledge with the community.
 
-I had the chance to work in several Elixir projects, but most of the experience and knowledge came from building a product and the journey was shared at ElixirConf US 2023
-[![ElixirConf US 2023]](https://www.youtube.com/watch?v=YWDCXbjircQ)
+I had the chance to work in several Elixir projects, but most of the experience and knowledge came from building a product and the journey was shared at [ElixirConf US 2023](https://www.youtube.com/watch?v=YWDCXbjircQ)
 
-[![Watch the demo](./static/thumbnail.jpg)](https://www.youtube.com/watch?v=ZMFXT9YDu-o)
+Whatch the demo on [Youtube](https://www.youtube.com/watch?v=ZMFXT9YDu-o)
+[![Watch the demo](./static/thumbnail.png)](https://www.youtube.com/watch?v=ZMFXT9YDu-o)
 
 I have seen lot of times this table from "Elixir in Action" book, and want to show how wasy is to enable this features in a real system. 
 
 ![plot](./static/erlang_features.png)
 
 ## The abstract idea 
+With this demo project and all the videos I will show you how easy can build a full IoT soft real-time system, powered by the AI as a codebase example for any purpoose of your projects.
+
 ![plot](./static/idea.png)
+
 Elixir, Erlang, OTP,the BEAM,Phoenix & Liveview and Nerves, is an amazing stack to build a rea-time distributed IoT platform.
 
 ## Key components from the Web Framework
+Be productve using the Phoenix Framework components to assemble your system
+
 ```mermaid
 flowchart TD
     J["Endpoint"] <--> F["Router"]
