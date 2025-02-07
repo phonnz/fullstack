@@ -209,7 +209,7 @@
           </.custom_button>
         </div>
         <div class="grid grid-cols-3 grid-rows-1 gap-0">
-          <div class="col-start-1 inline-block align-middle pt-14">
+          <div class="col-start-1 inline-block align-middle pt-14 pr-2 text-right text-gray-500">
             Fibonacci
           </div>
           <div class="col-start-2 ">
@@ -221,7 +221,11 @@
               />
             </.simple_form>
           </div>
-          <div class="pt-14">
+          <div class={[
+            "pt-14",
+            @fib_result.ok? && "text-lime-600 border-lime-600",
+            @fib_result.loading && "text-amber-600 border-amber-600"
+          ]}>
             <.async_result
               :let={fib_result}
               assign={@fib_result}
