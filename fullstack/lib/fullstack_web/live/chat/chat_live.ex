@@ -66,6 +66,7 @@ defmodule FullstackWeb.ChatLive do
             value={@text_value}
             phx-mounted={JS.focus()}
             placeholder="Say something!"
+            autocomplete="off"
           />
         </.simple_form>
       </section>
@@ -207,22 +208,6 @@ defmodule FullstackWeb.ChatLive do
     |> Map.keys()
     |> Enum.uniq()
     |> Enum.count()
-  end
-
-  defp get_form(params, action \\ :subimt) do
-    params
-    |> get_changeset()
-    |> Map.put(:action, action)
-    |> to_form(as: :form)
-  end
-
-  defp get_changeset(params) do
-    data = %{}
-    types = %{question: :string}
-
-    {data, types}
-    |> Ecto.Changeset.cast(params, Map.keys(types))
-    |> Ecto.Changeset.validate_required([:question])
   end
 
   defp save_message(message) do
