@@ -91,7 +91,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       colour_palette: :default
     ]
 
-    Plot.new(test_data, BarChart, 500, 400, options)
+    Plot.new(test_data, BarChart, 500, 350, options)
     |> Plot.axis_labels("Month", "New Customers")
     |> Plot.to_svg()
   end
@@ -117,7 +117,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       colour_palette: :default
     ]
 
-    Plot.new(test_data, PointPlot, 500, 400, options)
+    Plot.new(test_data, PointPlot, 500, 300, options)
     |> Plot.axis_labels("Day", "Count / Amount")
     |> Plot.to_svg()
   end
@@ -182,7 +182,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       end
 
     plot =
-      Plot.new(dataset, module, 600, 400, options)
+      Plot.new(dataset, module, 500, 300, options)
       |> Plot.titles(chart_options.title, nil)
       |> Plot.plot_options(plot_options)
 
