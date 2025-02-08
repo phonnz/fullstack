@@ -20,6 +20,7 @@ defmodule FullstackWeb.Router do
   scope "/", FullstackWeb do
     pipe_through :browser
     live "/fibonacci", Public.FibonacciLive.Index, :index
+    live "/transactions", Public.TransactionsLive.PublicTransactions, :public_transactions
 
     resources "/about", AboutController, only: [:index]
     live "/chat", ChatLive
@@ -29,7 +30,6 @@ defmodule FullstackWeb.Router do
 
     live "/devices/:id", DeviceLive.Show, :show
     live "/devices/:id/show/edit", DeviceLive.Show, :edit
-    live "/transactions", Public.TransactionsLive.PublicTransactions, :public_trasactions
 
     live "/urls", UrlLive.Index, :index
     live "/urls/new", UrlLive.Index, :new
