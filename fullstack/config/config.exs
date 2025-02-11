@@ -20,6 +20,10 @@ config :fullstack, FullstackWeb.Endpoint,
     formats: [html: FullstackWeb.ErrorHTML, json: FullstackWeb.ErrorJSON],
     layout: false
   ],
+  live_reload: [
+    patterns: [],
+    web_console_logger: true
+  ],
   pubsub_server: Fullstack.PubSub,
   live_view: [signing_salt: "c8Pq9B5y"]
 
