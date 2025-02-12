@@ -81,7 +81,7 @@ defmodule FullstackWeb.Router do
     post "/users/log_in", UserSessionController, :create
   end
 
-  scope "/", FullstackWeb do
+  scope "/admin", FullstackWeb do
     pipe_through [:browser, :require_authenticated_user]
 
     live_session :require_authenticated_user,

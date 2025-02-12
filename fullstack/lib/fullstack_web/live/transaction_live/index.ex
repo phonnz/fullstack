@@ -1,12 +1,12 @@
 defmodule FullstackWeb.TransactionLive.Index do
   use FullstackWeb, :live_view
 
-  alias Fullstack.Financial
+  alias Fullstack.Operations
   alias Fullstack.Financial.Transaction
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, stream(socket, :transactions, Financial.list_transactions())}
+    {:ok, stream(socket, :transactions, Operations.list_transactions())}
   end
 
   @impl true
