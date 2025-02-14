@@ -22,7 +22,8 @@ defmodule Fullstack.Application do
         {Cachex, [name: :chat]},
         Fullstack.Servers.OperationsSupervisor,
         Fullstack.Services.Counters,
-        {Fullstack.Servers.Generators.Transactions, []}
+        Fullstack.Servers.Generators.Transactions,
+        {Registry, [keys: :unique, name: :wallet_projectors]}
       ] ++ prod_child()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
