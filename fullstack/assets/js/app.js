@@ -22,11 +22,14 @@ import { Socket } from "phoenix"
 import { LiveSocket } from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 import { createLiveToastHook } from 'live_toast'
+import Map from "./map";
 // import VegaLite from "../vendor/vegalite"
+
 
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let hooks = {
-  LiveToast: createLiveToastHook()
+  Map 
+  //LiveToast: createLiveToastHook(),
 } //{ VegaLite }
 let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfToken }, hooks })
 
@@ -36,6 +39,12 @@ topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" })
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
+window.addEventListener("phx:live_reload:attached", ({detail: reloader}) => {
+  // enable server log streaming to client.
+  // disable with reloader.disableServerLogs()
+  reloader.enableServerLogs();
+  //window.liveReloader = reloader;
+})
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 
