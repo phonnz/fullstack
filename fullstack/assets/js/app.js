@@ -28,8 +28,8 @@ import Map from "./map";
 
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let hooks = {
-  Map 
-  //LiveToast: createLiveToastHook(),
+  Map,
+  LiveToast: createLiveToastHook(),
 } //{ VegaLite }
 let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfToken }, hooks })
 

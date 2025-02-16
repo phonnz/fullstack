@@ -1,4 +1,5 @@
-import maplibregl from "maplibre-gl";
+// Using global on template for Flyio deploy 
+// import maplibregl from "maplibre-gl";
 const Map = {
     mounted() {
         this.props = { id: this.el.getAttribute("data-id") };

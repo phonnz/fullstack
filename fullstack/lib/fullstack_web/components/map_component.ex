@@ -2,7 +2,7 @@ defmodule FullstackWeb.Live.MapComponent do
   use FullstackWeb, :live_component
   alias MapLibre
 
-  @fill_colour "#ffa8db"
+  @fill_colour "#03fc98"
 
   def render(assigns) do
     ~H"""
