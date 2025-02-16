@@ -6,7 +6,9 @@ const Map = {
             const map = {container: "map", style: ml}
             this.props.map = new maplibregl.Map(map);
         });
+        this.handleEvent(`map:${this.props.id}:add`, ({ layer }) => {
+            this.props.map.addLayer(layer);
+        });
     },
 };
-
 export default Map;
