@@ -1,7 +1,7 @@
 defmodule FullstackWeb.HomeLive.Index do
+  use FullstackWeb, :live_view
   alias Phoenix.LiveView.AsyncResult
   alias Fullstack.Financial
-  use FullstackWeb, :live_view
 
   alias Fullstack.{Customers, Financial}
   alias Fullstack.Services.Counters
