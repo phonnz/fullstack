@@ -1,8 +1,8 @@
-defmodule Fullstack.Wallet.Aggregate.WalletProjector do
+defmodule Fullstack.Wallet.Aggregate.WalletAggregator do
   use GenServer
   require Logger
+  @registry Fullstack.Wallet.Aggregate.WalletAggregators
 
-  @registry :wallet_projectors
   defstruct [:customer_id, :value, event_type: :amount_deposited]
 
   def start_link(customer_id) do
@@ -20,7 +20,7 @@ defmodule Fullstack.Wallet.Aggregate.WalletProjector do
         apply_event(pid, event)
 
       _ ->
-        Logger.debug("Attempt to apply event to non-existent account, starting projector")
+        Logger.debug("Attempt to apply event to non-existent account, starting aggregator")
         {:ok, pid} = start_link(account)
         apply_event(pid, event)
     end
@@ -30,14 +30,22 @@ defmodule Fullstack.Wallet.Aggregate.WalletProjector do
     GenServer.cast(pid, {:handle_event, event})
   end
 
-  def get_balance(pid) do
-    GenServer.call(pid, :get_balance)
+  def get_balance(customer_id) when is_binary(customer_id) do
+    customer_id
+    |> lookup_aggregator
+    |> GenServer.call(:get_balance)
   end
 
-  def lookup_balance(customer_id) when is_binary(customer_id) do
+  def get_history(customer_id) when is_binary(customer_id) do
+    customer_id
+    |> lookup_aggregator
+    |> GenServer.call(:get_history)
+  end
+
+  defp lookup_aggregator(customer_id) when is_binary(customer_id) do
     with [{pid, _}] <-
            Registry.lookup(@registry, customer_id) do
-      {:ok, get_balance(pid)}
+      pid
     else
       _ ->
         {:error, :unknown_account}
@@ -46,7 +54,7 @@ defmodule Fullstack.Wallet.Aggregate.WalletProjector do
 
   @impl true
   def init(customer_id) do
-    {:ok, %{balance: 0, account_number: customer_id}}
+    {:ok, %{balance: 0, account_number: customer_id, commands: []}}
   end
 
   @impl true
@@ -55,29 +63,40 @@ defmodule Fullstack.Wallet.Aggregate.WalletProjector do
   end
 
   def handle_event(
-        %{balance: bal} = s,
-        %{event_type: :amount_withdrawn, value: v}
+        %{balance: _bal} = s,
+        %{event_type: :amount_withdrawn, value: v} = evt
       ) do
-    %{s | balance: bal - v}
+    s
+    |> Map.update(:balance, 0, &(&1 - v))
+    |> Map.update(:commands, [], &[evt | &1])
   end
 
   def handle_event(
-        %{balance: bal} = s,
-        %{event_type: :amount_deposited, value: v}
+        %{balance: _bal} = s,
+        %{event_type: :amount_deposited, value: v} = evt
       ) do
-    %{s | balance: bal + v}
+    s
+    |> Map.update(:balance, 0, &(&1 + v))
+    |> Map.update(:commands, [], &[evt | &1])
   end
 
   def handle_event(
-        %{balance: bal} = s,
-        %{event_type: :fee_applied, value: v}
+        %{balance: _bal} = s,
+        %{event_type: :fee_applied, value: v} = evt
       ) do
-    %{s | balance: bal - v}
+    s
+    |> Map.update(:balance, 0, &(&1 - v))
+    |> Map.update(:commands, [], &[evt | &1])
   end
 
   @impl true
   def handle_call(:get_balance, _from, state) do
     {:reply, state.balance, state}
+  end
+
+  @impl true
+  def handle_call(:get_history, _from, state) do
+    {:reply, state.commands, state}
   end
 
   defp register_via(customer_id) do
