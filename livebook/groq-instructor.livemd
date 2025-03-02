@@ -1,0 +1,193 @@
+<!-- livebook:{"app_settings":{"access_type":"public","show_source":true,"slug":"groq-agent"},"autosave_interval_s":30} -->
+
+# Groq instructor
+
+```elixir
+Mix.install([
+  {:groq, "~> 0.1"},
+  {:hackney, "~> 1.18"},
+  {:jason, "~> 1.4"},
+  {:phoenix_live_view, "~> 0.18.3"},
+  {:kino, "~> 0.9.0"}
+])
+```
+
+## Section
+
+```elixir
+Mix.install([
+  {:groq, "~> 0.1"},
+  {:hackney, "~> 1.18"},
+  {:jason, "~> 1.4"},
+  {:phoenix_live_view, "~> 0.18.3"},
+  {:kino, "~> 0.9.0"}
+])
+```
+
+```elixir
+json_library = if Code.ensure_loaded?(Jason), do: Jason, else: :error
+
+Application.put_env(:groq, :json_library, json_library)
+
+System.fetch_env!("GROQ_API_KEY")
+
+# Start the Groq application
+case Application.ensure_all_started(:groq) do
+  {:ok, _} -> IO.puts("Groq application started successfully")
+  {:error, error} -> IO.puts("Failed to start Groq application: #{inspect(error)}")
+end
+```
+
+```elixir
+Application.ensure_all_started(:hackney)
+Application.ensure_all_started(:groq)
+```
+
+```elixir
+defmodule MathAgent do
+  def calculate(expression) do
+    try do
+      result = Code.eval_string(expression) |> elem(0)
+      Jason.encode!(%{result: result})
+    rescue
+      _ -> Jason.encode!(%{error: "Invalid expression"})
+    end
+  end
+
+  def function_properties do
+    [
+      %{
+        "type" => "function",
+        "function" => %{
+          "name" => "calculate",
+          "description" => "Evaluate a mathematical expression",
+          "parameters" => %{
+            "type" => "object",
+            "properties" => %{
+              "expression" => %{
+                "type" => "string",
+                "description" => "The mathematical expression to evaluate"
+              }
+            },
+            "required" => ["expression"]
+          }
+        }
+      }
+    ]
+  end
+
+  def create_chat_completion(messages) do
+    Groq.ChatCompletion.create(%{
+      "model" => "llama3-groq-70b-8192-tool-use-preview",
+      "messages" => messages,
+      "tools" => function_properties(),
+      "tool_choice" => "auto",
+      "max_tokens" => 4096
+    })
+  end
+
+  def handle_response({:ok, result}) do
+    case result do
+      %{"choices" => choices} when is_list(choices) and length(choices) > 0 ->
+        first_choice = Enum.at(choices, 0)
+        handle_message(first_choice["message"])
+
+      _ ->
+        {:error, "Unexpected response structure: #{inspect(result)}"}
+    end
+  end
+
+  def handle_response({:error, error}) do
+    {:error, "Error: #{inspect(error)}"}
+  end
+
+  defp handle_message(%{"tool_calls" => [tool_call | _]} = message) do
+    IO.puts("\nModel is using a tool:")
+    IO.inspect(message, label: "Full message")
+
+    %{"function" => %{"name" => function_name, "arguments" => arguments}} = tool_call
+
+    case function_name do
+      "calculate" ->
+        args = Jason.decode!(arguments)
+        IO.puts("Calling calculate function with expression: #{args["expression"]}")
+        result = calculate(args["expression"])
+        IO.puts("Calculate function result: #{result}")
+        {:tool_call, tool_call["id"], function_name, result}
+
+      _ ->
+        {:error, "Unknown function: #{function_name}"}
+    end
+  end
+
+  defp handle_message(message) do
+    IO.puts("\nModel is not using a tool:")
+    IO.inspect(message, label: "Full message")
+    {:ok, message["content"]}
+  end
+
+  def run_conversation(user_prompt) do
+    IO.puts("Starting conversation with user prompt: #{user_prompt}")
+
+    initial_messages = [
+      %{
+        "role" => "system",
+        "content" => "Another fake answer!"
+      },
+      %{
+        "role" => "user",
+        "content" => user_prompt
+      }
+    ]
+
+    case create_chat_completion(initial_messages) do
+      {:ok, result} ->
+        IO.puts("\nReceived initial response from Groq API")
+
+        case handle_response({:ok, result}) do
+          {:tool_call, id, name, content} ->
+            IO.puts("\nProcessing tool call result")
+
+            tool_message = %{
+              "tool_call_id" => id,
+              "role" => "tool",
+              "name" => name,
+              "content" => content
+            }
+
+            first_choice = Enum.at(result["choices"], 0)
+            new_messages = initial_messages ++ [first_choice["message"], tool_message]
+            IO.puts("\nSending follow-up request to Groq API")
+
+            case create_chat_completion(new_messages) do
+              {:ok, final_result} ->
+                IO.puts("\nReceived final response from Groq API")
+                handle_response({:ok, final_result})
+
+              error ->
+                error
+            end
+
+          other ->
+            other
+        end
+
+      error ->
+        error
+    end
+  end
+end
+```
+
+```elixir
+user_input_no_tool = "What's the capital of France?"
+
+IO.puts(
+  "\n\nRunning conversation with input that might not use the tool: #{user_input_no_tool}\n"
+)
+
+case MathAgent.run_conversation(user_input_no_tool) do
+  {:ok, response} -> IO.puts("\nFinal Response: #{response}")
+  {:error, error} -> IO.puts("\nError: #{error}")
+end
+```
