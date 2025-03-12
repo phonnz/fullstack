@@ -66,7 +66,8 @@ defmodule Fullstack.MixProject do
       {:cachex, "~> 3.6.0"},
       {:live_toast, "~> 0.6.4"},
       {:contex, "0.5.0"},
-      {:timex, "~>3.7.11"}
+      {:timex, "~>3.7.11"},
+      {:maplibre, "~> 0.1.9"}
     ]
   end
 

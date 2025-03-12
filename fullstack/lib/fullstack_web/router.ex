@@ -21,6 +21,7 @@ defmodule FullstackWeb.Router do
     pipe_through :browser
     live "/fibonacci", Public.FibonacciLive.Index, :index
     live "/transactions", Public.TransactionsLive.PublicTransactions, :public_transactions
+    live "/devices", Public.DevicesLive.Index, :index
 
     resources "/about", AboutController, only: [:index]
     live "/chat", ChatLive

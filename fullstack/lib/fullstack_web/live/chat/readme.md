@@ -6,5 +6,5 @@ This is a simple single file chat application using
 - Cachex for in-memmory persistance
 - PubSub for real-time broadcasting
 
-![Concept](../../../../static/chat_features.png)
+![Concept](../../../../../static/chat_features.png)
 
