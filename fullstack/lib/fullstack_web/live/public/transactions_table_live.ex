@@ -1,4 +1,5 @@
 defmodule FullstackWeb.Public.TransactionsTableLive do
+  alias Phoenix.LiveView.AsyncResult
   use FullstackWeb, :live_view
   alias Fullstack.Public.Transactions
 
@@ -31,8 +32,16 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
       |> assign_async(
         :transactions,
         fn ->
-          {:ok, %{transactions: Transactions.list_transactions(params)}}
+          case Transactions.list_transactions(params) do
+            {:error, reason} ->
+              {:error, reason}
+
+            transactions ->
+              transactions
+          end
         end,
+        on_success: &handle_transactions_success/2,
+        on_failure: &handle_transactions_failure/2,
         reset: true
       )
       |> assign(:valid_status, @valid_status)
@@ -54,9 +63,19 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
       <.input field={@form[:query_filter]} placeholder="customer_id..." />
       <.input type="select" field={@form[:status]} prompt="Status" options={@valid_status} />
     </.simple_form>
-
+    <.link patch={~p"/transactions"}>
+      <.icon name="hero-x-mark text-blue-700" class="h-4 w-4" />
+    </.link>
     <div :if={@transactions.loading} class="loading">
-      <div class="spinner">Loading</div>
+      <div class="spinner text-amber-700">Loading</div>
+    </div>
+    <div :if={@transactions.failed} class="error">
+      <div class="spinner text-red-700">
+        <.icon name="hero-exclamation-triangle-mini text-red-700" class="h-4 w-4" /><%= elem(
+          @transactions.failed,
+          1
+        ) %>
+      </div>
     </div>
     <.table :if={@transactions.ok?} id="transactions" rows={@transactions.result}>
       <:col :let={transaction} label="Id">
@@ -88,5 +107,15 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
     socket = push_patch(socket, to: ~p"/transactions?#{params}")
 
     {:noreply, socket}
+  end
+
+  def handle_transactions_success(transactions, socket) do
+    assign(socket, :transactions, %{loaded: true, data: transactions})
+  end
+
+  # Failure handler
+  def handle_transactions_failure(error, socket) do
+    dbg(error)
+    assign(socket, :transactions, %{failed: true, error: error})
   end
 end

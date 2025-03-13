@@ -3,9 +3,6 @@ defmodule Fullstack.Public.Transactions do
   alias Fullstack.Repo
 
   alias Fullstack.Financial.Transaction
-  alias Fullstack.Customers
-  alias Fullstack.Customers.Customer
-  alias Fullstack.Utils.Charts.ChartsDates
 
   @valid_status [
     "inserted",
@@ -25,12 +22,22 @@ defmodule Fullstack.Public.Transactions do
   def list_transactions(params \\ %{}) do
     Process.sleep(1_000)
 
-    Transaction
-    |> with_status(params)
-    |> filter_by(params)
-    |> set_page(params)
-    |> order_by(desc: :inserted_at)
-    |> Repo.all()
+    case Enum.random([true, false]) do
+      true ->
+        {:ok,
+         %{
+           transactions:
+             Transaction
+             |> with_status(params)
+             |> filter_by(params)
+             |> set_page(params)
+             |> order_by(desc: :inserted_at)
+             |> Repo.all()
+         }}
+
+      false ->
+        {:error, "Timeout Service"}
+    end
   end
 
   defp with_status(query, %{"status" => status}) when status in @valid_status do
