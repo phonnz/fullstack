@@ -28,9 +28,13 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
   def handle_params(params, _uri, socket) do
     socket =
       socket
-      |> assign_async(:transactions, fn ->
-        {:ok, %{transactions: Transactions.list_transactions(params)}}
-      end)
+      |> assign_async(
+        :transactions,
+        fn ->
+          {:ok, %{transactions: Transactions.list_transactions(params)}}
+        end,
+        reset: true
+      )
       |> assign(:valid_status, @valid_status)
       |> assign(:form, to_form(params))
 
@@ -52,10 +56,13 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
     </.simple_form>
 
     <div :if={@transactions.loading} class="loading">
-      <div class="spinner"></div>
+      <div class="spinner">Loading</div>
     </div>
     <.table :if={@transactions.ok?} id="transactions" rows={@transactions.result}>
-      <:col :let={transaction} label="Id"><%= transaction.id %></:col>
+      <:col :let={transaction} label="Id">
+        <%= transaction.inserted_at %><br />
+        <%= transaction.id %>
+      </:col>
       <:col :let={transaction} label="Customer"><%= transaction.customer_id %></:col>
       <:col :let={transaction} label="Status"><%= transaction.status %></:col>
     </.table>
@@ -67,8 +74,6 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
       params
       |> Map.take(~w(query_filter status))
       |> Map.reject(fn {_, v} -> v == "" end)
-
-    dbg(params)
 
     socket = push_patch(socket, to: ~p"/transactions?#{params}")
 

@@ -24,7 +24,7 @@ defmodule Fullstack.Financial.Transaction do
         :rejected,
         :cancelled
       ],
-      default: :started
+      default: :inserted
 
     belongs_to :customer, Customer
     belongs_to :pos, Pos

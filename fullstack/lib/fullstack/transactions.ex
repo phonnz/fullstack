@@ -8,25 +8,28 @@ defmodule Fullstack.Public.Transactions do
   alias Fullstack.Utils.Charts.ChartsDates
 
   @valid_status [
-    :inserted,
-    :started,
-    :on_going,
-    :ended,
-    :uploading,
-    :failed,
-    :processing,
-    :inferred,
-    :outstanding,
-    :paid,
-    :rejected,
-    :cancelled
+    "inserted",
+    "started",
+    "on_going",
+    "ended",
+    "uploading",
+    "failed",
+    "processing",
+    "inferred",
+    "outstanding",
+    "paid",
+    "rejected",
+    "cancelled"
   ]
 
   def list_transactions(params \\ %{}) do
+    Process.sleep(1_000)
+
     Transaction
     |> with_status(params)
     |> filter_by(params)
     |> set_page(params)
+    |> order_by(desc: :inserted_at)
     |> Repo.all()
   end
 
