@@ -1,21 +1,77 @@
 defmodule FullstackWeb.Public.TransactionsTableLive do
   use FullstackWeb, :live_view
+  alias Fullstack.Public.Transactions
+
+  @valid_status [
+    :inserted,
+    :started,
+    :on_going,
+    :ended,
+    :uploading,
+    :failed,
+    :processing,
+    :inferred,
+    :outstanding,
+    :paid,
+    :rejected,
+    :cancelled
+  ]
 
   def mount(_, _, socket) do
     socket =
       socket
       |> assign(:page_title, "Transactions")
-      |> assign(:transactions, [])
 
     {:ok, socket}
+  end
+
+  def handle_params(params, _uri, socket) do
+    socket =
+      socket
+      |> assign_async(:transactions, fn ->
+        {:ok, %{transactions: Transactions.list_transactions(params)}}
+      end)
+      |> assign(:valid_status, @valid_status)
+      |> assign(:form, to_form(params))
+
+    {:noreply, socket}
   end
 
   def render(assigns) do
     ~H"""
     <.header><%= @page_title %></.header>
-    <.table id="transactions" rows={@transactions}>
-      <:col :let={transaction} label="id"><%= transaction.id %></:col>
+    <.simple_form
+      for={@form}
+      phx-change="filter"
+      autocomplete="off"
+      phx-debounce="500"
+      class="filters"
+    >
+      <.input field={@form[:query_filter]} placeholder="customer_id..." />
+      <.input type="select" field={@form[:status]} prompt="Status" options={@valid_status} />
+    </.simple_form>
+
+    <div :if={@transactions.loading} class="loading">
+      <div class="spinner"></div>
+    </div>
+    <.table :if={@transactions.ok?} id="transactions" rows={@transactions.result}>
+      <:col :let={transaction} label="Id"><%= transaction.id %></:col>
+      <:col :let={transaction} label="Customer"><%= transaction.customer_id %></:col>
+      <:col :let={transaction} label="Status"><%= transaction.status %></:col>
     </.table>
     """
+  end
+
+  def handle_event("filter", params, socket) do
+    params =
+      params
+      |> Map.take(~w(query_filter status))
+      |> Map.reject(fn {_, v} -> v == "" end)
+
+    dbg(params)
+
+    socket = push_patch(socket, to: ~p"/transactions?#{params}")
+
+    {:noreply, socket}
   end
 end
