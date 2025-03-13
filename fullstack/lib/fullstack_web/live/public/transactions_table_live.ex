@@ -64,7 +64,17 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
         <%= transaction.id %>
       </:col>
       <:col :let={transaction} label="Customer"><%= transaction.customer_id %></:col>
-      <:col :let={transaction} label="Status"><%= transaction.status %></:col>
+      <:col :let={transaction} label="Status">
+        <span class={[
+          "rounded-md px-2 py-1 text-xs font-medium uppercase inline-block border",
+          transaction.status == :ended && "text-lime-600 border-lime-600",
+          transaction.status in [:inserted, :on_going] && "text-amber-600 border-amber-600",
+          transaction.status == :cancelled && "text-gray-600 border-gray-600"
+        ]}>
+          <%= transaction.status %>
+        </span>
+      </:col>
+      <:col :let={transaction} label="Amount"><%= transaction.amount %></:col>
     </.table>
     """
   end
