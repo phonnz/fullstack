@@ -26,7 +26,6 @@ defmodule FullstackWeb.Public.AgentLive do
             name="question"
             class="w-full px-3 py-2 border border-gray-300 rounded-md"
             rows="3"
-            phx-change="update_question"
             value={@question}
             disabled={@streaming}
           ><%= @question %></textarea>
@@ -54,16 +53,10 @@ defmodule FullstackWeb.Public.AgentLive do
     """
   end
 
-  def handle_event("update_question", %{"question" => question}, socket) do
-    {:noreply, assign(socket, question: question)}
-  end
-
   def handle_event("submit_question", %{"question" => question}, socket) do
     if String.trim(question) != "" do
-      # Start streaming mode
       socket = assign(socket, streaming: true, answer: "")
 
-      # Ask the GenServer to process the question
       AgentServer.ask_question(question, self())
 
       {:noreply, socket}
@@ -73,13 +66,11 @@ defmodule FullstackWeb.Public.AgentLive do
   end
 
   def handle_info({:stream_word, word}, socket) do
-    # Append the new word to the current answer
     updated_answer = socket.assigns.answer <> word
     {:noreply, assign(socket, answer: updated_answer)}
   end
 
   def handle_info({:stream_complete}, socket) do
-    # Mark streaming as complete
     {:noreply, assign(socket, streaming: false)}
   end
 end

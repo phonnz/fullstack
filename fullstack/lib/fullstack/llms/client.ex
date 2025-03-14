@@ -1,6 +1,6 @@
 defmodule Fullstack.Llms.Client.Local do
   @default_question "What's the capital of Mexico?"
-  def call(text \\ @default_question) do
+  def call(live_view_pid, text \\ @default_question) do
     data =
       %{
         "model" => "deepseek-r1",
@@ -40,6 +40,7 @@ defmodule Fullstack.Llms.Client.Local do
                      Map.update(acc, :think, new_word, &(&1 <> " #{new_word}"))
 
                    new_word when not thinking ->
+                     send(live_view_pid, {:stream_word, word <> " "})
                      Map.update(acc, :response, new_word, &(&1 <> " #{new_word}"))
                  end
 
@@ -49,6 +50,8 @@ defmodule Fullstack.Llms.Client.Local do
              pool_timeout: 60_000,
              receive_timeout: 60_000
            ) do
+      send(live_view_pid, {:stream_complete})
+
       {
         :ok,
         body
