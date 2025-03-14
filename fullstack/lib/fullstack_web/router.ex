@@ -22,6 +22,7 @@ defmodule FullstackWeb.Router do
     live "/fibonacci", Public.FibonacciLive.Index, :index
     live "/transactions", Public.TransactionsLive.PublicTransactions, :public_transactions
     live "/devices", Public.DevicesLive.Index, :index
+    live "/agent", Public.AgentLive
 
     resources "/about", AboutController, only: [:index]
     live "/chat", ChatLive
