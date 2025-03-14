@@ -79,8 +79,10 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
     </div>
     <.table :if={@transactions.ok?} id="transactions" rows={@transactions.result}>
       <:col :let={transaction} label="Id">
-        <%= transaction.inserted_at %><br />
-        <%= transaction.id %>
+        <.link navigate={~p"/transactions/#{transaction.id}"}>
+          <%= transaction.inserted_at %><br />
+          <%= transaction.id %>
+        </.link>
       </:col>
       <:col :let={transaction} label="Customer"><%= transaction.customer_id %></:col>
       <:col :let={transaction} label="Status">
@@ -115,7 +117,6 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
 
   # Failure handler
   def handle_transactions_failure(error, socket) do
-    dbg(error)
     assign(socket, :transactions, %{failed: true, error: error})
   end
 end

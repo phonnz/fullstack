@@ -1,5 +1,6 @@
 defmodule Fullstack.Public.Transactions do
   import Ecto.Query, warn: false
+  alias Fullstack.Public.Transactions
   alias Fullstack.Repo
 
   alias Fullstack.Financial.Transaction
@@ -38,6 +39,10 @@ defmodule Fullstack.Public.Transactions do
       false ->
         {:error, "Timeout Service"}
     end
+  end
+
+  def get(id) do
+    Repo.get(Transaction, id)
   end
 
   defp with_status(query, %{"status" => status}) when status in @valid_status do
