@@ -20,7 +20,9 @@ defmodule FullstackWeb.Router do
   scope "/", FullstackWeb do
     pipe_through :browser
     live "/fibonacci", Public.FibonacciLive.Index, :index
-    live "/transactions", Public.TransactionsLive.PublicTransactions, :public_transactions
+    live "/transactions/:id", Public.TransactionLive
+    live "/transactions", Public.TransactionsTableLive
+    live "/Analitics", Public.TransactionsLive.PublicTransactions, :public_transactions
     live "/devices", Public.DevicesLive.Index, :index
     live "/agent", Public.AgentLive
 
@@ -83,7 +85,7 @@ defmodule FullstackWeb.Router do
     post "/users/log_in", UserSessionController, :create
   end
 
-  scope "/", FullstackWeb do
+  scope "/admin", FullstackWeb do
     pipe_through [:browser, :require_authenticated_user]
 
     live_session :require_authenticated_user,
