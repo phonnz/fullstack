@@ -1,6 +1,7 @@
 defmodule FullstackWeb.Public.FibonacciLive.Index do
   use FullstackWeb, :live_view
-
+  alias Fullstack.Algos.FastFib
+  alias Phoenix.LiveView.AsyncResult
   alias Fullstack.Servers.Fibonacci.Fibonacci
 
   @impl true
@@ -13,6 +14,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
       |> assign(:memo_messages, [])
       |> assign(:task, nil)
       |> assign(:task_m, nil)
+      |> assign(:fast_fib, "")
       |> assign(:form, to_form(%{}))
 
     {:ok, socket}
@@ -70,6 +72,15 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         Memoized
       </button>
       <button
+        :if={is_nil(@task)}
+        type="submit"
+        name="option"
+        value="fast"
+        class="span-col-1 focus:outline-none text-white bg-purple-700 hover:bg-purple-800 focus:ring-4 focus:ring-purple-300 font-medium rounded-lg text-sm px-5 py-2.5 mb-2 dark:bg-purple-600 dark:hover:bg-purple-700 dark:focus:ring-purple-900"
+      >
+        Fast Fib
+      </button>
+      <button
         :if={@task || @task_m}
         type="button"
         phx-click="cancel"
@@ -78,7 +89,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         Cancel
       </button>
     </.form>
-    <div class="grid grid-cols-2 gap-10 max-h-[150px]">
+    <div class="grid grid-cols-3 gap-10 max-h-[150px]">
       <div class="h-full max-h-1/3">
         <h3>Simple</h3>
         <span :for={message <- @messages} class="font-size-8">
@@ -94,6 +105,10 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         <article :for={message <- @memo_messages} class="column-2">
           <b><%= message %></b>
         </article>
+      </div>
+      <div class="max-h-1/3">
+        <h3>Fast Fib</h3>
+        <b><%= @fast_fib %></b>
       </div>
     </div>
     """
@@ -120,7 +135,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
 
   @impl true
   def handle_event("compute", %{"option" => option, "value" => value} = params, socket)
-      when option in ["simple", "both", "memoized"] and
+      when option in ["simple", "both", "memoized", "fast"] and
              value not in [nil, ""] do
     pid_from = self()
 
@@ -149,6 +164,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
           |> assign(:memo_messages, [])
           |> assign(:task, task)
           |> assign(:task_m, task_m)
+          |> assign(:fast_fib, FastFib.fib(String.to_integer(value)))
 
         "memoized" ->
           {:ok, task_m} = Task.start_link(fn -> Fibonacci.fibm(pid_from, value) end)
@@ -156,6 +172,10 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
           socket
           |> assign(:memo_messages, [])
           |> assign(:task_m, task_m)
+
+        "fast" ->
+          socket
+          |> assign(:fast_fib, FastFib.fib(String.to_integer(value)))
       end
 
     {:noreply, socket}
@@ -175,7 +195,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
   end
 
   @impl true
-  def handle_info({:EXIT, pid, reason} = args, socket) do
+  def handle_info({:EXIT, pid, _reason} = _args, socket) do
     socket =
       cond do
         pid == socket.assigns.task ->
