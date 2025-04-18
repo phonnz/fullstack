@@ -12,15 +12,15 @@ defmodule Fullstack.Algos.TimestampSearch do
     - target_timestamp: The timestamp to search for
 
   ## Examples:
-      registries = for i <- 1..1_000_000, do: %{id: i, timestamp: Enum.random(ti..tf)}
-      registries = [
+  iex> registries = for i <- 1..1_000_000, do: %{id: i, timestamp: Enum.random(ti..tf)}
+  iex> TimestampSearch.find_first_after(registries, t) # Returns %{id: id, timestamp: t + 1}
+
+  iex> registries = [
         %{id: 1, timestamp: 1000},
         %{id: 2, timestamp: 2000},
         %{id: 3, timestamp: 3000}
       ]
-      
-      TimestampSearch.find_first_after(registries, 1500)
-      # Returns %{id: 2, timestamp: 2000}
+  iex> TimestampSearch.find_first_after(registries, 1500) # Returns %{id: 2, timestamp: 2000}
   """
   def find_first_after(registries, target_timestamp) when is_list(registries) do
     case registries do
