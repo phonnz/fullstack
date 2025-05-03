@@ -3,6 +3,7 @@ defmodule Fullstack.Financial.Transaction do
   import Ecto.Changeset
   alias Fullstack.Customers.Customer
   alias Fullstack.Financial.Pos
+  alias Money
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
