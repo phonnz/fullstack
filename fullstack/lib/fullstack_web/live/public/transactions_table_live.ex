@@ -2,6 +2,7 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
   alias Phoenix.LiveView.AsyncResult
   use FullstackWeb, :live_view
   alias Fullstack.Public.Transactions
+  alias Money
 
   @valid_status [
     :inserted,
@@ -64,14 +65,14 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
       <.input type="select" field={@form[:status]} prompt="Status" options={@valid_status} />
     </.simple_form>
     <.link patch={~p"/transactions"}>
-      <.icon name="hero-x-mark text-blue-700" class="h-4 w-4" />
+      <.icon name="hero-x-mark text-blue-700" class="w-4 h-4" />
     </.link>
     <div :if={@transactions.loading} class="loading">
-      <div class="spinner text-amber-700">Loading</div>
+      <div class="text-amber-700 spinner">Loading</div>
     </div>
     <div :if={@transactions.failed} class="error">
-      <div class="spinner text-red-700">
-        <.icon name="hero-exclamation-triangle-mini text-red-700" class="h-4 w-4" /><%= elem(
+      <div class="text-red-700 spinner">
+        <.icon name="hero-exclamation-triangle-mini text-red-700" class="w-4 h-4" /><%= elem(
           @transactions.failed,
           1
         ) %>
@@ -95,7 +96,9 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
           <%= transaction.status %>
         </span>
       </:col>
-      <:col :let={transaction} label="Amount"><%= transaction.amount %></:col>
+      <:col :let={transaction} label="Amount">
+        <%= transaction.amount |> Money.new() |> Money.to_string() %>
+      </:col>
     </.table>
     """
   end
