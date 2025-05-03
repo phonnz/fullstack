@@ -60,6 +60,7 @@ defmodule Fullstack.MixProject do
       {:bandit, "~> 1.2"},
       {:bcrypt_elixir, "~> 3.0"},
       {:libcluster, "~> 3.3.3"},
+      {:plug, "~> 1.17"},
       {:plug_cowboy, "~> 2.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:vega_lite, "~> 0.1.9"},
@@ -67,7 +68,9 @@ defmodule Fullstack.MixProject do
       {:live_toast, "~> 0.6.4"},
       {:contex, "0.5.0"},
       {:timex, "~>3.7.11"},
-      {:maplibre, "~> 0.1.9"}
+      {:maplibre, "~> 0.1.9"},
+      {:money, "~> 1.12"},
+      {:tidewave, "~> 0.1", only: :dev}
     ]
   end
 
