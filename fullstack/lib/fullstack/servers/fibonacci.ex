@@ -45,13 +45,13 @@ defmodule Fullstack.Servers.Fibonacci.Fibonacci do
 
   def fib(_from, value) when value in [0, 1], do: value
 
-  def fib(from, value) when value < 50 do
+  def fib(from, value) when value < 15 do
     Process.send(from, {:new_message, %{message: "#{value}"}}, [])
 
     fib(from, value - 1) + fib(from, value - 2)
   end
 
   def fib(_from, _value) do
-    "Only under 50 values"
+    "Only values under 15 "
   end
 end

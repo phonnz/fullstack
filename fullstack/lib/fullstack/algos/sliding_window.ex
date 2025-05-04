@@ -1,5 +1,5 @@
 defmodule Fullstack.Algos.SlidingWindow do
-  """
+  @doc """
   - Find the maximumelement by window
   - k size window
   - use deque
@@ -20,12 +20,14 @@ defmodule Fullstack.Algos.SlidingWindow do
   end
 
   defp find_max(ns, k) do
-Enum.reduce(0..k-1, {ns, [], []}, &filter_lt/2)
-end
+    Enum.reduce(0..(k - 1), {ns, [], []}, &filter_lt/3)
+  end
 
   defp filter_lt(ns, idx, {res, []}) do
     {ns, res, [Enum.at(ns, idx)]}
   end
-  defp filter_lt(ns, idx, {res, dq}) do
-    List.last(dq) < n
+
+  defp filter_lt(ns, idx, {________res, dq}) do
+    List.last(dq) < idx
   end
+end
