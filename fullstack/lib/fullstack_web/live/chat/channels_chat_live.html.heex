@@ -1,0 +1,220 @@
+<div class="h-screen flex flex-col bg-gray-50">
+  <!-- Header -->
+  <div class="bg-white border-b border-gray-200 px-6 py-4">
+    <h1 class="text-2xl font-bold text-gray-800">Channels Chat</h1>
+    <p class="text-sm text-gray-600">
+      Your ID: <span class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded font-mono"><%= @socket_id %></span>
+    </p>
+  </div>
+
+  <!-- Three-column layout -->
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Column 1: Channels List -->
+    <div class="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <!-- Create channel button -->
+      <div class="p-4 border-b border-gray-200">
+        <button
+          phx-click="create_channel"
+          class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
+        >
+          Create Channel
+        </button>
+      </div>
+
+      <!-- Channels list -->
+      <div class="flex-1 overflow-y-auto">
+        <div id="channels-list" phx-update="stream" class="divide-y divide-gray-200">
+          <div
+            :for={{dom_id, channel} <- @streams.channels}
+            id={dom_id}
+            phx-click="select_channel"
+            phx-value-channel_id={channel.id}
+            class={[
+              "p-4 cursor-pointer transition-colors duration-150",
+              if(@current_channel_id == channel.id,
+                do: "bg-indigo-50 border-l-4 border-indigo-600",
+                else: "hover:bg-gray-50"
+              )
+            ]}
+          >
+            <div class="flex items-start justify-between">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900 truncate font-mono">
+                  <%= truncate_id(channel.id, 16) %>
+                </p>
+                <p class="text-xs text-gray-500 mt-1">
+                  Owner: <span class="font-mono"><%= truncate_id(channel.owner, 10) %></span>
+                </p>
+                <p class="text-xs text-gray-400 mt-1">
+                  <%= format_timestamp(channel.created_at) %>
+                </p>
+              </div>
+              <div
+                :if={channel.owner == @socket_id}
+                class="ml-2 flex-shrink-0 bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded"
+              >
+                Owner
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Column 2: Messages -->
+    <div class="flex-1 flex flex-col bg-gray-50">
+      <%= if @current_channel_id do %>
+        <!-- Channel header -->
+        <div class="bg-white border-b border-gray-200 px-6 py-4">
+          <h2 class="text-lg font-semibold text-gray-800">
+            Channel: <span class="font-mono text-indigo-600"><%= truncate_id(@current_channel_id, 20) %></span>
+          </h2>
+          <p class="text-sm text-gray-500">
+            Owner: <span class="font-mono"><%= @current_channel_owner %></span>
+          </p>
+        </div>
+
+        <!-- Messages area -->
+        <div class="flex-1 overflow-y-auto px-6 py-4" style="display: flex; flex-direction: column-reverse;">
+          <div id="messages-list" phx-update="stream" class="space-y-4">
+            <div :for={{dom_id, message} <- @streams.messages} id={dom_id}>
+              <%= if message.from == @socket_id do %>
+                <!-- Own message -->
+                <div class="flex justify-end">
+                  <div class="max-w-md">
+                    <div class="bg-indigo-600 text-white rounded-lg px-4 py-2">
+                      <p class="text-sm"><%= message.text %></p>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1 text-right">
+                      <%= format_timestamp(message.timestamp) %>
+                    </p>
+                  </div>
+                </div>
+              <% else %>
+                <!-- Others' messages -->
+                <div class="flex justify-start">
+                  <div class="max-w-md">
+                    <div class="bg-white border border-gray-200 rounded-lg px-4 py-2">
+                      <p class="text-xs text-gray-600 font-mono mb-1"><%= truncate_id(message.from, 10) %></p>
+                      <p class="text-sm text-gray-800"><%= message.text %></p>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">
+                      <%= format_timestamp(message.timestamp) %>
+                    </p>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+
+        <!-- Typing indicator -->
+        <div class="px-6 py-2 min-h-[2rem]">
+          <%= if map_size(@typing_users) > 0 do %>
+            <p class="text-sm text-gray-500 italic">
+              <%= @typing_users |> Map.keys() |> Enum.map(&truncate_id(&1, 10)) |> Enum.join(", ") %> typing...
+            </p>
+          <% end %>
+        </div>
+
+        <!-- Message input -->
+        <div class="bg-white border-t border-gray-200 px-6 py-4">
+          <form phx-submit="send_message" class="flex gap-2">
+            <input
+              type="text"
+              name="message"
+              value={@message_input}
+              phx-change="typing"
+              placeholder="Type your message..."
+              autocomplete="off"
+              class="flex-1 rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
+            />
+            <button
+              type="submit"
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2 rounded-lg transition-colors duration-200"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      <% else %>
+        <!-- No channel selected -->
+        <div class="flex-1 flex items-center justify-center">
+          <div class="text-center">
+            <svg
+              class="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No channel selected</h3>
+            <p class="mt-1 text-sm text-gray-500">
+              Select a channel from the list or create a new one to start chatting.
+            </p>
+          </div>
+        </div>
+      <% end %>
+    </div>
+
+    <!-- Column 3: Participants -->
+    <div class="w-80 bg-white border-l border-gray-200 flex flex-col">
+      <%= if @current_channel_id do %>
+        <div class="p-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-800">Participants</h3>
+        </div>
+
+        <!-- Owner section -->
+        <%= if @current_channel_owner do %>
+          <div class="p-4 border-b border-gray-200 bg-indigo-50">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Owner</h4>
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-mono text-indigo-700">
+                <%= truncate_id(@current_channel_owner, 12) %>
+              </span>
+              <span class="bg-indigo-600 text-white text-xs px-2 py-1 rounded">
+                Owner
+              </span>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Other participants section -->
+        <div class="flex-1 overflow-y-auto">
+          <div class="p-4">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Other Participants</h4>
+            <div id="participants-list" phx-update="stream" class="space-y-2">
+              <div
+                :for={{dom_id, participant} <- @streams.participants}
+                id={dom_id}
+                class="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+              >
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-mono text-gray-900 truncate">
+                    <%= truncate_id(participant.socket_id, 12) %>
+                  </p>
+                  <p class="text-xs text-gray-500">
+                    <%= participant.message_count %> messages
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% else %>
+        <!-- No channel selected -->
+        <div class="flex-1 flex items-center justify-center p-4">
+          <p class="text-sm text-gray-500 text-center">
+            Select a channel to view participants
+          </p>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
