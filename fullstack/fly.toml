@@ -4,7 +4,7 @@
 #
 
 app = 'brain-stack'
-primary_region = 'mad'
+primary_region = 'ams'
 kill_signal = 'SIGTERM'
 
 [build]
