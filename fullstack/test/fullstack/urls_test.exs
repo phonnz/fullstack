@@ -35,7 +35,12 @@ defmodule Fullstack.UrlsTest do
 
     test "update_url/2 with valid data updates the url" do
       url = url_fixture()
-      update_attrs = %{origin: "some updated origin", destiny: "some updated destiny", visit_count: 43}
+
+      update_attrs = %{
+        origin: "some updated origin",
+        destiny: "some updated destiny",
+        visit_count: 43
+      }
 
       assert {:ok, %Url{} = url} = Urls.update_url(url, update_attrs)
       assert url.origin == "some updated origin"

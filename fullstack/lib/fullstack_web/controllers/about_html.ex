@@ -11,8 +11,9 @@ defmodule FullstackWeb.AboutHTML do
         <a href="/" class="block group">
           <div class="overflow-hidden relative bg-white rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
             <div class="relative">
-              <img src="/img/project-1.png" alt="Phoenix Project" class="object-cover w-full h-48"/>
-              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100"></div>
+              <img src="/img/project-1.png" alt="Phoenix Project" class="object-cover w-full h-48" />
+              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100">
+              </div>
             </div>
             <h2 class="p-4 text-xl font-semibold text-gray-800">FullStack Phoenix Project</h2>
             <div class="flex absolute inset-0 items-end opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -28,8 +29,9 @@ defmodule FullstackWeb.AboutHTML do
         <a href={~p"/chat"} class="block group">
           <div class="overflow-hidden relative bg-white rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
             <div class="relative">
-              <img src="/img/project-2.png" alt="Chat Application" class="object-cover w-full h-48"/>
-              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100"></div>
+              <img src="/img/project-2.png" alt="Chat Application" class="object-cover w-full h-48" />
+              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100">
+              </div>
             </div>
             <h2 class="p-4 text-xl font-semibold text-gray-800">Chat Application</h2>
             <div class="flex absolute inset-0 items-end opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -44,8 +46,9 @@ defmodule FullstackWeb.AboutHTML do
         <a href={~p"/fibonacci"} class="block group">
           <div class="overflow-hidden relative bg-white rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
             <div class="relative">
-              <img src="/img/project-3.png" alt="Dashboard Sample" class="object-cover w-full h-48"/>
-              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100"></div>
+              <img src="/img/project-3.png" alt="Dashboard Sample" class="object-cover w-full h-48" />
+              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100">
+              </div>
             </div>
             <h2 class="p-4 text-xl font-semibold text-gray-800">Fibonacci</h2>
             <div class="flex absolute inset-0 items-end opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -60,8 +63,9 @@ defmodule FullstackWeb.AboutHTML do
         <a href={~p"/transactions"} class="block group">
           <div class="overflow-hidden relative bg-white rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
             <div class="relative">
-              <img src="/img/project-4.png" alt="Dashboard Sample" class="object-cover w-full h-48"/>
-              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100"></div>
+              <img src="/img/project-4.png" alt="Dashboard Sample" class="object-cover w-full h-48" />
+              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100">
+              </div>
             </div>
             <h2 class="p-4 text-xl font-semibold text-gray-800">Basic Dashboard Sample</h2>
             <div class="flex absolute inset-0 items-end opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -77,8 +81,9 @@ defmodule FullstackWeb.AboutHTML do
         <a href={~p"/channels-chat"} class="block group">
           <div class="overflow-hidden relative bg-white rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
             <div class="relative">
-              <img src="/img/project-5.png" alt="Channels Chat" class="object-cover w-full h-48"/>
-              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100"></div>
+              <img src="/img/project-5.png" alt="Channels Chat" class="object-cover w-full h-48" />
+              <div class="absolute inset-0 bg-gradient-to-t opacity-0 transition-opacity duration-300 from-black/80 to-black/0 group-hover:opacity-100">
+              </div>
             </div>
             <h2 class="p-4 text-xl font-semibold text-gray-800">Basic Dashboard Sample</h2>
             <div class="flex absolute inset-0 items-end opacity-0 transition-opacity duration-300 group-hover:opacity-100">

@@ -43,15 +43,9 @@ defmodule FullstackWeb.Router do
     live "/urls/:id", UrlLive.Show, :show
     live "/urls/:id/show/edit", UrlLive.Show, :edit
     get "/u/:key", UrlRedirectController, :index
-    live "/:key", HomeLive.Urls, :index
 
     live "/", HomeLive.Index, :index
   end
-
-  # Other scopes may use custom stacks.
-  # scope "/api", FullstackWeb do
-  #   pipe_through :api
-  # end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:fullstack, :dev_routes) do
@@ -62,12 +56,31 @@ defmodule FullstackWeb.Router do
     # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
+    import PhoenixStorybook.Router
+
+    # Storybook static assets (must be in root scope, not CSRF-protected)
+    scope "/" do
+      storybook_assets()
+    end
+
+    # live_storybook cannot be inside a scope with path != "/" (library limitation)
+    scope "/" do
+      pipe_through :browser
+      live_storybook("/storybook", otp_app: :fullstack, backend_module: FullstackWeb.Storybook)
+    end
+
     scope "/dev" do
       pipe_through :browser
 
       live_dashboard "/dashboard", metrics: FullstackWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
+  end
+
+  # Catch-all route MUST be last — matches any "/:key"
+  scope "/", FullstackWeb do
+    pipe_through :browser
+    live "/:key", HomeLive.Urls, :index
   end
 
   ## Authentication routes

@@ -15,8 +15,9 @@ defmodule FullstackWeb.Public.DevicesLive.Index do
 
   def render(assigns) do
     ~H"""
-      <link href='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css' rel='stylesheet' />
-      <script src='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js'></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js">
+    </script>
     <h1>Devices</h1>
     <div :if={@devices.loading}>Loading devices...</div>
     <div :if={devices = @devices.ok? && @devices.result}>
@@ -26,7 +27,7 @@ defmodule FullstackWeb.Public.DevicesLive.Index do
         </li>
       </ul>
     </div>
-    <.live_component module={FullstackWeb.Live.MapComponent} id="visited-countries-map"/>
+    <.live_component module={FullstackWeb.Live.MapComponent} id="visited-countries-map" />
     """
   end
 
@@ -56,7 +57,7 @@ defmodule FullstackWeb.Public.DevicesLive.Index do
 
     {:ok,
      push_event(socket, "map:#{socket.id}:init", %{
-       "ml" => ml})
-     }
+       "ml" => ml
+     })}
   end
 end

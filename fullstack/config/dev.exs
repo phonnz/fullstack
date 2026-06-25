@@ -9,7 +9,7 @@ config :fullstack, Fullstack.Repo,
   port: 5433,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
-  pool_size: 10,
+  pool_size: 2,
   timeout: 20_000,
   pool_timeout: 20_000
 

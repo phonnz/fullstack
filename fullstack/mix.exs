@@ -49,7 +49,8 @@ defmodule Fullstack.MixProject do
        sparse: "optimized",
        app: false,
        compile: false,
-       depth: 1},
+       depth: 1,
+       override: true},
       {:swoosh, "~> 1.5"},
       {:finch, "~> 0.13"},
       {:telemetry_metrics, "~> 1.0"},
@@ -70,7 +71,9 @@ defmodule Fullstack.MixProject do
       {:timex, "~>3.7.11"},
       {:maplibre, "~> 0.1.9"},
       {:money, "~> 1.12"},
-      {:tidewave, "~> 0.1", only: :dev}
+      {:tidewave, "~> 0.1", only: :dev},
+      # Note: remove `only: :dev` and add route outside dev_routes guard to enable in production
+      {:phoenix_storybook, "~> 0.6.0", only: [:dev, :test]}
     ]
   end
 

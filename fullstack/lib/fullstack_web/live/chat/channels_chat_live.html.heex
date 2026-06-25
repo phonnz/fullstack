@@ -3,10 +3,12 @@
   <div class="bg-white border-b border-gray-200 px-6 py-4">
     <h1 class="text-2xl font-bold text-gray-800">Channels Chat</h1>
     <p class="text-sm text-gray-600">
-      Your ID: <span class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded font-mono"><%= @socket_id %></span>
+      Your ID:
+      <span class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded font-mono">
+        <%= @socket_id %>
+      </span>
     </p>
   </div>
-
   <!-- Three-column layout -->
   <div class="flex flex-1 overflow-hidden">
     <!-- Column 1: Channels List -->
@@ -20,7 +22,6 @@
           Create Channel
         </button>
       </div>
-
       <!-- Channels list -->
       <div class="flex-1 overflow-y-auto">
         <div id="channels-list" phx-update="stream" class="divide-y divide-gray-200">
@@ -60,22 +61,26 @@
         </div>
       </div>
     </div>
-
     <!-- Column 2: Messages -->
     <div class="flex-1 flex flex-col bg-gray-50">
       <%= if @current_channel_id do %>
         <!-- Channel header -->
         <div class="bg-white border-b border-gray-200 px-6 py-4">
           <h2 class="text-lg font-semibold text-gray-800">
-            Channel: <span class="font-mono text-indigo-600"><%= truncate_id(@current_channel_id, 20) %></span>
+            Channel:
+            <span class="font-mono text-indigo-600">
+              <%= truncate_id(@current_channel_id, 20) %>
+            </span>
           </h2>
           <p class="text-sm text-gray-500">
             Owner: <span class="font-mono"><%= @current_channel_owner %></span>
           </p>
         </div>
-
         <!-- Messages area -->
-        <div class="flex-1 overflow-y-auto px-6 py-4" style="display: flex; flex-direction: column-reverse;">
+        <div
+          class="flex-1 overflow-y-auto px-6 py-4"
+          style="display: flex; flex-direction: column-reverse;"
+        >
           <div id="messages-list" phx-update="stream" class="space-y-4">
             <div :for={{dom_id, message} <- @streams.messages} id={dom_id}>
               <%= if message.from == @socket_id do %>
@@ -95,7 +100,9 @@
                 <div class="flex justify-start">
                   <div class="max-w-md">
                     <div class="bg-white border border-gray-200 rounded-lg px-4 py-2">
-                      <p class="text-xs text-gray-600 font-mono mb-1"><%= truncate_id(message.from, 10) %></p>
+                      <p class="text-xs text-gray-600 font-mono mb-1">
+                        <%= truncate_id(message.from, 10) %>
+                      </p>
                       <p class="text-sm text-gray-800"><%= message.text %></p>
                     </div>
                     <p class="text-xs text-gray-500 mt-1">
@@ -107,7 +114,6 @@
             </div>
           </div>
         </div>
-
         <!-- Typing indicator -->
         <div class="px-6 py-2 min-h-[2rem]">
           <%= if map_size(@typing_users) > 0 do %>
@@ -116,7 +122,6 @@
             </p>
           <% end %>
         </div>
-
         <!-- Message input -->
         <div class="bg-white border-t border-gray-200 px-6 py-4">
           <form phx-submit="send_message" class="flex gap-2">
@@ -162,14 +167,12 @@
         </div>
       <% end %>
     </div>
-
     <!-- Column 3: Participants -->
     <div class="w-80 bg-white border-l border-gray-200 flex flex-col">
       <%= if @current_channel_id do %>
         <div class="p-4 border-b border-gray-200">
           <h3 class="text-lg font-semibold text-gray-800">Participants</h3>
         </div>
-
         <!-- Owner section -->
         <%= if @current_channel_owner do %>
           <div class="p-4 border-b border-gray-200 bg-indigo-50">
@@ -184,7 +187,6 @@
             </div>
           </div>
         <% end %>
-
         <!-- Other participants section -->
         <div class="flex-1 overflow-y-auto">
           <div class="p-4">
