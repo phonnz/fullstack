@@ -29,12 +29,6 @@ defmodule FullstackWeb.Router do
     resources "/about", AboutController, only: [:index]
     live "/chat", ChatLive
     live "/channels-chat", ChannelsChatLive
-    live "/devices", DeviceLive.Index, :index
-    live "/devices/new", DeviceLive.Index, :new
-    live "/devices/:id/edit", DeviceLive.Index, :edit
-
-    live "/devices/:id", DeviceLive.Show, :show
-    live "/devices/:id/show/edit", DeviceLive.Show, :edit
 
     live "/urls", UrlLive.Index, :index
     live "/urls/new", UrlLive.Index, :new
@@ -129,6 +123,11 @@ defmodule FullstackWeb.Router do
       live "/transactions/:id/show/edit", TransactionLive.Show, :edit
       live "/users/settings", UserSettingsLive, :edit
       live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
+      live "/devices", DeviceLive.Index, :index
+      live "/devices/new", DeviceLive.Index, :new
+      live "/devices/:id/edit", DeviceLive.Index, :edit
+      live "/devices/:id", DeviceLive.Show, :show
+      live "/devices/:id/show/edit", DeviceLive.Show, :edit
     end
   end
 

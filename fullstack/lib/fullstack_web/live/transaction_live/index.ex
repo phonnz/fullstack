@@ -1,6 +1,7 @@
 defmodule FullstackWeb.TransactionLive.Index do
   use FullstackWeb, :live_view
 
+  alias Fullstack.Financial
   alias Fullstack.Operations
   alias Fullstack.Financial.Transaction
 

@@ -2,7 +2,7 @@
   Pos <%= @pos.id %>
   <:subtitle>This is a pos record from your database.</:subtitle>
   <:actions>
-    <.link patch={~p"/poss/#{@pos}/show/edit"} phx-click={JS.push_focus()}>
+    <.link patch={~p"/admin/poss/#{@pos}/show/edit"} phx-click={JS.push_focus()}>
       <.button>Edit pos</.button>
     </.link>
   </:actions>
@@ -12,15 +12,15 @@
   <:item title="Name"><%= @pos.name %></:item>
 </.list>
 
-<.back navigate={~p"/poss"}>Back to poss</.back>
+<.back navigate={~p"/admin/poss"}>Back to poss</.back>
 
-<.modal :if={@live_action == :edit} id="pos-modal" show on_cancel={JS.patch(~p"/poss/#{@pos}")}>
+<.modal :if={@live_action == :edit} id="pos-modal" show on_cancel={JS.patch(~p"/admin/poss/#{@pos}")}>
   <.live_component
     module={FullstackWeb.PosLive.FormComponent}
     id={@pos.id}
     title={@page_title}
     action={@live_action}
     pos={@pos}
-    patch={~p"/poss/#{@pos}"}
+    patch={~p"/admin/poss/#{@pos}"}
   />
 </.modal>

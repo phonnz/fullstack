@@ -2,7 +2,7 @@
   Customer <%= @customer.id %>
   <:subtitle>This is a customer record from your database.</:subtitle>
   <:actions>
-    <.link patch={~p"/customers/#{@customer}/show/edit"} phx-click={JS.push_focus()}>
+    <.link patch={~p"/admin/customers/#{@customer}/show/edit"} phx-click={JS.push_focus()}>
       <.button>Edit customer</.button>
     </.link>
   </:actions>
@@ -13,13 +13,13 @@
   <:item title="Email"><%= @customer.email %></:item>
 </.list>
 
-<.back navigate={~p"/customers"}>Back to customers</.back>
+<.back navigate={~p"/admin/customers"}>Back to customers</.back>
 
 <.modal
   :if={@live_action == :edit}
   id="customer-modal"
   show
-  on_cancel={JS.patch(~p"/customers/#{@customer}")}
+  on_cancel={JS.patch(~p"/admin/customers/#{@customer}")}
 >
   <.live_component
     module={FullstackWeb.CustomerLive.FormComponent}
@@ -27,6 +27,6 @@
     title={@page_title}
     action={@live_action}
     customer={@customer}
-    patch={~p"/customers/#{@customer}"}
+    patch={~p"/admin/customers/#{@customer}"}
   />
 </.modal>

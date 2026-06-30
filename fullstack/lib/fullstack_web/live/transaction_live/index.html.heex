@@ -1,7 +1,7 @@
 <.header>
   Listing Transactions
   <:actions>
-    <.link patch={~p"/transactions/new"}>
+    <.link patch={~p"/admin/transactions/new"}>
       <.button>New Transaction</.button>
     </.link>
   </:actions>
@@ -10,14 +10,14 @@
 <.table
   id="transactions"
   rows={@streams.transactions}
-  row_click={fn {_id, transaction} -> JS.navigate(~p"/transactions/#{transaction}") end}
+  row_click={fn {_id, transaction} -> JS.navigate(~p"/admin/transactions/#{transaction}") end}
 >
   <:col :let={{_id, transaction}} label="Amount"><%= transaction.amount %></:col>
   <:action :let={{_id, transaction}}>
     <div class="sr-only">
-      <.link navigate={~p"/transactions/#{transaction}"}>Show</.link>
+      <.link navigate={~p"/admin/transactions/#{transaction}"}>Show</.link>
     </div>
-    <.link patch={~p"/transactions/#{transaction}/edit"}>Edit</.link>
+    <.link patch={~p"/admin/transactions/#{transaction}/edit"}>Edit</.link>
   </:action>
   <:action :let={{id, transaction}}>
     <.link
@@ -33,7 +33,7 @@
   :if={@live_action in [:new, :edit]}
   id="transaction-modal"
   show
-  on_cancel={JS.patch(~p"/transactions")}
+  on_cancel={JS.patch(~p"/admin/transactions")}
 >
   <.live_component
     module={FullstackWeb.TransactionLive.FormComponent}
@@ -41,6 +41,6 @@
     title={@page_title}
     action={@live_action}
     transaction={@transaction}
-    patch={~p"/transactions"}
+    patch={~p"/admin/transactions"}
   />
 </.modal>

@@ -23,14 +23,16 @@ defmodule Fullstack.Services.Counters do
 
   def increase(user_id, counter_id) do
     counter_name = if counter_id == :centralized, do: :centralized, else: user_id
-    updated_counter = GenServer.call(__MODULE__, {:inc, counter_name})
+    {_name, value} = GenServer.call(__MODULE__, {:inc, counter_name})
+    updated_counter = {counter_id, value}
     FullstackWeb.Endpoint.broadcast("centralized_counter", "updated_counter", updated_counter)
     updated_counter
   end
 
   def decrease(user_id, counter_id) do
     counter_name = if counter_id == :centralized, do: :centralized, else: user_id
-    updated_counter = GenServer.call(__MODULE__, {:dec, counter_name})
+    {_name, value} = GenServer.call(__MODULE__, {:dec, counter_name})
+    updated_counter = {counter_id, value}
     FullstackWeb.Endpoint.broadcast("centralized_counter", "updated_counter", updated_counter)
     updated_counter
   end
@@ -55,12 +57,21 @@ defmodule Fullstack.Services.Counters do
 
   @impl true
   def handle_call({:dec, counter_id}, _from, state) do
+    ensure_counter_exists(state.table_name, counter_id)
     result = :ets.update_counter(state.table_name, counter_id, {2, -1})
     {:reply, {counter_id, result}, state}
   end
 
   def handle_call({:inc, counter_id}, _from, state) do
+    ensure_counter_exists(state.table_name, counter_id)
     result = :ets.update_counter(state.table_name, counter_id, {2, 1})
     {:reply, {counter_id, result}, state}
+  end
+
+  defp ensure_counter_exists(table_name, counter_id) do
+    case :ets.lookup(table_name, counter_id) do
+      [] -> :ets.insert_new(table_name, {counter_id, 0})
+      _ -> :ok
+    end
   end
 end

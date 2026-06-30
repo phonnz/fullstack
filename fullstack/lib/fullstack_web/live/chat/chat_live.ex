@@ -27,48 +27,44 @@ defmodule FullstackWeb.ChatLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="h-screen flex-1">
+    <div class="flex flex-col h-screen bg-base-200">
       <.header>
         Hooah!<br /> This is your identifier:
-        <span class="bg-slate-200 p-2 rounded-lg"><%= assigns.tmp_id %></span>
+        <span class="badge badge-neutral badge-lg"><%= assigns.tmp_id %></span>
       </.header>
-      <div class="h-2/3 max-h-2/3 pt-8 pb-4">
-        <div
-          class="h-full "
-          style="overflow: scroll;  max-height: 100%;  display: flex;  flex-direction: column-reverse;-ms-overflow-style: none;scrollbar-width:none"
-        >
-          <div
-            phx-update="append"
-            id="messages"
-            class="height:500px;width: 100%;  color: #001f3f;  background: #3D9970;padding: 5px"
-          >
-            <div
-              :for={message <- @messages}
-              id={"m-#{message.id}"}
-              class={"flex mb-4 " <> if message.from == @tmp_id, do: "justify-end", else: ""}
-            >
-              <.message_line message={message} tmp_id={@tmp_id}></.message_line>
-            </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-2">
+        <div phx-update="append" id="messages" class="w-full bg-base-100 text-base-content p-2">
+          <div :for={message <- @messages} id={"m-#{message.id}"} class="w-full">
+            <.message_line message={message} tmp_id={@tmp_id}></.message_line>
           </div>
         </div>
       </div>
-      <section class="fixed bottom-0 left-0 right-0 w-full p-4">
-        <p class="text-gray-500">
+      <section class="shrink-0 border-t border-base-300 bg-base-100 p-4">
+        <div class="text-sm text-base-content/60">
           <%= @users_count %> users with <%= @connections %> connections
-        </p>
-        <p :if={@typing_users != ""} class="text-gray-500">
+        </div>
+        <p
+          :if={@typing_users != ""}
+          role="status"
+          aria-live="polite"
+          class="text-sm text-base-content/60"
+        >
+          <span class="loading loading-dots loading-xs"></span>
           <%= @typing_users %> typing...
         </p>
-        <span class="text-gray-500"></span>
-        <.simple_form for={@form} phx-change="change" phx-submit="save">
-          <.input
-            field={@form[:message]}
+        <.form for={@form} phx-change="change" phx-submit="save" class="mt-3 flex gap-2">
+          <input
+            type="text"
+            name={@form[:message].name}
+            id={@form[:message].id}
             value={@text_value}
+            class="input input-bordered w-full"
             phx-mounted={JS.focus()}
             placeholder="Say something!"
             autocomplete="off"
           />
-        </.simple_form>
+          <button type="submit" class="btn btn-primary">Send</button>
+        </.form>
       </section>
     </div>
     """
@@ -124,9 +120,9 @@ defmodule FullstackWeb.ChatLive do
 
   def message_line(%{message: %{from: sender}, tmp_id: me} = assigns) when sender == me do
     ~H"""
-    <div class="flex justify-end mb-4 cursor-pointer">
-      <div class="flex max-w-40 bg-indigo-500 text-white rounded-lg p-3 gap-3">
-        <p class="text-white"><%= assigns.message.text %></p>
+    <div class="chat chat-end">
+      <div class="chat-bubble chat-bubble-primary">
+        <%= @message.text %>
       </div>
     </div>
     """
@@ -134,9 +130,9 @@ defmodule FullstackWeb.ChatLive do
 
   def message_line(%{message: %{from: "Fullstack"}} = assigns) do
     ~H"""
-    <div class="flex mb-4 cursor-pointer">
-      <div class="flex max-w-96 bg-white rounded-lg p-3 gap-3">
-        <p class="bg-slate-100 text-gray p-2"><%= assigns.message.text %></p>
+    <div class="chat chat-start">
+      <div class="chat-bubble chat-bubble-info">
+        <%= @message.text %>
       </div>
     </div>
     """
@@ -144,12 +140,12 @@ defmodule FullstackWeb.ChatLive do
 
   def message_line(assigns) do
     ~H"""
-    <div class="flex mb-4 cursor-pointer">
-      <div class="max-w-2/3 rounded-lg flex items-center justify-center px-2 mr-2 bg-slate-400 text-gray-700">
-        <%= assigns.message.from %>:
+    <div class="chat chat-start">
+      <div class="chat-header text-xs opacity-50">
+        <%= @message.from %>
       </div>
-      <div class="flex max-w-96 bg-white rounded-lg p-3 gap-3">
-        <p class="text-gray-700"><%= assigns.message.text %></p>
+      <div class="chat-bubble">
+        <%= @message.text %>
       </div>
     </div>
     """

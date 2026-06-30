@@ -9,6 +9,12 @@ defmodule Fullstack.Financial do
 
   defdelegate count_transactions, to: Transactions
   defdelegate count_transactions(transactions), to: Transactions
+  defdelegate list_transactions, to: Transactions
+  defdelegate get_transaction!(id), to: Transactions
+  defdelegate create_transaction(attrs), to: Transactions
+  defdelegate update_transaction(transaction, attrs), to: Transactions
+  defdelegate delete_transaction(transaction), to: Transactions
+  defdelegate change_transaction(transaction, attrs \\ %{}), to: Transactions
 
   def build_transactions_analytics(params) do
     transactions = Transactions.list_transactions(params)

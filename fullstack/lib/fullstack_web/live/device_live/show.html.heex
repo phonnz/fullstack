@@ -2,7 +2,7 @@
   Device <%= @device.id %>
   <:subtitle>This is a device record from your database.</:subtitle>
   <:actions>
-    <.link patch={~p"/devices/#{@device}/show/edit"} phx-click={JS.push_focus()}>
+    <.link patch={~p"/admin/devices/#{@device}/show/edit"} phx-click={JS.push_focus()}>
       <.button>Edit device</.button>
     </.link>
   </:actions>
@@ -14,13 +14,13 @@
   <:item title="Enabled"><%= @device.enabled %></:item>
 </.list>
 
-<.back navigate={~p"/devices"}>Back to devices</.back>
+<.back navigate={~p"/admin/devices"}>Back to devices</.back>
 
 <.modal
   :if={@live_action == :edit}
   id="device-modal"
   show
-  on_cancel={JS.patch(~p"/devices/#{@device}")}
+  on_cancel={JS.patch(~p"/admin/devices/#{@device}")}
 >
   <.live_component
     module={FullstackWeb.DeviceLive.FormComponent}
@@ -28,6 +28,6 @@
     title={@page_title}
     action={@live_action}
     device={@device}
-    patch={~p"/devices/#{@device}"}
+    patch={~p"/admin/devices/#{@device}"}
   />
 </.modal>

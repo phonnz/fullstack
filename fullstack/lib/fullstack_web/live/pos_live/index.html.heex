@@ -1,7 +1,7 @@
 <.header>
   Listing Poss
   <:actions>
-    <.link patch={~p"/poss/new"}>
+    <.link patch={~p"/admin/poss/new"}>
       <.button>New Pos</.button>
     </.link>
   </:actions>
@@ -10,14 +10,14 @@
 <.table
   id="poss"
   rows={@streams.poss}
-  row_click={fn {_id, pos} -> JS.navigate(~p"/poss/#{pos}") end}
+  row_click={fn {_id, pos} -> JS.navigate(~p"/admin/poss/#{pos}") end}
 >
   <:col :let={{_id, pos}} label="Name"><%= pos.name %></:col>
   <:action :let={{_id, pos}}>
     <div class="sr-only">
-      <.link navigate={~p"/poss/#{pos}"}>Show</.link>
+      <.link navigate={~p"/admin/poss/#{pos}"}>Show</.link>
     </div>
-    <.link patch={~p"/poss/#{pos}/edit"}>Edit</.link>
+    <.link patch={~p"/admin/poss/#{pos}/edit"}>Edit</.link>
   </:action>
   <:action :let={{id, pos}}>
     <.link
@@ -29,13 +29,13 @@
   </:action>
 </.table>
 
-<.modal :if={@live_action in [:new, :edit]} id="pos-modal" show on_cancel={JS.patch(~p"/poss")}>
+<.modal :if={@live_action in [:new, :edit]} id="pos-modal" show on_cancel={JS.patch(~p"/admin/poss")}>
   <.live_component
     module={FullstackWeb.PosLive.FormComponent}
     id={@pos.id || :new}
     title={@page_title}
     action={@live_action}
     pos={@pos}
-    patch={~p"/poss"}
+    patch={~p"/admin/poss"}
   />
 </.modal>
