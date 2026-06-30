@@ -14,5 +14,8 @@
     "vega": "^5.29.0",
     "vega-embed": "^6.25.0",
     "vega-lite": "^5.18.1"
+  },
+  "devDependencies": {
+    "daisyui": "^4.12.24"
   }
 }

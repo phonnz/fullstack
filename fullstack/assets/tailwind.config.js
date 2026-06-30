@@ -10,7 +10,8 @@ module.exports = {
     "./js/**/*.js",
     "../lib/*_web.ex",
     "../lib/*_web/**/*.*ex",
-    "../deps/live_toast/lib/**/*.*ex"
+    "../deps/live_toast/lib/**/*.*ex",
+    "../storybook/**/*.*exs"
   ],
   theme: {
     extend: {
@@ -21,6 +22,7 @@ module.exports = {
   },
   plugins: [
     require("@tailwindcss/forms"),
+    require("daisyui"),
     // Allows prefixing tailwind classes with LiveView classes to add rules
     // only when LiveView classes are applied, for example:
     //
@@ -65,5 +67,9 @@ module.exports = {
         }
       }, { values })
     })
-  ]
+  ],
+  daisyui: {
+    themes: ["light"],
+    logs: false
+  }
 }
