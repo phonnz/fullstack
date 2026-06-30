@@ -4,9 +4,9 @@ defmodule FullstackWeb.UrlLiveTest do
   import Phoenix.LiveViewTest
   import Fullstack.UrlsFixtures
 
-  @create_attrs %{origin: "some origin", destiny: "some destiny", visit_count: 42}
-  @update_attrs %{origin: "some updated origin", destiny: "some updated destiny", visit_count: 43}
-  @invalid_attrs %{origin: nil, destiny: nil, visit_count: nil}
+  @create_attrs %{origin: "some origin", destiny: "https://example.com"}
+  @update_attrs %{origin: "some updated origin", destiny: "https://updated.example.com"}
+  @invalid_attrs %{origin: nil, destiny: nil}
 
   defp create_url(_) do
     url = url_fixture()
@@ -16,20 +16,20 @@ defmodule FullstackWeb.UrlLiveTest do
   describe "Index" do
     setup [:create_url]
 
-    test "lists all ulrs", %{conn: conn, url: url} do
-      {:ok, _index_live, html} = live(conn, ~p"/ulrs")
+    test "lists all urls", %{conn: conn, url: url} do
+      {:ok, _index_live, html} = live(conn, ~p"/urls")
 
       assert html =~ "Listing Ulrs"
       assert html =~ url.origin
     end
 
     test "saves new url", %{conn: conn} do
-      {:ok, index_live, _html} = live(conn, ~p"/ulrs")
+      {:ok, index_live, _html} = live(conn, ~p"/urls")
 
       assert index_live |> element("a", "New Url") |> render_click() =~
                "New Url"
 
-      assert_patch(index_live, ~p"/ulrs/new")
+      assert_patch(index_live, ~p"/urls/new")
 
       assert index_live
              |> form("#url-form", url: @invalid_attrs)
@@ -39,7 +39,7 @@ defmodule FullstackWeb.UrlLiveTest do
              |> form("#url-form", url: @create_attrs)
              |> render_submit()
 
-      assert_patch(index_live, ~p"/ulrs")
+      assert_patch(index_live, ~p"/urls")
 
       html = render(index_live)
       assert html =~ "Url created successfully"
@@ -47,12 +47,12 @@ defmodule FullstackWeb.UrlLiveTest do
     end
 
     test "updates url in listing", %{conn: conn, url: url} do
-      {:ok, index_live, _html} = live(conn, ~p"/ulrs")
+      {:ok, index_live, _html} = live(conn, ~p"/urls")
 
       assert index_live |> element("#ulrs-#{url.id} a", "Edit") |> render_click() =~
                "Edit Url"
 
-      assert_patch(index_live, ~p"/ulrs/#{url}/edit")
+      assert_patch(index_live, ~p"/urls/#{url}/edit")
 
       assert index_live
              |> form("#url-form", url: @invalid_attrs)
@@ -62,7 +62,7 @@ defmodule FullstackWeb.UrlLiveTest do
              |> form("#url-form", url: @update_attrs)
              |> render_submit()
 
-      assert_patch(index_live, ~p"/ulrs")
+      assert_patch(index_live, ~p"/urls")
 
       html = render(index_live)
       assert html =~ "Url updated successfully"
@@ -70,7 +70,7 @@ defmodule FullstackWeb.UrlLiveTest do
     end
 
     test "deletes url in listing", %{conn: conn, url: url} do
-      {:ok, index_live, _html} = live(conn, ~p"/ulrs")
+      {:ok, index_live, _html} = live(conn, ~p"/urls")
 
       assert index_live |> element("#ulrs-#{url.id} a", "Delete") |> render_click()
       refute has_element?(index_live, "#ulrs-#{url.id}")
@@ -81,19 +81,19 @@ defmodule FullstackWeb.UrlLiveTest do
     setup [:create_url]
 
     test "displays url", %{conn: conn, url: url} do
-      {:ok, _show_live, html} = live(conn, ~p"/ulrs/#{url}")
+      {:ok, _show_live, html} = live(conn, ~p"/urls/#{url}")
 
       assert html =~ "Show Url"
       assert html =~ url.origin
     end
 
     test "updates url within modal", %{conn: conn, url: url} do
-      {:ok, show_live, _html} = live(conn, ~p"/ulrs/#{url}")
+      {:ok, show_live, _html} = live(conn, ~p"/urls/#{url}")
 
       assert show_live |> element("a", "Edit") |> render_click() =~
                "Edit Url"
 
-      assert_patch(show_live, ~p"/ulrs/#{url}/show/edit")
+      assert_patch(show_live, ~p"/urls/#{url}/show/edit")
 
       assert show_live
              |> form("#url-form", url: @invalid_attrs)
@@ -103,7 +103,7 @@ defmodule FullstackWeb.UrlLiveTest do
              |> form("#url-form", url: @update_attrs)
              |> render_submit()
 
-      assert_patch(show_live, ~p"/ulrs/#{url}")
+      assert_patch(show_live, ~p"/urls/#{url}")
 
       html = render(show_live)
       assert html =~ "Url updated successfully"

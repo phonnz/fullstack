@@ -61,6 +61,7 @@ defmodule Fullstack.FinancialTest do
     alias Fullstack.Financial.Transaction
 
     import Fullstack.FinancialFixtures
+    import Fullstack.CustomersFixtures
 
     @invalid_attrs %{amount: nil}
 
@@ -75,7 +76,9 @@ defmodule Fullstack.FinancialTest do
     end
 
     test "create_transaction/1 with valid data creates a transaction" do
-      valid_attrs = %{amount: 42}
+      customer = customer_fixture()
+      pos = pos_fixture()
+      valid_attrs = %{amount: 42, customer_id: customer.id, pos_id: pos.id}
 
       assert {:ok, %Transaction{} = transaction} = Financial.create_transaction(valid_attrs)
       assert transaction.amount == 42

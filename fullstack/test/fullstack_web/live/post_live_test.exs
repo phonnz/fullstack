@@ -8,28 +8,29 @@ defmodule FullstackWeb.PostLiveTest do
   @update_attrs %{title: "some updated title", content: "some updated content"}
   @invalid_attrs %{title: nil, content: nil}
 
-  defp create_post(_) do
+  defp create_post(%{conn: conn}) do
     post = post_fixture()
-    %{post: post}
+    user = Fullstack.AccountsFixtures.user_fixture()
+    %{conn: log_in_user(conn, user), post: post}
   end
 
   describe "Index" do
     setup [:create_post]
 
     test "lists all posts", %{conn: conn, post: post} do
-      {:ok, _index_live, html} = live(conn, ~p"/posts")
+      {:ok, _index_live, html} = live(conn, ~p"/admin/posts")
 
       assert html =~ "Listing Posts"
       assert html =~ post.title
     end
 
     test "saves new post", %{conn: conn} do
-      {:ok, index_live, _html} = live(conn, ~p"/posts")
+      {:ok, index_live, _html} = live(conn, ~p"/admin/posts")
 
       assert index_live |> element("a", "New Post") |> render_click() =~
                "New Post"
 
-      assert_patch(index_live, ~p"/posts/new")
+      assert_patch(index_live, ~p"/admin/posts/new")
 
       assert index_live
              |> form("#post-form", post: @invalid_attrs)
@@ -39,7 +40,7 @@ defmodule FullstackWeb.PostLiveTest do
              |> form("#post-form", post: @create_attrs)
              |> render_submit()
 
-      assert_patch(index_live, ~p"/posts")
+      assert_patch(index_live, ~p"/admin/posts")
 
       html = render(index_live)
       assert html =~ "Post created successfully"
@@ -47,12 +48,12 @@ defmodule FullstackWeb.PostLiveTest do
     end
 
     test "updates post in listing", %{conn: conn, post: post} do
-      {:ok, index_live, _html} = live(conn, ~p"/posts")
+      {:ok, index_live, _html} = live(conn, ~p"/admin/posts")
 
       assert index_live |> element("#posts-#{post.id} a", "Edit") |> render_click() =~
                "Edit Post"
 
-      assert_patch(index_live, ~p"/posts/#{post}/edit")
+      assert_patch(index_live, ~p"/admin/posts/#{post}/edit")
 
       assert index_live
              |> form("#post-form", post: @invalid_attrs)
@@ -62,7 +63,7 @@ defmodule FullstackWeb.PostLiveTest do
              |> form("#post-form", post: @update_attrs)
              |> render_submit()
 
-      assert_patch(index_live, ~p"/posts")
+      assert_patch(index_live, ~p"/admin/posts")
 
       html = render(index_live)
       assert html =~ "Post updated successfully"
@@ -70,7 +71,7 @@ defmodule FullstackWeb.PostLiveTest do
     end
 
     test "deletes post in listing", %{conn: conn, post: post} do
-      {:ok, index_live, _html} = live(conn, ~p"/posts")
+      {:ok, index_live, _html} = live(conn, ~p"/admin/posts")
 
       assert index_live |> element("#posts-#{post.id} a", "Delete") |> render_click()
       refute has_element?(index_live, "#posts-#{post.id}")
@@ -81,19 +82,19 @@ defmodule FullstackWeb.PostLiveTest do
     setup [:create_post]
 
     test "displays post", %{conn: conn, post: post} do
-      {:ok, _show_live, html} = live(conn, ~p"/posts/#{post}")
+      {:ok, _show_live, html} = live(conn, ~p"/admin/posts/#{post}")
 
       assert html =~ "Show Post"
       assert html =~ post.title
     end
 
     test "updates post within modal", %{conn: conn, post: post} do
-      {:ok, show_live, _html} = live(conn, ~p"/posts/#{post}")
+      {:ok, show_live, _html} = live(conn, ~p"/admin/posts/#{post}")
 
       assert show_live |> element("a", "Edit") |> render_click() =~
                "Edit Post"
 
-      assert_patch(show_live, ~p"/posts/#{post}/show/edit")
+      assert_patch(show_live, ~p"/admin/posts/#{post}/show/edit")
 
       assert show_live
              |> form("#post-form", post: @invalid_attrs)
@@ -103,7 +104,7 @@ defmodule FullstackWeb.PostLiveTest do
              |> form("#post-form", post: @update_attrs)
              |> render_submit()
 
-      assert_patch(show_live, ~p"/posts/#{post}")
+      assert_patch(show_live, ~p"/admin/posts/#{post}")
 
       html = render(show_live)
       assert html =~ "Post updated successfully"

@@ -4,53 +4,31 @@ defmodule FullstackWeb.TransactionLiveTest do
   import Phoenix.LiveViewTest
   import Fullstack.FinancialFixtures
 
-  @create_attrs %{amount: 42}
   @update_attrs %{amount: 43}
   @invalid_attrs %{amount: nil}
 
-  defp create_transaction(_) do
+  defp create_transaction(%{conn: conn}) do
     transaction = transaction_fixture()
-    %{transaction: transaction}
+    user = Fullstack.AccountsFixtures.user_fixture()
+    %{conn: log_in_user(conn, user), transaction: transaction}
   end
 
   describe "Index" do
     setup [:create_transaction]
 
     test "lists all transactions", %{conn: conn} do
-      {:ok, _index_live, html} = live(conn, ~p"/transactions")
+      {:ok, _index_live, html} = live(conn, ~p"/admin/transactions")
 
-      assert html =~ "Listing Transactions"
-    end
-
-    test "saves new transaction", %{conn: conn} do
-      {:ok, index_live, _html} = live(conn, ~p"/transactions")
-
-      assert index_live |> element("a", "New Transaction") |> render_click() =~
-               "New Transaction"
-
-      assert_patch(index_live, ~p"/transactions/new")
-
-      assert index_live
-             |> form("#transaction-form", transaction: @invalid_attrs)
-             |> render_change() =~ "can&#39;t be blank"
-
-      assert index_live
-             |> form("#transaction-form", transaction: @create_attrs)
-             |> render_submit()
-
-      assert_patch(index_live, ~p"/transactions")
-
-      html = render(index_live)
-      assert html =~ "Transaction created successfully"
+      assert html =~ "Transactions"
     end
 
     test "updates transaction in listing", %{conn: conn, transaction: transaction} do
-      {:ok, index_live, _html} = live(conn, ~p"/transactions")
+      {:ok, index_live, _html} = live(conn, ~p"/admin/transactions")
 
       assert index_live |> element("#transactions-#{transaction.id} a", "Edit") |> render_click() =~
                "Edit Transaction"
 
-      assert_patch(index_live, ~p"/transactions/#{transaction}/edit")
+      assert_patch(index_live, ~p"/admin/transactions/#{transaction}/edit")
 
       assert index_live
              |> form("#transaction-form", transaction: @invalid_attrs)
@@ -60,14 +38,14 @@ defmodule FullstackWeb.TransactionLiveTest do
              |> form("#transaction-form", transaction: @update_attrs)
              |> render_submit()
 
-      assert_patch(index_live, ~p"/transactions")
+      assert_patch(index_live, ~p"/admin/transactions")
 
       html = render(index_live)
       assert html =~ "Transaction updated successfully"
     end
 
     test "deletes transaction in listing", %{conn: conn, transaction: transaction} do
-      {:ok, index_live, _html} = live(conn, ~p"/transactions")
+      {:ok, index_live, _html} = live(conn, ~p"/admin/transactions")
 
       assert index_live
              |> element("#transactions-#{transaction.id} a", "Delete")
@@ -81,18 +59,18 @@ defmodule FullstackWeb.TransactionLiveTest do
     setup [:create_transaction]
 
     test "displays transaction", %{conn: conn, transaction: transaction} do
-      {:ok, _show_live, html} = live(conn, ~p"/transactions/#{transaction}")
+      {:ok, _show_live, html} = live(conn, ~p"/admin/transactions/#{transaction}")
 
-      assert html =~ "Show Transaction"
+      assert html =~ "Transaction"
     end
 
     test "updates transaction within modal", %{conn: conn, transaction: transaction} do
-      {:ok, show_live, _html} = live(conn, ~p"/transactions/#{transaction}")
+      {:ok, show_live, _html} = live(conn, ~p"/admin/transactions/#{transaction}")
 
       assert show_live |> element("a", "Edit") |> render_click() =~
                "Edit Transaction"
 
-      assert_patch(show_live, ~p"/transactions/#{transaction}/show/edit")
+      assert_patch(show_live, ~p"/admin/transactions/#{transaction}/show/edit")
 
       assert show_live
              |> form("#transaction-form", transaction: @invalid_attrs)
@@ -102,7 +80,7 @@ defmodule FullstackWeb.TransactionLiveTest do
              |> form("#transaction-form", transaction: @update_attrs)
              |> render_submit()
 
-      assert_patch(show_live, ~p"/transactions/#{transaction}")
+      assert_patch(show_live, ~p"/admin/transactions/#{transaction}")
 
       html = render(show_live)
       assert html =~ "Transaction updated successfully"

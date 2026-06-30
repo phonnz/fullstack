@@ -8,28 +8,29 @@ defmodule FullstackWeb.PosLiveTest do
   @update_attrs %{name: "some updated name"}
   @invalid_attrs %{name: nil}
 
-  defp create_pos(_) do
+  defp create_pos(%{conn: conn}) do
     pos = pos_fixture()
-    %{pos: pos}
+    user = Fullstack.AccountsFixtures.user_fixture()
+    %{conn: log_in_user(conn, user), pos: pos}
   end
 
   describe "Index" do
     setup [:create_pos]
 
     test "lists all poss", %{conn: conn, pos: pos} do
-      {:ok, _index_live, html} = live(conn, ~p"/poss")
+      {:ok, _index_live, html} = live(conn, ~p"/admin/poss")
 
       assert html =~ "Listing Poss"
       assert html =~ pos.name
     end
 
     test "saves new pos", %{conn: conn} do
-      {:ok, index_live, _html} = live(conn, ~p"/poss")
+      {:ok, index_live, _html} = live(conn, ~p"/admin/poss")
 
       assert index_live |> element("a", "New Pos") |> render_click() =~
                "New Pos"
 
-      assert_patch(index_live, ~p"/poss/new")
+      assert_patch(index_live, ~p"/admin/poss/new")
 
       assert index_live
              |> form("#pos-form", pos: @invalid_attrs)
@@ -39,7 +40,7 @@ defmodule FullstackWeb.PosLiveTest do
              |> form("#pos-form", pos: @create_attrs)
              |> render_submit()
 
-      assert_patch(index_live, ~p"/poss")
+      assert_patch(index_live, ~p"/admin/poss")
 
       html = render(index_live)
       assert html =~ "Pos created successfully"
@@ -47,12 +48,12 @@ defmodule FullstackWeb.PosLiveTest do
     end
 
     test "updates pos in listing", %{conn: conn, pos: pos} do
-      {:ok, index_live, _html} = live(conn, ~p"/poss")
+      {:ok, index_live, _html} = live(conn, ~p"/admin/poss")
 
       assert index_live |> element("#poss-#{pos.id} a", "Edit") |> render_click() =~
                "Edit Pos"
 
-      assert_patch(index_live, ~p"/poss/#{pos}/edit")
+      assert_patch(index_live, ~p"/admin/poss/#{pos}/edit")
 
       assert index_live
              |> form("#pos-form", pos: @invalid_attrs)
@@ -62,7 +63,7 @@ defmodule FullstackWeb.PosLiveTest do
              |> form("#pos-form", pos: @update_attrs)
              |> render_submit()
 
-      assert_patch(index_live, ~p"/poss")
+      assert_patch(index_live, ~p"/admin/poss")
 
       html = render(index_live)
       assert html =~ "Pos updated successfully"
@@ -70,7 +71,7 @@ defmodule FullstackWeb.PosLiveTest do
     end
 
     test "deletes pos in listing", %{conn: conn, pos: pos} do
-      {:ok, index_live, _html} = live(conn, ~p"/poss")
+      {:ok, index_live, _html} = live(conn, ~p"/admin/poss")
 
       assert index_live |> element("#poss-#{pos.id} a", "Delete") |> render_click()
       refute has_element?(index_live, "#poss-#{pos.id}")
@@ -81,19 +82,19 @@ defmodule FullstackWeb.PosLiveTest do
     setup [:create_pos]
 
     test "displays pos", %{conn: conn, pos: pos} do
-      {:ok, _show_live, html} = live(conn, ~p"/poss/#{pos}")
+      {:ok, _show_live, html} = live(conn, ~p"/admin/poss/#{pos}")
 
       assert html =~ "Show Pos"
       assert html =~ pos.name
     end
 
     test "updates pos within modal", %{conn: conn, pos: pos} do
-      {:ok, show_live, _html} = live(conn, ~p"/poss/#{pos}")
+      {:ok, show_live, _html} = live(conn, ~p"/admin/poss/#{pos}")
 
       assert show_live |> element("a", "Edit") |> render_click() =~
                "Edit Pos"
 
-      assert_patch(show_live, ~p"/poss/#{pos}/show/edit")
+      assert_patch(show_live, ~p"/admin/poss/#{pos}/show/edit")
 
       assert show_live
              |> form("#pos-form", pos: @invalid_attrs)
@@ -103,7 +104,7 @@ defmodule FullstackWeb.PosLiveTest do
              |> form("#pos-form", pos: @update_attrs)
              |> render_submit()
 
-      assert_patch(show_live, ~p"/poss/#{pos}")
+      assert_patch(show_live, ~p"/admin/poss/#{pos}")
 
       html = render(show_live)
       assert html =~ "Pos updated successfully"

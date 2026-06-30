@@ -11,7 +11,7 @@ defmodule Fullstack.UrlsFixtures do
     {:ok, url} =
       attrs
       |> Enum.into(%{
-        destiny: "some destiny",
+        destiny: "https://example.com",
         origin: "some origin",
         visit_count: 42
       })

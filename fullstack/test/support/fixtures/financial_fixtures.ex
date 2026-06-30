@@ -22,10 +22,15 @@ defmodule Fullstack.FinancialFixtures do
   Generate a transaction.
   """
   def transaction_fixture(attrs \\ %{}) do
+    customer = Fullstack.CustomersFixtures.customer_fixture()
+    pos = pos_fixture()
+
     {:ok, transaction} =
       attrs
       |> Enum.into(%{
-        amount: 42
+        amount: 42,
+        customer_id: customer.id,
+        pos_id: pos.id
       })
       |> Fullstack.Financial.create_transaction()
 

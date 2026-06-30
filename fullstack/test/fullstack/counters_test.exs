@@ -4,7 +4,7 @@ defmodule Fullstack.Services.CountersTest do
   alias Fullstack.Services.Counters
 
   setup do
-    # {:ok, _pid} = Counters.start_link(table_name: :test_counters)
+    :ets.delete_all_objects(:counters)
     :ok
   end
 
@@ -19,8 +19,8 @@ defmodule Fullstack.Services.CountersTest do
       assert Counters.increase("user_1", :identified) == {:identified, 1}
       assert Counters.increase("user_1", :identified) == {:identified, 2}
 
-      assert Counters.decrease("user_0", :identified) == {:dentified, 1}
       assert Counters.decrease("user_0", :identified) == {:identified, 0}
+      assert Counters.decrease("user_0", :identified) == {:identified, -1}
       assert Counters.decrease("user_1", :identified) == {:identified, 1}
     end
 

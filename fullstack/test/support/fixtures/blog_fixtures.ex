@@ -8,11 +8,14 @@ defmodule Fullstack.BlogFixtures do
   Generate a post.
   """
   def post_fixture(attrs \\ %{}) do
+    author = Fullstack.AccountsFixtures.user_fixture()
+
     {:ok, post} =
       attrs
       |> Enum.into(%{
         content: "some content",
-        title: "some title"
+        title: "some title",
+        author_id: author.id
       })
       |> Fullstack.Blog.create_post()
 

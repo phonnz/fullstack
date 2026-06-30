@@ -21,11 +21,11 @@ defmodule Fullstack.UrlsTest do
     end
 
     test "create_url/1 with valid data creates a url" do
-      valid_attrs = %{origin: "some origin", destiny: "some destiny", visit_count: 42}
+      valid_attrs = %{origin: "some origin", destiny: "https://example.com", visit_count: 42}
 
       assert {:ok, %Url{} = url} = Urls.create_url(valid_attrs)
       assert url.origin == "some origin"
-      assert url.destiny == "some destiny"
+      assert url.destiny == "https://example.com"
       assert url.visit_count == 42
     end
 
@@ -38,13 +38,13 @@ defmodule Fullstack.UrlsTest do
 
       update_attrs = %{
         origin: "some updated origin",
-        destiny: "some updated destiny",
+        destiny: "https://updated.example.com",
         visit_count: 43
       }
 
       assert {:ok, %Url{} = url} = Urls.update_url(url, update_attrs)
       assert url.origin == "some updated origin"
-      assert url.destiny == "some updated destiny"
+      assert url.destiny == "https://updated.example.com"
       assert url.visit_count == 43
     end
 
