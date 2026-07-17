@@ -32,13 +32,13 @@ defmodule Fullstack.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:phoenix, "~> 1.7.12"},
+      {:phoenix, "~> 1.8.0"},
       {:phoenix_ecto, "~> 4.4"},
       {:ecto_sql, "~> 3.10"},
       {:postgrex, ">= 0.0.0"},
       {:phoenix_html, "~> 4.0"},
       {:phoenix_live_reload, "~> 1.5", only: :dev},
-      {:phoenix_live_view, "~> 0.20.2"},
+      {:phoenix_live_view, "~> 1.2.6"},
       {:floki, ">= 0.30.0", only: :test},
       {:phoenix_live_dashboard, "~> 0.8.3"},
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
@@ -73,7 +73,7 @@ defmodule Fullstack.MixProject do
       {:money, "~> 1.12"},
       {:tidewave, "~> 0.1", only: :dev},
       # Note: remove `only: :dev` and add route outside dev_routes guard to enable in production
-      {:phoenix_storybook, "~> 0.6.0", only: [:dev, :test]}
+      {:phoenix_storybook, "~> 1.3", only: [:dev, :test]}
     ]
   end
 
