@@ -1,4 +1,4 @@
-<div class="bg-white h-screen font-sans flex flex-col items-center justify-start">
+<div class="bg-base-100 h-screen font-sans flex flex-col items-center justify-start">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="lg:grid lg:grid-cols-12 lg:gap-8 pt-12 lg:pt-0">
       <div class="sm:text-center md:max-w-2xl md:mx-auto lg:col-span-6 lg:text-left lg:flex lg:items-center">
@@ -9,10 +9,10 @@
             </div>
             <.link
               navigate={~p"/about"}
-              class="inline-flex px-1 py-1 gap-x-2 rounded-xl border border-gray-400 border-2 hover:border-orange-500 items-center text-sm font-semibold text-gray-600 space-x-1"
+              class="inline-flex px-1 py-1 gap-x-2 rounded-xl border border-base-300 border-2 hover:border-orange-500 items-center text-sm font-semibold text-muted space-x-1"
               href="#"
             >
-              <span class="bg-orange-100 flex items-center justify-center gap-2 text-orange-800 text-sm font-semibold px-2.5 py-0.5 rounded-lg dark:bg-blue-900 dark:text-blue-300">
+              <span class="badge badge-warning flex items-center justify-center gap-2 text-sm font-semibold px-2.5 py-0.5">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="24"
@@ -46,9 +46,9 @@
                   <path d="m12 5 7 7-7 7"></path>
                 </svg>
             </.link>
-            <h1 class="mt-4 text-4xl tracking-tight font-extrabold text-gray-900 sm:mt-5 sm:leading-none lg:mt-6 lg:text-5xl xl:text-6xl">
+            <h1 class="mt-4 text-4xl tracking-tight font-extrabold text-base-content sm:mt-5 sm:leading-none lg:mt-6 lg:text-5xl xl:text-6xl">
               <p class="sm:block">Robust real-time</p>
-              <div class="h-14 text-zinc-500 md:block">
+              <div class="h-14 text-muted md:block">
                 <%= @phrase %>
               </div>
               <p>applications ?</p>
@@ -60,7 +60,7 @@
       </div>
       <div class="pt-0 m:mt-16 m-4 lg:mt-18 lg:py-18 lg:col-span-5">
         <.subheader>
-          <h3 class="text-base mt-16 m-4 text-gray-700 text-xl ">
+          <h3 class="text-base mt-16 m-4 text-base-content text-xl ">
             This is a simple demo of
           </h3>
           <:sublines>
@@ -78,14 +78,14 @@
             <div class="text-center sm:flex sm:items-center sm:justify-center ">
               <div class="sm:flex-shrink-0">
                 <div class="flow-root">
-                  <div class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full">
+                  <div class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5">
                     Browser
                   </div>
-                  <p class="text-4xl font-bold ml-4 text-gray-900 grid grid-cols-3 ">
+                  <p class="text-4xl font-bold ml-4 text-base-content grid grid-cols-3 ">
                     <span
                       phx-click={:dec}
                       phx-value-id={:local}
-                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-4 py-2 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full col-span-3 lg:col-span-1 center"
+                      class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-4 py-2 text-sm font-medium leading-5 col-span-3 lg:col-span-1 center"
                     >
                       -
                     </span>
@@ -95,7 +95,7 @@
                     <span
                       phx-click={:inc}
                       phx-value-id={:local}
-                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-4 py-2 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full col-span-1 sm:col-span-1"
+                      class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-4 py-2 text-sm font-medium leading-5 col-span-1 sm:col-span-1"
                     >
                       +
                     </span>
@@ -106,14 +106,14 @@
             <div class="text-center sm:flex sm:items-center sm:justify-center">
               <div class="sm:flex-shrink-0">
                 <div class="flow-root">
-                  <div class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full">
+                  <div class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5">
                     User
                   </div>
-                  <p class="text-4xl font-bold ml-4 text-gray-900">
+                  <p class="text-4xl font-bold ml-4 text-base-content">
                     <span
                       phx-click={:dec}
                       phx-value-id={:identified}
-                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-4 py-2 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full"
+                      class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-4 py-2 text-sm font-medium leading-5"
                     >
                       -
                     </span>
@@ -121,7 +121,7 @@
                     <span
                       phx-click={:inc}
                       phx-value-id={:identified}
-                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-2 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full"
+                      class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-2 text-sm font-medium leading-5"
                     >
                       +
                     </span>
@@ -132,14 +132,14 @@
             <div class="text-center sm:flex sm:items-center sm:justify-center">
               <div class="sm:flex-shrink-0">
                 <div class="flow-root">
-                  <div class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full">
+                  <div class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5">
                     Centralized
                   </div>
-                  <p class="text-4xl font-bold ml-4 text-gray-900">
+                  <p class="text-4xl font-bold ml-4 text-base-content">
                     <span
                       phx-click={:dec}
                       phx-value-id={:centralized}
-                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-2 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full"
+                      class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-2 text-sm font-medium leading-5"
                     >
                       -
                     </span>
@@ -147,7 +147,7 @@
                     <span
                       phx-click={:inc}
                       phx-value-id={:centralized}
-                      class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-2 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full"
+                      class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-2 text-sm font-medium leading-5"
                     >
                       +
                     </span>
@@ -162,30 +162,30 @@
             <div class="text-center sm:flex sm:items-center sm:justify-center">
               <div class="sm:flex-shrink-0">
                 <div class="flow-root">
-                  <div class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full">
+                  <div class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5">
                     Devices
                   </div>
-                  <p class="text-4xl font-bold text-gray-900"><%= @devices_count %></p>
+                  <p class="text-4xl font-bold text-base-content"><%= @devices_count %></p>
                 </div>
               </div>
             </div>
             <div class="text-center sm:flex sm:items-center sm:justify-center">
               <div class="sm:flex-shrink-0">
                 <div class="flow-root">
-                  <div class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-2 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full">
+                  <div class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-2 text-sm font-medium leading-5">
                     Customers
                   </div>
-                  <p class="text-4xl font-bold text-gray-900"><%= @customers_count %></p>
+                  <p class="text-4xl font-bold text-base-content"><%= @customers_count %></p>
                 </div>
               </div>
             </div>
             <div class="text-center sm:flex sm:items-center sm:justify-center">
               <div class="sm:flex-shrink-0">
                 <div class="flow-root">
-                  <div class="border w-fit transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5 text-orange-600 bg-orange-100 rounded-full">
+                  <div class="badge badge-warning w-fit border-transparent transition-colors inline-flex items-center justify-center px-3 py-0.5 text-sm font-medium leading-5">
                     Transactions
                   </div>
-                  <p class="text-4xl font-bold ml-4 text-gray-900"><%= @transactions_count %></p>
+                  <p class="text-4xl font-bold ml-4 text-base-content"><%= @transactions_count %></p>
                 </div>
               </div>
             </div>
@@ -195,20 +195,18 @@
         <div class="mt-10 sm:flex sm:justify-center lg:justify-start">
           <.custom_button
             phx-click="crash"
-            clas="inline-flex items-center text-white  justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full sm:w-auto"
           >
-            <.icon name="hero-exclamation-triangle" /> Crash the Browser!
+            <.icon name="hero-exclamation-triangle" aria-hidden="true" /> Crash the Browser!
           </.custom_button>
           <.custom_button
             phx-click="destroy"
             btn_type="error"
-            clas="inline-flex text-white hover:ring-red-900 bg-red-700 hover:bg-red-600 items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 mt-3 w-full sm:mt-0 sm:ml-3 sm:w-auto"
           >
-            <.icon name="hero-x-mark" /> Destroy Centralized!
+            <.icon name="hero-x-mark" aria-hidden="true" /> Destroy Centralized!
           </.custom_button>
         </div>
         <div class="grid grid-cols-3 grid-rows-1 gap-0">
-          <div class="col-start-1 inline-block align-middle pt-14 pr-2 text-right text-gray-500">
+          <div class="col-start-1 inline-block align-middle pt-14 pr-2 text-right text-muted">
             Fibonacci
           </div>
           <div class="col-start-2 ">

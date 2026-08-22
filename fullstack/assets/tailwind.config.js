@@ -21,6 +21,10 @@ module.exports = {
         // below; use `text-muted` instead of `text-base-content/60`, which
         // fails WCAG AA in both themes.
         muted: "var(--muted)",
+        // Brand orange as TEXT. The raw brand #FD4F00 measures 3.34:1 on the
+        // light base and 4.75:1 on the dark one — no single shade clears AA
+        // in both, so this is theme-aware. Use `brand` for fills, this for text.
+        "brand-content": "var(--brand-content)",
       }
     },
   },
@@ -83,7 +87,9 @@ module.exports = {
           // 4.06:1 here and fails AA. Solid colour so it is theme-aware
           // rather than an opacity that only works in one theme.
           // 7.56:1 on base-100, 6.75:1 on base-200.
-          "--muted": "#4B5563"
+          "--muted": "#4B5563",
+          // 5.23:1 on base-100, 4.67:1 on base-200
+          "--brand-content": "#C43D00"
         }
       },
       {
@@ -93,7 +99,9 @@ module.exports = {
           // 3.36:1 on primary, which fails AA. This gives 5.72:1.
           "primary-content": "#0F0B24",
           // 7.03:1 on base-100, 7.44:1 on base-200.
-          "--muted": "#A6ADBB"
+          "--muted": "#A6ADBB",
+          // 6.12:1 on base-100, 6.48:1 on base-200
+          "--brand-content": "#FF7A45"
         }
       }
     ],

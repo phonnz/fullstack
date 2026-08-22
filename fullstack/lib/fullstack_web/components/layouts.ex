@@ -4,6 +4,26 @@ defmodule FullstackWeb.Layouts do
   embed_templates "layouts/*"
 
   @doc """
+  Classes for a LiveToast flash.
+
+  Overrides the library default, which hardcodes `bg-white` / `text-black`
+  and so renders a white card on a dark background. Mirrors the default
+  structure and swaps only the colours for daisyUI alert tokens.
+  """
+  def toast_class_fn(assigns) do
+    [
+      "alert group/toast z-100 pointer-events-auto relative w-full items-center justify-between",
+      "origin-center overflow-hidden rounded-lg p-4 shadow-lg col-start-1 col-end-1 row-start-1 row-end-2",
+      # start hidden if javascript is enabled
+      "[@media(scripting:enabled)]:opacity-0 [@media(scripting:enabled){[data-phx-main]_&}]:opacity-100",
+      # used to hide the disconnected flashes
+      if(assigns[:rest][:hidden] == true, do: "hidden", else: "flex"),
+      assigns[:kind] == :info && "alert-info",
+      assigns[:kind] == :error && "alert-error"
+    ]
+  end
+
+  @doc """
   Renders the light/dark theme toggle.
 
   The theme itself is resolved before first paint by the inline script in

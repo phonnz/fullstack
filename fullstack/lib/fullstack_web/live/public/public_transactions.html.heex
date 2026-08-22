@@ -1,5 +1,5 @@
 <LiveToast.toast_group flash={@flash} connected={assigns[:socket] != nil} corner={:top_right} />
-<div class="bg-white h-screen font-sans flex flex-col ">
+<div class="bg-base-100 h-screen font-sans flex flex-col ">
   <div class="flex flex-wrap ">
     <div class="md:p-2 p-1 w-1/2">
       <%= make_plot(@customers, @bar_options, @selected_bar) %>
@@ -8,7 +8,7 @@
       <%= build_pointplot(@point_data, @point_options) %>
     </div>
     <div class="md:p-2 p-1 w-1/4">
-      <h2 class="font-medium title-font tracking-widest text-gray-900 mt-10 mb-4 text-sm text-center sm:text-left">
+      <h2 class="font-medium title-font tracking-widest text-base-content mt-10 mb-4 text-sm text-center sm:text-left">
         TOP CUSTOMERS
       </h2>
       <div class="flex flex-col sm:items-start sm:text-left font-small text-center items-center -mb-1 space-y-2.5">
@@ -31,7 +31,7 @@
       </div>
     </div>
     <div class="md:p-2 p-1 w-1/4">
-      <h2 class="font-medium title-font tracking-widest text-gray-900 mt-10 mb-4 text-sm text-center sm:text-left">
+      <h2 class="font-medium title-font tracking-widest text-base-content mt-10 mb-4 text-sm text-center sm:text-left">
         LAST CUSTOMERS
       </h2>
       <div class="flex flex-col sm:items-start sm:text-left text-center items-center -mb-1 space-y-2.5 text-base">
@@ -58,13 +58,13 @@
         <div class="mx-auto max-w-screen-xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
           <dl class="mt-2 grid grid-cols-1 gap-4  sm:grid-cols-1 md:grid-cols-2">
             <div class="flex flex-col rounded-lg bg-blue-50 px-2 py-4 text-center">
-              <dt class="order-last text-lg font-medium text-gray-500">Total Transactions</dt>
+              <dt class="order-last text-lg font-medium text-muted">Total Transactions</dt>
               <dd class="text-xl font-extrabold text-blue-600 md:text-3xl">
                 <%= @info.transactions_count %>
               </dd>
             </div>
             <div class="flex flex-col rounded-lg bg-blue-50 px-2 py-4 text-center">
-              <dt class="order-last text-lg font-medium text-gray-500">Total Sales</dt>
+              <dt class="order-last text-lg font-medium text-muted">Total Sales</dt>
               <dd class="text-xl font-extrabold text-blue-600 md:text-2xl">
                 <%= @info.total_amount %>
               </dd>

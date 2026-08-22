@@ -1,19 +1,24 @@
 <header class="px-4 sm:px-6 lg:px-8">
-  <div class="flex items-center justify-between border-b border-zinc-100 py-3 text-sm">
+  <div class="flex items-center justify-between border-b border-base-300 py-3 text-sm">
     <div class="flex items-center gap-4">
-      <a href="/">
-        <img src={~p"/img/logo.svg"} width="36" />
+      <a href="/" aria-label="Fullstack home">
+        <img src={~p"/img/logo.svg"} width="36" alt="" />
       </a>
-      <p class="bg-brand/5 text-brand rounded-full px-2 font-medium leading-6">
+      <p class="badge badge-outline text-brand-content border-brand-content/40 font-medium">
         v<%= Application.spec(:phoenix, :vsn) %>
       </p>
     </div>
-    <div class="flex items-center gap-4 font-semibold leading-6 text-zinc-900"></div>
+    <div class="flex items-center gap-4 font-semibold leading-6 text-base-content"></div>
   </div>
 </header>
 <main id="main-content" tabindex="-1" class="px-4 py-10 sm:px-4 lg:px-8">
   <div class="mx-auto max-w-2xl">
-    <LiveToast.toast_group flash={@flash} connected={assigns[:socket] != nil} corner={:top_right} />
+    <LiveToast.toast_group
+      flash={@flash}
+      connected={assigns[:socket] != nil}
+      corner={:top_right}
+      toast_class_fn={&FullstackWeb.Layouts.toast_class_fn/1}
+    />
   </div>
   <%= @inner_content %>
 </main>

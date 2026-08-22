@@ -47,7 +47,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         type="submit"
         name="option"
         value="simple"
-        class="span-col-1 text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800 col-span-full sm:col-span-1"
+        class="span-col-1 btn font-medium text-sm mb-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 btn-primary focus-visible:outline-primary me-2 col-span-full sm:col-span-1"
       >
         Simple
       </button>
@@ -56,7 +56,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         type="submit"
         name="option"
         value="memoized"
-        class="span-col-1 focus:outline-none text-white bg-orange-700 hover:bg-orange-800 focus:ring-4 focus:ring-orange-300 font-medium rounded-lg text-sm px-5 py-2.5 mb-2 dark:bg-orange-600 dark:hover:bg-orange-700 dark:focus:ring-orange-900 col-span-full sm:col-span-1"
+        class="span-col-1 btn font-medium text-sm mb-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 btn-warning focus-visible:outline-warning col-span-full sm:col-span-1"
       >
         Memoized
       </button>
@@ -65,7 +65,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         type="submit"
         name="option"
         value="fast"
-        class="span-col-1 focus:outline-none text-white bg-emerald-700 hover:bg-emerald-800 focus:ring-4 focus:ring-emerald-300 font-medium rounded-lg text-sm px-5 py-2.5 mb-2 dark:bg-emerald-600 dark:hover:bg-emerald-700 dark:focus:ring-emerald-900 col-span-full sm:col-span-1"
+        class="span-col-1 btn font-medium text-sm mb-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 btn-accent focus-visible:outline-accent col-span-full sm:col-span-1"
       >
         Fast Fib
       </button>
@@ -75,7 +75,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         name="option"
         value="both"
         phx-action="both"
-        class="span-col-1 focus:outline-none text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 mb-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-900 col-span-full sm:col-span-1"
+        class="span-col-1 btn font-medium text-sm mb-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 btn-success focus-visible:outline-success col-span-full sm:col-span-1"
       >
         All
       </button>
@@ -83,7 +83,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         :if={@task || @task_m}
         type="button"
         phx-click="cancel"
-        class="span-col-1 focus:outline-none text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-900 col-span-full lg:col-span-1"
+        class="span-col-1 btn font-medium text-sm mb-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 btn-error focus-visible:outline-error me-2 col-span-full lg:col-span-1"
       >
         Cancel
       </button>

@@ -91,7 +91,7 @@ defmodule FullstackWeb.Public.TransactionsTableLive do
           "rounded-md px-2 py-1 text-xs font-medium uppercase inline-block border",
           transaction.status == :ended && "text-lime-600 border-lime-600",
           transaction.status in [:inserted, :on_going] && "text-amber-600 border-amber-600",
-          transaction.status == :cancelled && "text-gray-600 border-gray-600"
+          transaction.status == :cancelled && "text-muted border-base-300"
         ]}>
           <%= transaction.status %>
         </span>

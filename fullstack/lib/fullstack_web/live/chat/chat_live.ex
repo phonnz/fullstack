@@ -40,14 +40,14 @@ defmodule FullstackWeb.ChatLive do
         </div>
       </div>
       <section class="shrink-0 border-t border-base-300 bg-base-100 p-4">
-        <div class="text-sm text-base-content/60">
+        <div class="text-sm text-muted">
           <%= @users_count %> users with <%= @connections %> connections
         </div>
         <p
           :if={@typing_users != ""}
           role="status"
           aria-live="polite"
-          class="text-sm text-base-content/60"
+          class="text-sm text-muted"
         >
           <span class="loading loading-dots loading-xs"></span>
           <%= @typing_users %> typing...
@@ -141,7 +141,7 @@ defmodule FullstackWeb.ChatLive do
   def message_line(assigns) do
     ~H"""
     <div class="chat chat-start">
-      <div class="chat-header text-xs opacity-50">
+      <div class="chat-header text-xs text-muted">
         <%= @message.from %>
       </div>
       <div class="chat-bubble">
