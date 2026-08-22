@@ -17,6 +17,10 @@ module.exports = {
     extend: {
       colors: {
         brand: "#FD4F00",
+        // Theme-aware muted text. Backed by --muted in the daisyui themes
+        // below; use `text-muted` instead of `text-base-content/60`, which
+        // fails WCAG AA in both themes.
+        muted: "var(--muted)",
       }
     },
   },
@@ -69,7 +73,30 @@ module.exports = {
     })
   ],
   daisyui: {
-    themes: ["light"],
+    // Stock daisyUI light/dark, with the minimum overrides needed to reach
+    // WCAG 2.1 AA. Every value below is measured, not estimated.
+    themes: [
+      {
+        light: {
+          ...require("daisyui/src/theming/themes")["light"],
+          // Muted text token. Replaces `text-base-content/60`, which measures
+          // 4.06:1 here and fails AA. Solid colour so it is theme-aware
+          // rather than an opacity that only works in one theme.
+          // 7.56:1 on base-100, 6.75:1 on base-200.
+          "--muted": "#4B5563"
+        }
+      },
+      {
+        dark: {
+          ...require("daisyui/src/theming/themes")["dark"],
+          // Stock dark defines no primary-content, so it computes white:
+          // 3.36:1 on primary, which fails AA. This gives 5.72:1.
+          "primary-content": "#0F0B24",
+          // 7.03:1 on base-100, 7.44:1 on base-200.
+          "--muted": "#A6ADBB"
+        }
+      }
+    ],
     logs: false
   }
 }

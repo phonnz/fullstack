@@ -54,3 +54,49 @@ liveSocket.connect()
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
 
+// Theme switching.
+//
+// The initial theme is resolved before first paint by the inline script in
+// root.html.heex. This only handles the user overriding it, and keeps
+// aria-pressed in sync so the control is announced correctly.
+//
+// Delegated from document so it survives LiveView navigation without a hook.
+function currentTheme() {
+  return document.documentElement.dataset.theme || "light"
+}
+
+function syncThemeButtons() {
+  const active = currentTheme()
+  document.querySelectorAll(".theme-option").forEach(btn => {
+    const isActive = btn.dataset.setTheme === active
+    btn.setAttribute("aria-pressed", String(isActive))
+    btn.classList.toggle("bg-primary", isActive)
+    btn.classList.toggle("text-primary-content", isActive)
+    btn.classList.toggle("text-muted", !isActive)
+  })
+}
+
+document.addEventListener("click", event => {
+  const btn = event.target.closest(".theme-option")
+  if (!btn) { return }
+
+  const theme = btn.dataset.setTheme
+  document.documentElement.dataset.theme = theme
+  try { localStorage.setItem("theme", theme) } catch (_) { /* private mode */ }
+  syncThemeButtons()
+})
+
+// Follow the OS setting until the user makes an explicit choice.
+try {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", event => {
+    let saved = null
+    try { saved = localStorage.getItem("theme") } catch (_) { /* private mode */ }
+    if (saved) { return }
+    document.documentElement.dataset.theme = event.matches ? "dark" : "light"
+    syncThemeButtons()
+  })
+} catch (_) { /* matchMedia unavailable */ }
+
+window.addEventListener("phx:page-loading-stop", syncThemeButtons)
+syncThemeButtons()
+

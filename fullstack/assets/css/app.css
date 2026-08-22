@@ -7,3 +7,16 @@
 .ecosystem-logo{
 	@apply relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full
 }
+
+/* Respect the OS reduced-motion setting. daisyUI animates button presses and
+   spinners by default; vestibular disorders make that genuinely nauseating. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
