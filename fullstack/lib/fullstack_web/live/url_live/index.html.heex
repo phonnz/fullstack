@@ -11,6 +11,7 @@
   id="ulrs"
   rows={@streams.ulrs}
   row_click={fn {_id, url} -> JS.navigate(~p"/urls/#{url}") end}
+  row_label={fn {_id, url} -> "View short URL #{url.origin}" end}
 >
   <:col :let={{_id, url}} label="Origin"><%= url.origin %></:col>
   <:col :let={{_id, url}} label="Destiny"><%= url.destiny %></:col>

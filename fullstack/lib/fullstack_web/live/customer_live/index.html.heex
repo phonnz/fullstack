@@ -11,6 +11,7 @@
   id="customers"
   rows={@streams.customers}
   row_click={fn {_id, customer} -> JS.navigate(~p"/admin/customers/#{customer}") end}
+  row_label={fn {_id, customer} -> "View customer #{customer.full_name}" end}
 >
   <:col :let={{_id, customer}} label="Full name"><%= customer.full_name %></:col>
   <:col :let={{_id, customer}} label="Email"><%= customer.email %></:col>

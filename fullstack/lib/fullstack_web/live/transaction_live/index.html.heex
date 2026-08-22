@@ -11,6 +11,7 @@
   id="transactions"
   rows={@streams.transactions}
   row_click={fn {_id, transaction} -> JS.navigate(~p"/admin/transactions/#{transaction}") end}
+  row_label={fn {_id, transaction} -> "View transaction of #{transaction.amount}" end}
 >
   <:col :let={{_id, transaction}} label="Amount"><%= transaction.amount %></:col>
   <:action :let={{_id, transaction}}>

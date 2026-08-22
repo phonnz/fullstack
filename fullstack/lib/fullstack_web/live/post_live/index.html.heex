@@ -11,6 +11,7 @@
   id="posts"
   rows={@streams.posts}
   row_click={fn {_id, post} -> JS.navigate(~p"/admin/posts/#{post}") end}
+  row_label={fn {_id, post} -> "View post #{post.title}" end}
 >
   <:col :let={{_id, post}} label="Title"><%= post.title %></:col>
   <:col :let={{_id, post}} label="Content"><%= post.content %></:col>

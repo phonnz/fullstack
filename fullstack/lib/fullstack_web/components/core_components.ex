@@ -50,14 +50,17 @@ defmodule FullstackWeb.CoreComponents do
       data-cancel={JS.exec(@on_cancel, "phx-remove")}
       class="relative z-50 hidden"
     >
-      <div id={"#{@id}-bg"} class="bg-zinc-50/90 fixed inset-0 transition-opacity" aria-hidden="true" />
+      <div
+        id={"#{@id}-bg"}
+        class="bg-base-300/80 fixed inset-0 transition-opacity"
+        aria-hidden="true"
+      />
       <div
         class="fixed inset-0 overflow-y-auto"
         aria-labelledby={"#{@id}-title"}
         aria-describedby={"#{@id}-description"}
         role="dialog"
         aria-modal="true"
-        tabindex="0"
       >
         <div class="flex min-h-full items-center justify-center">
           <div class="w-full max-w-3xl p-4 sm:p-6 lg:py-8">
@@ -66,20 +69,20 @@ defmodule FullstackWeb.CoreComponents do
               phx-window-keydown={JS.exec("data-cancel", to: "##{@id}")}
               phx-key="escape"
               phx-click-away={JS.exec("data-cancel", to: "##{@id}")}
-              class="shadow-zinc-700/10 ring-zinc-700/10 relative hidden rounded-2xl bg-white p-14 shadow-lg ring-1 transition"
+              class="shadow-base-300/40 ring-base-300 relative hidden rounded-2xl bg-base-100 p-14 shadow-lg ring-1 transition"
             >
               <div class="absolute top-6 right-5">
                 <button
                   phx-click={JS.exec("data-cancel", to: "##{@id}")}
                   type="button"
-                  class="-m-3 flex-none p-3 opacity-20 hover:opacity-40"
+                  class="-m-3 flex-none rounded-lg p-3 text-base-content/70 hover:bg-base-200 hover:text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                   aria-label={gettext("close")}
                 >
-                  <.icon name="hero-x-mark-solid" class="h-5 w-5" />
+                  <.icon name="hero-x-mark-solid" class="h-5 w-5" aria-hidden="true" />
                 </button>
               </div>
               <div id={"#{@id}-content"}>
-                <%= render_slot(@inner_block) %>
+                {render_slot(@inner_block)}
               </div>
             </.focus_wrap>
           </div>
@@ -113,20 +116,34 @@ defmodule FullstackWeb.CoreComponents do
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
       class={[
-        "fixed top-2 right-2 w-80 sm:w-96 z-50 rounded-lg p-3 ring-1",
-        @kind == :info && "bg-emerald-50 text-emerald-800 ring-emerald-500 fill-cyan-900",
-        @kind == :error && "bg-rose-50 text-rose-900 shadow-md ring-rose-500 fill-rose-900"
+        "alert fixed top-2 right-2 w-80 sm:w-96 z-50 grid-cols-1 justify-items-start p-3 shadow-lg",
+        @kind == :info && "alert-info",
+        @kind == :error && "alert-error"
       ]}
       {@rest}
     >
       <p :if={@title} class="flex items-center gap-1.5 text-sm font-semibold leading-6">
-        <.icon :if={@kind == :info} name="hero-information-circle-mini" class="h-4 w-4" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle-mini" class="h-4 w-4" />
-        <%= @title %>
+        <.icon
+          :if={@kind == :info}
+          name="hero-information-circle-mini"
+          class="h-4 w-4"
+          aria-hidden="true"
+        />
+        <.icon
+          :if={@kind == :error}
+          name="hero-exclamation-circle-mini"
+          class="h-4 w-4"
+          aria-hidden="true"
+        />
+        {@title}
       </p>
-      <p class="mt-2 text-sm leading-5"><%= msg %></p>
-      <button type="button" class="group absolute top-1 right-1 p-2" aria-label={gettext("close")}>
-        <.icon name="hero-x-mark-solid" class="h-5 w-5 opacity-40 group-hover:opacity-70" />
+      <p class="mt-2 text-sm leading-5">{msg}</p>
+      <button
+        type="button"
+        class="absolute top-1 right-1 rounded-md p-2 hover:bg-base-content/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+        aria-label={gettext("close")}
+      >
+        <.icon name="hero-x-mark-solid" class="h-5 w-5" aria-hidden="true" />
       </button>
     </div>
     """
@@ -153,7 +170,8 @@ defmodule FullstackWeb.CoreComponents do
       phx-connected={hide("#client-error")}
       hidden
     >
-      Attempting to reconnect <.icon name="hero-arrow-path" class="ml-1 h-3 w-3 animate-spin" />
+      Attempting to reconnect
+      <.icon name="hero-arrow-path" class="ml-1 h-3 w-3 animate-spin" aria-hidden="true" />
     </.flash>
 
     <.flash
@@ -165,7 +183,7 @@ defmodule FullstackWeb.CoreComponents do
       hidden
     >
       Hang in there while we get back on track
-      <.icon name="hero-arrow-path" class="ml-1 h-3 w-3 animate-spin" />
+      <.icon name="hero-arrow-path" class="ml-1 h-3 w-3 animate-spin" aria-hidden="true" />
     </.flash>
     """
   end
@@ -196,10 +214,10 @@ defmodule FullstackWeb.CoreComponents do
   def simple_form(assigns) do
     ~H"""
     <.form :let={f} for={@for} as={@as} {@rest}>
-      <div class="mt-10 space-y-8 bg-white">
-        <%= render_slot(@inner_block, f) %>
+      <div class="mt-10 space-y-8 bg-base-100">
+        {render_slot(@inner_block, f)}
         <div :for={action <- @actions} class="mt-2 flex items-center justify-between gap-6">
-          <%= render_slot(action, f) %>
+          {render_slot(action, f)}
         </div>
       </div>
     </.form>
@@ -225,13 +243,13 @@ defmodule FullstackWeb.CoreComponents do
     <button
       type={@type}
       class={[
-        "phx-submit-loading:opacity-75 rounded-lg bg-zinc-900 hover:bg-zinc-700 py-2 px-3",
-        "text-sm font-semibold leading-6 text-white active:text-white/80",
+        "btn btn-primary phx-submit-loading:opacity-75",
+        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
         @class
       ]}
       {@rest}
     >
-      <%= render_slot(@inner_block) %>
+      {render_slot(@inner_block)}
     </button>
     """
   end
@@ -301,7 +319,7 @@ defmodule FullstackWeb.CoreComponents do
 
     ~H"""
     <div phx-feedback-for={@name}>
-      <label class="flex items-center gap-4 text-sm leading-6 text-zinc-600">
+      <label class="flex items-center gap-4 text-sm leading-6 text-muted">
         <input type="hidden" name={@name} value="false" />
         <input
           type="checkbox"
@@ -309,12 +327,12 @@ defmodule FullstackWeb.CoreComponents do
           name={@name}
           value="true"
           checked={@checked}
-          class="rounded border-zinc-300 text-zinc-900 focus:ring-0"
+          class="checkbox checkbox-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           {@rest}
         />
-        <%= @label %>
+        {@label}
       </label>
-      <.error :for={msg <- @errors}><%= msg %></.error>
+      <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
   end
@@ -322,18 +340,18 @@ defmodule FullstackWeb.CoreComponents do
   def input(%{type: "select"} = assigns) do
     ~H"""
     <div phx-feedback-for={@name}>
-      <.label for={@id}><%= @label %></.label>
+      <.label for={@id}>{@label}</.label>
       <select
         id={@id}
         name={@name}
-        class="mt-2 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-zinc-400 focus:ring-0 sm:text-sm"
+        class="select select-bordered mt-2 block w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:text-sm"
         multiple={@multiple}
         {@rest}
       >
-        <option :if={@prompt} value=""><%= @prompt %></option>
-        <%= Phoenix.HTML.Form.options_for_select(@options, @value) %>
+        <option :if={@prompt} value="">{@prompt}</option>
+        {Phoenix.HTML.Form.options_for_select(@options, @value)}
       </select>
-      <.error :for={msg <- @errors}><%= msg %></.error>
+      <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
   end
@@ -341,19 +359,20 @@ defmodule FullstackWeb.CoreComponents do
   def input(%{type: "textarea"} = assigns) do
     ~H"""
     <div phx-feedback-for={@name}>
-      <.label for={@id}><%= @label %></.label>
+      <.label for={@id}>{@label}</.label>
       <textarea
         id={@id}
         name={@name}
         class={[
-          "mt-2 block w-full rounded-lg text-zinc-900 focus:ring-0 sm:text-sm sm:leading-6",
-          "min-h-[6rem] phx-no-feedback:border-zinc-300 phx-no-feedback:focus:border-zinc-400",
-          @errors == [] && "border-zinc-300 focus:border-zinc-400",
-          @errors != [] && "border-rose-400 focus:border-rose-400"
+          "textarea textarea-bordered mt-2 block w-full sm:text-sm sm:leading-6",
+          "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+          "min-h-[6rem]",
+          @errors == [] && "focus-visible:outline-primary",
+          @errors != [] && "textarea-error focus-visible:outline-error"
         ]}
         {@rest}
       ><%= Phoenix.HTML.Form.normalize_value("textarea", @value) %></textarea>
-      <.error :for={msg <- @errors}><%= msg %></.error>
+      <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
   end
@@ -362,21 +381,21 @@ defmodule FullstackWeb.CoreComponents do
   def input(assigns) do
     ~H"""
     <div phx-feedback-for={@name}>
-      <.label for={@id}><%= @label %></.label>
+      <.label for={@id}>{@label}</.label>
       <input
         type={@type}
         name={@name}
         id={@id}
         value={Phoenix.HTML.Form.normalize_value(@type, @value)}
         class={[
-          "mt-2 block w-full rounded-lg text-zinc-900 focus:ring-0 sm:text-sm sm:leading-6",
-          "phx-no-feedback:border-zinc-300 phx-no-feedback:focus:border-zinc-400",
-          @errors == [] && "border-zinc-300 focus:border-zinc-400",
-          @errors != [] && "border-rose-400 focus:border-rose-400"
+          "input input-bordered mt-2 block w-full sm:text-sm sm:leading-6",
+          "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+          @errors == [] && "focus-visible:outline-primary",
+          @errors != [] && "input-error focus-visible:outline-error"
         ]}
         {@rest}
       />
-      <.error :for={msg <- @errors}><%= msg %></.error>
+      <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
   end
@@ -389,8 +408,8 @@ defmodule FullstackWeb.CoreComponents do
 
   def label(assigns) do
     ~H"""
-    <label for={@for} class="block text-sm font-semibold leading-6 text-zinc-800">
-      <%= render_slot(@inner_block) %>
+    <label for={@for} class="block text-sm font-semibold leading-6 text-base-content">
+      {render_slot(@inner_block)}
     </label>
     """
   end
@@ -402,9 +421,9 @@ defmodule FullstackWeb.CoreComponents do
 
   def error(assigns) do
     ~H"""
-    <p class="mt-3 flex gap-3 text-sm leading-6 text-rose-600 phx-no-feedback:hidden">
-      <.icon name="hero-exclamation-circle-mini" class="mt-0.5 h-5 w-5 flex-none" />
-      <%= render_slot(@inner_block) %>
+    <p class="mt-3 flex gap-3 text-sm leading-6 text-error phx-no-feedback:hidden">
+      <.icon name="hero-exclamation-circle-mini" class="mt-0.5 h-5 w-5 flex-none" aria-hidden="true" />
+      {render_slot(@inner_block)}
     </p>
     """
   end
@@ -422,14 +441,14 @@ defmodule FullstackWeb.CoreComponents do
     ~H"""
     <header class={[@actions != [] && "flex items-center justify-between gap-6", @class]}>
       <div>
-        <h1 class="text-lg font-semibold leading-8 text-zinc-800">
-          <%= render_slot(@inner_block) %>
+        <h1 class="text-lg font-semibold leading-8 text-base-content">
+          {render_slot(@inner_block)}
         </h1>
-        <p :if={@subtitle != []} class="mt-2 text-sm leading-6 text-zinc-600">
-          <%= render_slot(@subtitle) %>
+        <p :if={@subtitle != []} class="mt-2 text-sm leading-6 text-muted">
+          {render_slot(@subtitle)}
         </p>
       </div>
-      <div class="flex-none"><%= render_slot(@actions) %></div>
+      <div class="flex-none">{render_slot(@actions)}</div>
     </header>
     """
   end
@@ -448,6 +467,13 @@ defmodule FullstackWeb.CoreComponents do
   attr :rows, :list, required: true
   attr :row_id, :any, default: nil, doc: "the function for generating the row id"
   attr :row_click, :any, default: nil, doc: "the function for handling phx-click on each row"
+
+  attr :row_label, :any,
+    default: nil,
+    doc:
+      "a function returning the accessible name for a clickable row, for example " <>
+        "`fn url -> \"View \#{url.origin}\" end`. Without it a clickable row is " <>
+        "announced only by its cell contents."
 
   attr :row_item, :any,
     default: &Function.identity/1,
@@ -468,38 +494,47 @@ defmodule FullstackWeb.CoreComponents do
     ~H"""
     <div class="overflow-y-auto px-4 sm:overflow-visible sm:px-0">
       <table class="w-[40rem] mt-11 sm:w-full">
-        <thead class="text-sm text-left leading-6 text-zinc-500">
+        <thead class="text-sm text-left leading-6 text-muted">
           <tr>
-            <th :for={col <- @col} class="p-0 pr-6 pb-4 font-normal"><%= col[:label] %></th>
-            <th class="relative p-0 pb-4"><span class="sr-only"><%= gettext("Actions") %></span></th>
+            <th :for={col <- @col} class="p-0 pr-6 pb-4 font-normal">{col[:label]}</th>
+            <th class="relative p-0 pb-4"><span class="sr-only">{gettext("Actions")}</span></th>
           </tr>
         </thead>
         <tbody
           id={@id}
           phx-update={match?(%Phoenix.LiveView.LiveStream{}, @rows) && "stream"}
-          class="relative divide-y divide-zinc-100 border-t border-zinc-200 text-sm leading-6 text-zinc-700"
+          class="relative divide-y divide-base-300 border-t border-base-300 text-sm leading-6 text-base-content"
         >
-          <tr :for={row <- @rows} id={@row_id && @row_id.(row)} class="group hover:bg-zinc-50">
-            <td
-              :for={{col, i} <- Enum.with_index(@col)}
-              phx-click={@row_click && @row_click.(row)}
-              class={["relative p-0", @row_click && "hover:cursor-pointer"]}
-            >
+          <tr
+            :for={row <- @rows}
+            id={@row_id && @row_id.(row)}
+            tabindex={@row_click && "0"}
+            role={@row_click && "button"}
+            aria-label={@row_click && @row_label && @row_label.(@row_item.(row))}
+            phx-click={@row_click && @row_click.(row)}
+            phx-keydown={@row_click && @row_click.(row)}
+            phx-key="Enter"
+            class={[
+              "group",
+              @row_click && "hover:bg-base-200 hover:cursor-pointer",
+              @row_click &&
+                "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+            ]}
+          >
+            <td :for={{col, i} <- Enum.with_index(@col)} class="relative p-0">
               <div class="block py-4 pr-6">
-                <span class="absolute -inset-y-px right-0 -left-4 group-hover:bg-zinc-50 sm:rounded-l-xl" />
-                <span class={["relative", i == 0 && "font-semibold text-zinc-900"]}>
-                  <%= render_slot(col, @row_item.(row)) %>
+                <span class={["relative", i == 0 && "font-semibold text-base-content"]}>
+                  {render_slot(col, @row_item.(row))}
                 </span>
               </div>
             </td>
             <td :if={@action != []} class="relative w-14 p-0">
               <div class="relative whitespace-nowrap py-4 text-right text-sm font-medium">
-                <span class="absolute -inset-y-px -right-4 left-0 group-hover:bg-zinc-50 sm:rounded-r-xl" />
                 <span
                   :for={action <- @action}
-                  class="relative ml-4 font-semibold leading-6 text-zinc-900 hover:text-zinc-700"
+                  class="relative ml-4 font-semibold leading-6 text-primary hover:underline"
                 >
-                  <%= render_slot(action, @row_item.(row)) %>
+                  {render_slot(action, @row_item.(row))}
                 </span>
               </div>
             </td>
@@ -527,10 +562,10 @@ defmodule FullstackWeb.CoreComponents do
   def list(assigns) do
     ~H"""
     <div class="mt-14">
-      <dl class="-my-4 divide-y divide-zinc-100">
+      <dl class="-my-4 divide-y divide-base-300">
         <div :for={item <- @item} class="flex gap-4 py-4 text-sm leading-6 sm:gap-8">
-          <dt class="w-1/4 flex-none text-zinc-500"><%= item.title %></dt>
-          <dd class="text-zinc-700"><%= render_slot(item) %></dd>
+          <dt class="w-1/4 flex-none text-muted">{item.title}</dt>
+          <dd class="text-base-content">{render_slot(item)}</dd>
         </div>
       </dl>
     </div>
@@ -552,10 +587,10 @@ defmodule FullstackWeb.CoreComponents do
     <div class="mt-16">
       <.link
         navigate={@navigate}
-        class="text-sm font-semibold leading-6 text-zinc-900 hover:text-zinc-700"
+        class="text-sm font-semibold leading-6 text-base-content hover:text-primary rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
-        <.icon name="hero-arrow-left-solid" class="h-3 w-3" />
-        <%= render_slot(@inner_block) %>
+        <.icon name="hero-arrow-left-solid" class="h-3 w-3" aria-hidden="true" />
+        {render_slot(@inner_block)}
       </.link>
     </div>
     """
@@ -582,9 +617,13 @@ defmodule FullstackWeb.CoreComponents do
   attr :name, :string, required: true
   attr :class, :string, default: nil
 
+  attr :rest, :global,
+    include: ~w(aria-hidden aria-label role),
+    doc: "arbitrary HTML attributes, so decorative icons can be hidden from screen readers"
+
   def icon(%{name: "hero-" <> _} = assigns) do
     ~H"""
-    <span class={[@name, @class]} />
+    <span class={[@name, @class]} {@rest} />
     """
   end
 
