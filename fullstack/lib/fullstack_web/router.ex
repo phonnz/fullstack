@@ -57,17 +57,17 @@ defmodule FullstackWeb.Router do
     # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
-    import PhoenixStorybook.Router
-
-    # Storybook static assets (must be in root scope, not CSRF-protected)
-    scope "/" do
-      storybook_assets()
-    end
-
-    # live_storybook cannot be inside a scope with path != "/" (library limitation)
-    scope "/" do
-      pipe_through :browser
-      live_storybook("/storybook", otp_app: :fullstack, backend_module: FullstackWeb.Storybook)
+    # Storybook routes are compiled only in dev/test (see elixirc_paths in
+    # mix.exs). `use`/`import` are expanded by the compiler even inside a dead
+    # `if` branch, so the call is emitted via Module.eval_quoted/2 — the AST is
+    # only built when the module actually exists.
+    if Code.ensure_loaded?(FullstackWeb.StorybookRoutes) do
+      Module.eval_quoted(
+        __MODULE__,
+        quote(do: use(FullstackWeb.StorybookRoutes)),
+        [],
+        __ENV__
+      )
     end
 
     scope "/dev" do

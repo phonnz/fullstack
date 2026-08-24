@@ -24,7 +24,12 @@ defmodule Fullstack.MixProject do
   end
 
   # Specifies which paths to compile per environment.
-  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  # `dev/` holds code that must never reach a prod build — notably the
+  # storybook routes, which `import PhoenixStorybook.Router`. `import` is a
+  # compiler directive resolved even inside a falsy `if`, so excluding the file
+  # from the prod compile is the only reliable guard.
+  defp elixirc_paths(:test), do: ["lib", "dev", "test/support"]
+  defp elixirc_paths(:dev), do: ["lib", "dev"]
   defp elixirc_paths(_), do: ["lib"]
 
   # Specifies your project dependencies.
