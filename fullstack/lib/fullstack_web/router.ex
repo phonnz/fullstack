@@ -19,26 +19,33 @@ defmodule FullstackWeb.Router do
 
   scope "/", FullstackWeb do
     pipe_through :browser
-    live "/fibonacci", Public.FibonacciLive.Index, :index
-    live "/transactions/:id", Public.TransactionLive
-    live "/transactions", Public.TransactionsTableLive
-    live "/Analitics", Public.TransactionsLive.PublicTransactions, :public_transactions
-    live "/devices", Public.DevicesLive.Index, :index
-    live "/agent", Public.AgentLive
 
     resources "/about", AboutController, only: [:index]
-    live "/chat", ChatLive
-    live "/channels-chat", ChannelsChatLive
-
-    live "/urls", UrlLive.Index, :index
-    live "/urls/new", UrlLive.Index, :new
-    live "/urls/:id/edit", UrlLive.Index, :edit
-
-    live "/urls/:id", UrlLive.Show, :show
-    live "/urls/:id/show/edit", UrlLive.Show, :edit
     get "/u/:key", UrlRedirectController, :index
 
-    live "/", HomeLive.Index, :index
+    # The site header renders inside the LiveView, so these public routes need
+    # :current_user assigned to show the right account links. mount_current_user
+    # uses assign_new and does not require a session, so anonymous mounts are fine.
+    live_session :public, on_mount: [{FullstackWeb.UserAuth, :mount_current_user}] do
+      live "/fibonacci", Public.FibonacciLive.Index, :index
+      live "/transactions/:id", Public.TransactionLive
+      live "/transactions", Public.TransactionsTableLive
+      live "/Analitics", Public.TransactionsLive.PublicTransactions, :public_transactions
+      live "/devices", Public.DevicesLive.Index, :index
+      live "/agent", Public.AgentLive
+
+      live "/chat", ChatLive
+      live "/channels-chat", ChannelsChatLive
+
+      live "/urls", UrlLive.Index, :index
+      live "/urls/new", UrlLive.Index, :new
+      live "/urls/:id/edit", UrlLive.Index, :edit
+
+      live "/urls/:id", UrlLive.Show, :show
+      live "/urls/:id/show/edit", UrlLive.Show, :edit
+
+      live "/", HomeLive.Index, :index
+    end
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

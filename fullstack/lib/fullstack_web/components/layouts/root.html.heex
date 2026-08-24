@@ -32,53 +32,6 @@
     >
       Skip to main content
     </a>
-    <nav
-      aria-label="Account"
-      class="relative z-10 flex items-center gap-4 px-4 sm:px-6 lg:px-8 justify-end"
-    >
-      <.theme_toggle />
-      <ul class="flex items-center gap-4">
-        <%= if @current_user do %>
-          <li class="text-[0.8125rem] leading-6 text-muted">
-            {@current_user.email}
-          </li>
-          <li>
-            <.link
-              href={~p"/users/settings"}
-              class="text-[0.8125rem] leading-6 font-semibold hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
-            >
-              Settings
-            </.link>
-          </li>
-          <li>
-            <.link
-              href={~p"/users/log_out"}
-              method="delete"
-              class="text-[0.8125rem] leading-6 font-semibold hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
-            >
-              Log out
-            </.link>
-          </li>
-        <% else %>
-          <li>
-            <.link
-              href={~p"/users/register"}
-              class="text-[0.8125rem] leading-6 font-semibold hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
-            >
-              Register
-            </.link>
-          </li>
-          <li>
-            <.link
-              href={~p"/users/log_in"}
-              class="text-[0.8125rem] leading-6 font-semibold hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
-            >
-              Log in
-            </.link>
-          </li>
-        <% end %>
-      </ul>
-    </nav>
     {@inner_content}
   </body>
 </html>
