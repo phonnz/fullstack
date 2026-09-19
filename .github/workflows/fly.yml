@@ -1,27 +1,117 @@
-name: Deploying
-on: 
-  push:
+# Deploy pipeline for the Fullstack Phoenix application on Fly.io.
+#
+# Trigger: runs only when a pull request targeting `main` is closed. The
+# `compile` and `deploy` jobs additionally guard on `merged == true`, so a PR
+# that is closed without merging produces no deploy. There is no `push`
+# trigger: a direct push to `main` (e.g. an admin override) does not run this
+# workflow and therefore does not deploy or migrate anything.
+#
+# Gate: `compile` runs `mix compile` under `MIX_ENV=prod` with the same
+# Elixir/OTP versions pinned in `fullstack/Dockerfile`. `deploy` requires
+# `compile` to succeed (`needs: compile`) before `flyctl deploy` runs.
+#
+# Known gap: this pipeline has no `mix test` (or equivalent automated test)
+# gate. A merged PR that compiles but breaks behavior at runtime will still
+# deploy and still run migrations against production. (9 pre-existing test
+# failures were recorded on 2026-08-24 and have not been re-verified since;
+# the test suite also requires a local Postgres on port 5433 per
+# `config/test.exs`.) The asset pipeline and the Docker image build are also
+# not exercised here and can still fail inside the Fly remote builder.
+#
+# Migrations: run exactly once per deploy via Fly's `release_command`
+# (`fly.toml` -> `/app/bin/migrate` -> `Fullstack.Release.migrate/0`), before
+# the new version receives traffic. This workflow never runs migrations
+# directly.
+#
+# Concurrency: the `deploy` job is serialized via a concurrency group with
+# `cancel-in-progress: false`, because a deploy may be mid-migration. With
+# rapid successive merges, a superseded pending deploy run will show
+# `cancelled` on its `deploy` job — this is expected: the next run already
+# deploys a `main` that contains the superseded commit's changes.
+#
+# Checkout ref: both jobs check out `github.event.pull_request.merge_commit_sha`
+# rather than the default `refs/pull/N/merge` (a synthetic, ephemeral GitHub
+# test-merge commit) or `main` at checkout time (which could differ between
+# the two jobs if another PR merges in between). Pinning both jobs to the
+# same merge commit guarantees the compile gate and the deploy operate on
+# identical bytes.
+name: Deploy to Fly.io
+
+on:
+  pull_request:
+    types: [closed]
     branches: ["main"]
 
-env: 
-  FLY_API_TOKEN: ${{ secrets.FLYIO_API_TOKEN}}
-  POOL_SIZE: "1"
+permissions:
+  contents: read
 
 jobs:
-  deploys:
-    name: Deploy Fullsatack
+  compile:
+    name: Compile (MIX_ENV=prod)
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MIX_ENV: prod
     steps:
-    - uses: actions/checkout@v4
-    - uses: superfly/flyctl-actions/setup-flyctl@master
-    - name: Deploy
-      run: flyctl deploy --remote-only
-      working-directory: fullstack
+      - uses: actions/checkout@v4
+        with:
+          # The commit that actually landed on main, not GitHub's synthetic refs/pull/N/merge.
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
+      - name: Read Elixir/OTP versions from the Dockerfile (single source of truth)
+        id: versions
+        working-directory: fullstack
+        run: |
+          elixir="$(sed -n 's/^ARG ELIXIR_VERSION=//p' Dockerfile)"
+          otp="$(sed -n 's/^ARG OTP_VERSION=//p' Dockerfile)"
+          test -n "$elixir" && test -n "$otp"
+          echo "elixir=$elixir" >> "$GITHUB_OUTPUT"
+          echo "otp=$otp" >> "$GITHUB_OUTPUT"
 
+      - uses: erlang/setup-beam@v1
+        with:
+          elixir-version: ${{ steps.versions.outputs.elixir }}
+          otp-version: ${{ steps.versions.outputs.otp }}
+          version-type: strict
 
+      - uses: actions/cache@v4
+        with:
+          path: |
+            fullstack/deps
+            fullstack/_build
+          key: ${{ runner.os }}-mix-prod-${{ steps.versions.outputs.elixir }}-${{ steps.versions.outputs.otp }}-${{ hashFiles('fullstack/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-prod-${{ steps.versions.outputs.elixir }}-${{ steps.versions.outputs.otp }}-
 
+      - run: mix deps.get --only prod
+        working-directory: fullstack
+      - run: mix deps.compile
+        working-directory: fullstack
+      # --warnings-as-errors is deliberately omitted: a clean --force prod
+      # compile on Elixir 1.15.4 / OTP 26.0.2 (checked at apply time,
+      # 2026-09-20) surfaced dozens of pre-existing warnings, so enabling the
+      # flag now would land this gate permanently red. Revisit once the
+      # warning backlog is cleared.
+      - run: mix compile
+        working-directory: fullstack
 
-
-
-
+  deploy:
+    name: Deploy Fullstack
+    needs: compile
+    if: needs.compile.result == 'success' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: fly-deploy-production
+      cancel-in-progress: false # never cancel a deploy that may be mid-migration
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLYIO_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: superfly/flyctl-actions/setup-flyctl@1.6
+      - name: Deploy
+        run: flyctl deploy --remote-only
+        working-directory: fullstack
