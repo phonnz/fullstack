@@ -13,7 +13,7 @@ kill_signal = 'SIGTERM'
 release_command = '/app/bin/migrate'
 
 [env]
-PHX_HOST = 'brain-stack.fly.dev'
+PHX_HOST = 'agentson.live'
 PORT = '8080'
 
 [http_service]

@@ -55,5 +55,11 @@ defmodule FullstackWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+
+  # Must run before the Router: Phoenix.Router.call/2 matches the route
+  # using conn.path_info before any pipeline plug executes, so a host-based
+  # path rewrite has to happen at the endpoint level to affect routing.
+  plug FullstackWeb.Plugs.HostRewrite
+
   plug FullstackWeb.Router
 end

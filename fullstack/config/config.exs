@@ -13,6 +13,12 @@ config :fullstack,
   generators: [binary_id: true],
   transactions: [start: true, time_to_generate: 5 * 60_000]
 
+# Per-host root path rewrite, see FullstackWeb.Plugs.HostRewrite.
+config :fullstack, :host_roots, %{
+  "chat.agentson.live" => "/chat",
+  "agentson.live" => "/about"
+}
+
 # Configures the endpoint
 config :fullstack, FullstackWeb.Endpoint,
   url: [host: "localhost"],
