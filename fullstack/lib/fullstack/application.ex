@@ -25,6 +25,8 @@ defmodule Fullstack.Application do
         Fullstack.Servers.Generators.Transactions,
         {Registry, [keys: :unique, name: :wallet_projectors]},
         {Registry, [keys: :unique, name: Fullstack.Wallet.Aggregate.WalletAggregators]},
+        {Registry, keys: :unique, name: Fullstack.JidoMarketAgents.ConversationRegistry},
+        Fullstack.JidoMarketAgents.ConversationSupervisor,
         Fullstack.Agents.AgentServer
       ] ++ prod_child()
 
