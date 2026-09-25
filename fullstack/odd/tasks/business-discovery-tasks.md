@@ -157,18 +157,24 @@ Independent of Slice A; may land before or after it. Must precede Slice C.
 **Satisfies:** R6 (all)
 **Files:** `message_buffer.ex`, `message_buffer_supervisor.ex`
 
-- [ ] RED: three messages inside the window produce exactly one forwarded batch joined by
+- [x] RED: three messages inside the window produce exactly one forwarded batch joined by
       `\n\n` (S6.1).
-- [ ] RED: each new message **resets** the timer — flush occurs a full window after the
+- [x] RED: each new message **resets** the timer — flush occurs a full window after the
       *last* message, not the first (S6.2).
-- [ ] RED: two conversations in one window get separate batches; content never crosses
+- [x] RED: two conversations in one window get separate batches; content never crosses
       (S6.3).
-- [ ] RED: `append` returns `{:ok, :buffered, id}` immediately (S6.4).
-- [ ] RED: `{:buffered, ...}` is broadcast so the UI can show collection (S6.5).
-- [ ] One process per `user_id` under `MessageBufferSupervisor` (design D6).
-- [ ] Unique ids per test via `System.unique_integer` to keep these `async: true`.
-- [ ] GREEN + `mix test test/fullstack/jido_market_agents/message_buffer_test.exs`
-- [ ] Commit: `feat(jido): add MessageBuffer with per-user debounce`
+- [x] RED: `append` returns `{:ok, :buffered, id}` immediately (S6.4).
+- [x] RED: `{:buffered, ...}` is broadcast so the UI can show collection (S6.5).
+- [x] One process per `user_id` under `MessageBufferSupervisor` (design D6), found via
+      `ConversationRegistry` namespaced with `{:message_buffer, user_id}` — no new registry
+      added; T7 supervision wiring needs no extra registry step for this.
+- [x] Unique ids per test via `System.unique_integer`. `async: false`, not `true` as
+      originally assumed here — every test starts a real `RateLimiter` (a single named
+      GenServer) via `start_supervised!/1` to drive the pipeline end-to-end, so concurrent
+      tests would collide on that name. Same constraint as `rate_limiter_test.exs`.
+- [x] GREEN + `mix test test/fullstack/jido_market_agents/message_buffer_test.exs`
+- [ ] Commit: `feat(jido): add MessageBuffer with per-user debounce` — NOT committed per
+      instruction; left in working tree for review.
 
 ### T7 — Wire into the facade and supervision tree
 **Satisfies:** R10 (S10.1, S10.2)
@@ -258,8 +264,8 @@ Requires A (sidebar reads persisted rows) and B (chat must not ship unthrottled)
 | T2 | delegated | done | `5847c57` | 14/14 green (21/21 with T1); suite 301 tests, same 9 pre-existing failures; format clean on touched files; no new warnings |
 | T3 | delegated | done | `24661e8` | 8/8 green; suite 309 tests, same 9 pre-existing failures; D2 rescue branch mutation-tested (removing `rescue` fails the test); format clean |
 | T4 | delegated | done | `71717fa` | 4/4 green (33/33 jido); suite 313 tests, same 9 pre-existing; S5.2 mutation-tested (reverting partial-persistence fails it); format clean |
-| T5 | delegated | in progress | — | — |
-| T6 | — | not started | — | — |
+| T5 | delegated | done | `b9ce9a9` | 10/10 green; suite 323 tests, same 9 pre-existing; ETS dedup fix mutation-tested (reverting fails 7/10); format clean |
+| T6 | delegated | done (uncommitted) | — | 5/5 green; suite 328 tests, same 9 pre-existing failures, 0 new; format clean; no new warnings (independently re-verified) |
 | T7 | — | not started | — | — |
 | T8 | — | not started | — | — |
 | T9 | — | not started | — | — |
