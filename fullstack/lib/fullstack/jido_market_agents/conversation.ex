@@ -19,6 +19,19 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   @pubsub Fullstack.PubSub
   @default_timeout 15_000
 
+  # The six flat fields extracted by `MarketValidator` (its schema, minus
+  # `extraction_history` — excluded per design D3). Shared by the T4
+  # partial-persistence fix (`partial_validated_data/1`) and rehydration
+  # (`normalize_validated_data_map/1`).
+  @validator_fields [
+    :country,
+    :city,
+    :business_market,
+    :initial_budget,
+    :final_product_proposal,
+    :product_price
+  ]
+
   defstruct [
     :id,
     :messages,
@@ -99,6 +112,19 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
+  # Id scheme (design D4/D8, decided in T4): rehydration needs a way to
+  # find the specific persisted `Conversations.Record` for this GenServer
+  # `id`, scoped to `user_id`. Nothing in the current schema stores the
+  # GenServer's string id on a `Record` (`record.ex` has no such column,
+  # and adding one is out of T4's scope — `conversation.ex` only). So the
+  # chosen scheme is: for a persisted (user-bound) conversation, the
+  # GenServer `id` *is* the `Record`'s own `binary_id`. This needs no
+  # schema change, is exactly what S2.2 describes ("the Registry key is
+  # that UUID string"), and makes `Conversations.get_for_user(id,
+  # user_id)` directly the rehydration lookup — reusing the existing
+  # user-scoped query (D8) with no new unscoped getter. Callers that want
+  # a rehydratable conversation create the `Record` first
+  # (`Conversations.create/1`) and pass `record.id` as `id` here.
   defp find_or_start(id, user_id \\ nil) do
     case lookup(id) do
       {:ok, pid} ->
@@ -114,6 +140,67 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
+  # Under the chosen id scheme, `id` is only ever a hit if it is itself a
+  # `Record`'s `binary_id` (a UUID) — `Conversations.create/1` never
+  # produces anything else. Callers that pick an arbitrary non-UUID
+  # string as their conversation id (the legacy 3-arity `send_message/3`
+  # path, and any caller with no `Record` to rehydrate from) can never
+  # have a matching row, so treat that as an ordinary miss rather than
+  # letting `Ecto.Query.CastError` reach `init/1`.
+  defp load_persisted_conversation(id, user_id) do
+    if uuid?(id) do
+      case Conversations.get_for_user(id, user_id) do
+        nil ->
+          :not_found
+
+        %Conversations.Record{} = record ->
+          {:ok,
+           %{
+             record_id: record.id,
+             status: restored_status(record.status),
+             validated_data: record.validated_data,
+             messages: Enum.map(Conversations.list_messages(record.id), &restored_message/1)
+           }}
+      end
+    else
+      :not_found
+    end
+  end
+
+  # `Ecto.UUID.cast/1` is lenient: it also accepts any raw 16-byte binary
+  # and hex-encodes it, so a plain string of the right length (e.g.
+  # `"test-persist-324"`, 17 bytes) can spuriously "cast" successfully
+  # without ever being canonical UUID text. Match the canonical
+  # `8-4-4-4-12` hex string form instead, since that is the only form
+  # `Ecto.UUID`'s own `dump/1` (what the `:binary_id` column actually
+  # requires) accepts as text input.
+  @uuid_text_regex ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+  defp uuid?(id) when is_binary(id), do: Regex.match?(@uuid_text_regex, id)
+  defp uuid?(_), do: false
+
+  # Only these 4 known values are ever persisted (`Record`'s
+  # `@statuses`/changeset validation) — an explicit mapping, never
+  # `String.to_atom/1` on a value that came out of the database.
+  defp restored_status("active"), do: :active
+  defp restored_status("researching"), do: :researching
+  defp restored_status("completed"), do: :completed
+  defp restored_status("error"), do: :error
+
+  defp restored_message(%Conversations.Message{} = message) do
+    %{
+      role: restored_role(message.role),
+      content: message.content,
+      timestamp: message.inserted_at,
+      metadata: message.metadata || %{}
+    }
+  end
+
+  # `role` is constrained by `Message`'s changeset to exactly these two
+  # values — explicit mapping, not dynamic atom creation.
+  defp restored_role("user"), do: :user
+  defp restored_role("assistant"), do: :assistant
+
   # Server callbacks
 
   @impl true
@@ -121,13 +208,39 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     id = Keyword.fetch!(opts, :id)
     user_id = Keyword.get(opts, :user_id)
 
-    validator = MarketValidator.new(id: "#{id}_validator")
+    # Rehydration (D4) is attempted here, inside `init/1`, rather than in
+    # `find_or_start/2` (the caller process that decides whether to spawn
+    # a child at all). The `Conversation` child spec is the `use
+    # GenServer` default (`restart: :permanent`), so `ConversationSupervisor`
+    # (`:one_for_one`) restarts a killed conversation automatically by
+    # calling `start_link/1` with the *original* `start_child` opts —
+    # bypassing `find_or_start/2` entirely. `init/1` is the only code path
+    # both a manual miss (via `find_or_start/2`) and that automatic
+    # restart share, so it is the one place a load can't be raced or
+    # skipped. If `user_id` is nil there is nothing to scope the lookup by
+    # (design D8: no unscoped getter exists) — start fresh empty, same as
+    # today (S5.3).
+    restored = user_id && load_persisted_conversation(id, user_id)
+
+    # The researcher agent has no persisted state (untouched by this
+    # feature) — always starts fresh, restored or not.
     researcher = MarketResearcher.new(id: "#{id}_researcher")
 
-    state = %__MODULE__{
+    state =
+      case restored do
+        {:ok, restored} -> restored_state(id, user_id, researcher, restored)
+        _ -> fresh_state(id, user_id, researcher)
+      end
+
+    Logger.info("Conversation started: #{id}")
+    {:ok, state}
+  end
+
+  defp fresh_state(id, user_id, researcher) do
+    %__MODULE__{
       id: id,
       messages: [],
-      validator_agent: validator,
+      validator_agent: MarketValidator.new(id: "#{id}_validator"),
       researcher_agent: researcher,
       status: :active,
       validated_data: nil,
@@ -135,9 +248,73 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       record_id: nil,
       persisted_count: 0
     }
+  end
 
-    Logger.info("Conversation started: #{id}")
-    {:ok, state}
+  # Rehydration (R5/D3/D4): rebuilds the validator agent only through its
+  # public `new/1` + `set/2` API — never by deserializing a stored struct.
+  # `extraction_history` does not survive (D3, accepted: `check_completeness/1`
+  # never reads it).
+  defp restored_state(id, user_id, researcher, restored) do
+    validator = rebuild_validator(id, restored.validated_data)
+
+    %__MODULE__{
+      id: id,
+      messages: restored.messages,
+      validator_agent: validator,
+      researcher_agent: researcher,
+      status: restored.status,
+      validated_data: restored.validated_data,
+      user_id: user_id,
+      record_id: restored.record_id,
+      persisted_count: length(restored.messages)
+    }
+  end
+
+  defp rebuild_validator(id, nil) do
+    MarketValidator.new(id: "#{id}_validator")
+  end
+
+  defp rebuild_validator(id, validated_data) when is_map(validated_data) do
+    validator = MarketValidator.new(id: "#{id}_validator")
+
+    case normalize_validated_data_map(validated_data) do
+      empty when map_size(empty) == 0 ->
+        validator
+
+      normalized ->
+        {:ok, validator} = MarketValidator.set(validator, normalized)
+        validator
+    end
+  end
+
+  # `validated_data` round-trips through a `:map` (jsonb-like) column, so
+  # its keys may come back as strings or already as atoms — never assume
+  # either. Only the six known validator fields are accepted, mapped via
+  # `String.to_existing_atom/1` (safe: these atoms already exist, defined
+  # in `MarketValidator`'s schema) rather than `String.to_atom/1` on
+  # arbitrary database content. Nil values are dropped so `set/2` only
+  # receives fields that actually have data.
+  defp normalize_validated_data_map(data) do
+    Map.new(
+      for {key, value} <- data,
+          not is_nil(value),
+          field = validator_field_key(key),
+          not is_nil(field) do
+        {field, value}
+      end
+    )
+  end
+
+  defp validator_field_key(key) when is_atom(key) do
+    if key in @validator_fields, do: key, else: nil
+  end
+
+  defp validator_field_key(key) when is_binary(key) do
+    if key in Enum.map(@validator_fields, &Atom.to_string/1) do
+      String.to_existing_atom(key)
+    else
+      nil
+    end
   end
 
   @impl true
@@ -275,10 +452,37 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
         assistant_msg = %{role: :assistant, content: content, timestamp: DateTime.utc_now()}
 
-        state = %{state | messages: state.messages ++ [assistant_msg]}
+        state = %{
+          state
+          | messages: state.messages ++ [assistant_msg],
+            validated_data: partial_validated_data(state.validator_agent)
+        }
+
         state = broadcast(state, :extraction_complete, %{status: :needs_data})
         {:noreply, state}
     end
+  end
+
+  # Bug fix (T4, Part 1): the `{:complete, data}` branch above sets
+  # `validated_data` from the validator's `extract_data/1`, but the
+  # `{:incomplete, fields}` branch never did — so a conversation killed
+  # after a partial turn (e.g. country given, business_market still
+  # missing) had nothing to rehydrate from, silently discarding whatever
+  # the user already provided. This mirrors `extract_data/1`
+  # (`market_validator.ex:232-240`) but is built directly from
+  # `agent.state` rather than by calling `check_completeness/1` again
+  # (which would just return `{:incomplete, ...}`, not a data map).
+  #
+  # `extraction_history` is deliberately excluded (design D3) — it is
+  # diagnostic only and `check_completeness/1` never reads it.
+  #
+  # Shape choice: fields are included even when nil/empty (not filtered
+  # out), the same shape `extract_data/1` returns for the complete case.
+  # This keeps `validated_data` a fixed 6-key map in both branches, so
+  # rehydration (`normalize_validated_data_map/1` below) has one shape to
+  # handle rather than two.
+  defp partial_validated_data(validator_agent) do
+    Map.new(@validator_fields, fn field -> {field, Map.get(validator_agent.state, field)} end)
   end
 
   defp broadcast(state, event, extra) do
