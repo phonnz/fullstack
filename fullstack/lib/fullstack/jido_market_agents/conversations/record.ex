@@ -39,5 +39,6 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Record do
     |> cast(attrs, [:user_id, :title, :status, :validated_data])
     |> validate_required([:user_id])
     |> validate_inclusion(:status, @statuses)
+    |> foreign_key_constraint(:user_id)
   end
 end
