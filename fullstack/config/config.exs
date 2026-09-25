@@ -19,6 +19,15 @@ config :fullstack, :host_roots, %{
   "agentson.live" => "/about"
 }
 
+# Throttling durations for Fullstack.JidoMarketAgents.RateLimiter and MessageBuffer.
+# Read at runtime via Application.get_env/3, never as module attributes, so test
+# config takes effect (see config/test.exs for short deterministic values).
+config :fullstack, Fullstack.JidoMarketAgents,
+  debounce_ms: 45_000,
+  rate_limit_count: 10,
+  rate_limit_window_ms: 30 * 60 * 1000,
+  cooldown_ms: 15 * 60 * 1000
+
 # Configures the endpoint
 config :fullstack, FullstackWeb.Endpoint,
   url: [host: "localhost"],
