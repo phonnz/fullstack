@@ -253,7 +253,9 @@ Requires A (sidebar reads persisted rows) and B (chat must not ship unthrottled)
 - [ ] GREEN + `mix test`
 - [ ] Commit: `feat(web): add business discovery evaluate chat with conversation history`
 
-**Slice C gate:** `mix test` green, format, warnings-as-errors. Final checkpoint; delivery decided after T9.
+**Slice C gate:** PASSED at `b3d863a` — 352 tests, same 9 pre-existing failures, format clean,
+zero new warnings. FEATURE COMPLETE. All 9 tasks done on `ft-agents`; delivery (PR/slicing)
+is now the user's decision.
 
 ---
 
@@ -268,8 +270,8 @@ Requires A (sidebar reads persisted rows) and B (chat must not ship unthrottled)
 | T5 | delegated | done | `b9ce9a9` | 10/10 green; suite 323 tests, same 9 pre-existing; ETS dedup fix mutation-tested (reverting fails 7/10); format clean |
 | T6 | delegated | done | `bbc33a1` | 5/5 green; suite 328 tests, same 9 pre-existing; S6.2 REWRITTEN by parent — original passed with the timer reset removed (proved by mutation); rewritten version fails without it |
 | T7 | delegated | done | `ab6c774` | 5/5 new green, 57/57 with legacy suite; suite 333 tests, same 9 pre-existing; zero clause warnings in touched files; legacy bypass mutation-tested (rerouting through buffer fails 25 tests) |
-| T8 | — | not started | — | — |
-| T9 | — | not started | — | — |
+| T8 | delegated | done | `4b8f099` | 9/9 green; suite 337 tests, same 9 pre-existing; RED proved the catch-all would have swallowed the route (live_redirect to /urls); format clean; no new warnings |
+| T9 | delegated | done | `b3d863a` | 15/15 green; suite 352 tests, same 9 pre-existing; D8 404 and S17.2 indicator-clearing both mutation-tested (each fails when removed); all 3 routes resolve via mix phx.routes |
 
 Route is `inline` or `delegated`, recorded per the ODD delegation triggers: 2+ non-trivial
 files delegates to one writer; 4+ files for understanding delegates one mapper. T1, T5, T6,
