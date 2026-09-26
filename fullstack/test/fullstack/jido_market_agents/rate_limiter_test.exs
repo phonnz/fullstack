@@ -1,6 +1,15 @@
 defmodule Fullstack.JidoMarketAgents.RateLimiterTest do
   # The RateLimiter is a single named GenServer (design D6), so every test in this
   # file shares one process and its ETS table. Tests must run serially.
+  #
+  # T7: RateLimiter is now started by the application supervision tree
+  # (application.ex), so it is already running under its registered name by
+  # the time this suite boots. `start_supervised!(RateLimiter)` would crash
+  # with `{:already_started, pid}` — there is nothing left for this test
+  # file to start. Tests exercise the already-running application instance
+  # directly. Isolation across tests still holds: every test uses
+  # `unique_user/0`, so no two tests ever share a `user_id` key in the
+  # limiter's ETS table or cooldown maps.
   use ExUnit.Case, async: false
 
   alias Fullstack.JidoMarketAgents.RateLimiter
@@ -13,11 +22,6 @@ defmodule Fullstack.JidoMarketAgents.RateLimiterTest do
                  :rate_limit_count
                ]
   @cooldown_ms Application.compile_env!(:fullstack, Fullstack.JidoMarketAgents)[:cooldown_ms]
-
-  setup do
-    start_supervised!(RateLimiter)
-    :ok
-  end
 
   defp unique_user, do: System.unique_integer([:positive])
   defp unique_conversation, do: System.unique_integer([:positive])

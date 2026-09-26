@@ -1,24 +1,25 @@
 defmodule Fullstack.JidoMarketAgents.MessageBufferTest do
   # MessageBuffer forwards flushed batches to a REAL `RateLimiter` (a single
-  # named GenServer, design D6) which this test starts with
-  # `start_supervised!/1`. Two async tests both doing that would race on the
-  # same registered name and crash with `{:already_started, pid}` — the exact
-  # reason `rate_limiter_test.exs` itself is `async: false`. `MessageBuffer`
-  # processes are per-user (this task's own process), so nothing about their
-  # own shape forces serialization — it is purely the shared `RateLimiter`
-  # dependency that does. Serial it stays.
+  # named GenServer, design D6). Two async tests both starting it would race
+  # on the same registered name and crash with `{:already_started, pid}` —
+  # the exact reason `rate_limiter_test.exs` itself is `async: false`.
+  # `MessageBuffer` processes are per-user (this task's own process), so
+  # nothing about their own shape forces serialization — it is purely the
+  # shared `RateLimiter` dependency that does. Serial it stays.
+  #
+  # T7: both RateLimiter and MessageBufferSupervisor are now started by the
+  # application supervision tree (application.ex), so they are already
+  # running under their registered names by the time this suite boots.
+  # `start_supervised!/1` for either would crash with
+  # `{:already_started, pid}`. Tests exercise the already-running
+  # application instances directly; per-test isolation still holds via
+  # `unique_user/0` / `unique_conversation/0`.
   use ExUnit.Case, async: false
 
-  alias Fullstack.JidoMarketAgents.{MessageBuffer, MessageBufferSupervisor, RateLimiter}
+  alias Fullstack.JidoMarketAgents.MessageBuffer
   alias Fullstack.JidoMarketAgents.Conversation
 
   @debounce_ms Application.compile_env!(:fullstack, Fullstack.JidoMarketAgents)[:debounce_ms]
-
-  setup do
-    start_supervised!(RateLimiter)
-    start_supervised!(MessageBufferSupervisor)
-    :ok
-  end
 
   defp unique_user, do: System.unique_integer([:positive])
   defp unique_conversation, do: System.unique_integer([:positive])
