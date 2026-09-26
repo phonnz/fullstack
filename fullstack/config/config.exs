@@ -16,7 +16,8 @@ config :fullstack,
 # Per-host root path rewrite, see FullstackWeb.Plugs.HostRewrite.
 config :fullstack, :host_roots, %{
   "chat.agentson.live" => "/chat",
-  "agentson.live" => "/about"
+  "agentson.live" => "/about",
+  "discover.agentson.live" => "/business-discovery"
 }
 
 # Throttling durations for Fullstack.JidoMarketAgents.RateLimiter and MessageBuffer.

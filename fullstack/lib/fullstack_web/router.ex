@@ -37,6 +37,8 @@ defmodule FullstackWeb.Router do
       live "/chat", ChatLive
       live "/channels-chat", ChannelsChatLive
 
+      live "/business-discovery", BusinessDiscoveryLive.Index, :index
+
       live "/urls", UrlLive.Index, :index
       live "/urls/new", UrlLive.Index, :new
       live "/urls/:id/edit", UrlLive.Index, :edit
