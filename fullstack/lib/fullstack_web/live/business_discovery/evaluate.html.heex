@@ -1,0 +1,113 @@
+<div class="h-screen flex flex-col bg-base-200">
+  <!-- Header -->
+  <div class="bg-base-100 border-b border-base-300 px-6 py-4">
+    <h1 class="text-2xl font-bold text-base-content">Business Discovery</h1>
+    <p class="text-sm text-muted">Evaluate your business idea with our agent.</p>
+  </div>
+  <!-- Two-column layout -->
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Column 1: Conversations sidebar -->
+    <div class="w-80 bg-base-100 border-r border-base-300 flex flex-col">
+      <div class="p-4 border-b border-base-300">
+        <button phx-click="new_conversation" class="w-full btn btn-primary font-semibold">
+          New conversation
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto">
+        <div id="conversations-list" phx-update="stream" class="divide-y divide-base-300">
+          <div
+            :for={{dom_id, conversation} <- @streams.conversations}
+            id={dom_id}
+            phx-click="select_conversation"
+            phx-value-id={conversation.id}
+            class={[
+              "p-4 cursor-pointer transition-colors duration-150",
+              if(@conversation && @conversation.id == conversation.id,
+                do: "bg-base-200 border-l-4 border-primary",
+                else: "hover:bg-base-200"
+              )
+            ]}
+          >
+            <p class="text-sm font-medium text-base-content truncate">
+              {conversation.title || "Untitled conversation"}
+            </p>
+            <p class="text-xs text-muted mt-1">
+              {conversation.status}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Column 2: Transcript -->
+    <div class="flex-1 flex flex-col bg-base-200">
+      <%= if @conversation do %>
+        <div class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div :for={message <- @messages}>
+            <%= if message_role(message) == "user" do %>
+              <div class="flex justify-end">
+                <div class="max-w-md bg-primary text-primary-content rounded-lg px-4 py-2">
+                  <p class="text-sm">{message_content(message)}</p>
+                </div>
+              </div>
+            <% else %>
+              <div class="flex justify-start">
+                <div class="max-w-md bg-base-100 border border-base-300 rounded-lg px-4 py-2">
+                  <p class="text-sm text-base-content">{message_content(message)}</p>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+        <!-- Indicator area (D9: derived from :phase, never a boolean flag) -->
+        <div class="px-6 py-2 min-h-[2.5rem]">
+          <%= case @phase do %>
+            <% :buffering -> %>
+              <p class="phase-buffering text-sm text-muted italic">Thinking...</p>
+            <% :researching -> %>
+              <p class="phase-researching text-sm text-muted italic">Thinking... researching</p>
+            <% :queued -> %>
+              <p class="phase-queued text-sm text-muted italic">
+                Queued — will send after cooldown.
+              </p>
+            <% :rate_limited -> %>
+              <p class="phase-rate-limited text-sm text-warning">
+                {@rate_limited && @rate_limited.message}
+                <%= if @rate_limited && @rate_limited[:retry_at] do %>
+                  Retry at {@rate_limited.retry_at}.
+                <% end %>
+              </p>
+            <% _ -> %>
+              <%= if @error do %>
+                <p class="phase-error text-sm text-error">{inspect(@error)}</p>
+              <% end %>
+          <% end %>
+        </div>
+        <!-- Message input -->
+        <div class="bg-base-100 border-t border-base-300 px-6 py-4">
+          <form id="message-form" phx-submit="send" class="flex gap-2">
+            <input
+              type="text"
+              name="message"
+              placeholder="Tell us about your business idea..."
+              autocomplete="off"
+              class="input input-bordered flex-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            />
+            <button type="submit" class="btn btn-primary font-semibold">
+              Send
+            </button>
+          </form>
+        </div>
+      <% else %>
+        <!-- No conversation selected -->
+        <div class="flex-1 flex items-center justify-center">
+          <div class="text-center">
+            <h3 class="mt-2 text-sm font-medium text-base-content">No conversation selected</h3>
+            <p class="mt-1 text-sm text-muted">
+              Start a new conversation to begin evaluating your business idea.
+            </p>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

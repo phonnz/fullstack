@@ -10,7 +10,7 @@
 
     <div class="flex justify-center gap-3">
       <%= if @current_user do %>
-        <.link href="/business-discovery/evaluate" class="btn btn-primary">
+        <.link href={~p"/business-discovery/evaluate"} class="btn btn-primary">
           Start evaluation
         </.link>
       <% else %>

@@ -48,6 +48,17 @@ defmodule FullstackWeb.Router do
 
       live "/", HomeLive.Index, :index
     end
+
+    # New live_session for the authenticated Business Discovery chat (T9).
+    # Placed BEFORE the catch-all `live "/:key", HomeLive.Urls` scope below,
+    # so that scope does not swallow these routes. Named :business_discovery
+    # (not :require_authenticated_user, which is reserved for the /admin
+    # scope) and scoped at "/" per design/task instructions.
+    live_session :business_discovery,
+      on_mount: [{FullstackWeb.UserAuth, :ensure_authenticated}] do
+      live "/business-discovery/evaluate", BusinessDiscoveryLive.Evaluate, :index
+      live "/business-discovery/evaluate/:id", BusinessDiscoveryLive.Evaluate, :show
+    end
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
