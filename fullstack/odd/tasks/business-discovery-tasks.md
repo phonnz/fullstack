@@ -193,7 +193,8 @@ Independent of Slice A; may land before or after it. Must precede Slice C.
 - [ ] GREEN + `mix test`
 - [ ] Commit: `feat(jido): add buffered send_message/4 to the public API`
 
-**Slice B gate:** `mix test` green, format, warnings-as-errors. Checkpoint only — no PR.
+**Slice B gate:** PASSED at `ab6c774` — 333 tests, same 9 pre-existing failures, format clean,
+zero new warnings. Checkpoint only — no PR, continuing on `ft-agents`.
 
 ---
 
@@ -265,8 +266,8 @@ Requires A (sidebar reads persisted rows) and B (chat must not ship unthrottled)
 | T3 | delegated | done | `24661e8` | 8/8 green; suite 309 tests, same 9 pre-existing failures; D2 rescue branch mutation-tested (removing `rescue` fails the test); format clean |
 | T4 | delegated | done | `71717fa` | 4/4 green (33/33 jido); suite 313 tests, same 9 pre-existing; S5.2 mutation-tested (reverting partial-persistence fails it); format clean |
 | T5 | delegated | done | `b9ce9a9` | 10/10 green; suite 323 tests, same 9 pre-existing; ETS dedup fix mutation-tested (reverting fails 7/10); format clean |
-| T6 | delegated | done (uncommitted) | — | 5/5 green; suite 328 tests, same 9 pre-existing failures, 0 new; format clean; no new warnings (independently re-verified) |
-| T7 | — | not started | — | — |
+| T6 | delegated | done | `bbc33a1` | 5/5 green; suite 328 tests, same 9 pre-existing; S6.2 REWRITTEN by parent — original passed with the timer reset removed (proved by mutation); rewritten version fails without it |
+| T7 | delegated | done | `ab6c774` | 5/5 new green, 57/57 with legacy suite; suite 333 tests, same 9 pre-existing; zero clause warnings in touched files; legacy bypass mutation-tested (rerouting through buffer fails 25 tests) |
 | T8 | — | not started | — | — |
 | T9 | — | not started | — | — |
 
