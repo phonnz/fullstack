@@ -14,7 +14,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
       final_product_proposal: [type: :string, required: false]
     ]
 
-  alias Fullstack.JidoMarketAgents.LLM.MimoClient
+  alias Fullstack.JidoMarketAgents.LLM
 
   def research(agent) do
     country = agent.state.country
@@ -50,10 +50,9 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
       %{"role" => "user", "content" => prompt}
     ]
 
-    case MimoClient.chat_completion(messages, max_tokens: 1024) do
+    case LLM.chat_completion(:researcher, messages, response_format: :text) do
       {:ok, content} ->
-        {:ok,
-         %{research_result: content, location: location, market: market, product: product}}
+        {:ok, %{research_result: content, location: location, market: market, product: product}}
 
       {:error, reason} ->
         {:error, {:research_failed, reason}}

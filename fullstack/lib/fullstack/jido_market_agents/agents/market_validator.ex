@@ -20,7 +20,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       extraction_history: [type: :list, required: false, default: []]
     ]
 
-  alias Fullstack.JidoMarketAgents.LLM.MimoClient
+  alias Fullstack.JidoMarketAgents.LLM
+  alias Fullstack.JidoMarketAgents.Agents.ExtractionOutput
 
   @required_fields [
     :country,
@@ -69,7 +70,9 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       %{"role" => "user", "content" => message}
     ]
 
-    case MimoClient.chat_completion(messages, temperature: 0.3, max_tokens: 1024, json_mode: true) do
+    case LLM.chat_completion(:validator, messages,
+           response_format: {:json_object, ExtractionOutput.schema()}
+         ) do
       {:ok, content} ->
         case parse_llm_json(content) do
           {:ok, extracted} ->
@@ -202,7 +205,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     # Try to extract JSON from the response (may be wrapped in markdown fences)
     json_str =
       case Regex.run(~r/```(?:json)?\s*(\{.*\})\s*```/s, content) do
-        [_, json] -> json
+        [_, json] ->
+          json
 
         _ ->
           String.trim(content)
@@ -215,19 +219,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     end
   end
 
-  defp normalize_map(map) do
-    Map.new(@extractable_fields, fn field ->
-      value = Map.get(map, field, Map.get(map, to_string(field)))
-      {field, normalize_value(value)}
-    end)
-  end
-
-  defp normalize_value(nil), do: nil
-
-  defp normalize_value(value) when is_binary(value) or is_number(value) or is_atom(value),
-    do: to_string(value)
-
-  defp normalize_value(_value), do: nil
+  defp normalize_map(map), do: ExtractionOutput.normalize_map(map)
 
   defp extract_data(agent) do
     %{
