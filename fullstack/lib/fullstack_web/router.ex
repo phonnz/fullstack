@@ -39,6 +39,8 @@ defmodule FullstackWeb.Router do
 
       live "/business-discovery", BusinessDiscoveryLive.Index, :index
 
+      live "/waitlist", WaitlistLive.Index, :index
+
       live "/urls", UrlLive.Index, :index
       live "/urls/new", UrlLive.Index, :new
       live "/urls/:id/edit", UrlLive.Index, :edit

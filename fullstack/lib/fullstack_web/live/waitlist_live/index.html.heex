@@ -1,0 +1,102 @@
+<div class="bg-base-100 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-16 space-y-16">
+    <section class="text-center space-y-6">
+      <span class="badge badge-primary">Coming soon</span>
+
+      <h1 class="text-4xl font-bold text-base-content">
+        Know if your business idea works — before you spend a euro building it.
+      </h1>
+
+      <p class="text-lg text-base-content/70">
+        Chat with an AI agent mesh that turns your product idea into a full
+        business viability assessment: competitor analysis, market diagnosis,
+        SMART objectives, a financial picture for your first months, a path
+        from zero to MVP, and an iteration strategy.
+      </p>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-2xl font-semibold text-base-content">How it works</h2>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div class="rounded-lg border border-base-300 p-4">
+          <h3 class="font-semibold text-base-content">1. Tell us your idea</h3>
+          <p class="text-base-content/70 text-sm">
+            Describe your product idea in a conversation, no forms or slide decks.
+          </p>
+        </div>
+        <div class="rounded-lg border border-base-300 p-4">
+          <h3 class="font-semibold text-base-content">2. The agent mesh gets to work</h3>
+          <p class="text-base-content/70 text-sm">
+            Specialized agents analyze competitors, size the market, and frame
+            SMART objectives for your idea.
+          </p>
+        </div>
+        <div class="rounded-lg border border-base-300 p-4">
+          <h3 class="font-semibold text-base-content">3. Get your financial picture</h3>
+          <p class="text-base-content/70 text-sm">
+            A realistic view of costs and revenue for your first months in business.
+          </p>
+        </div>
+        <div class="rounded-lg border border-base-300 p-4">
+          <h3 class="font-semibold text-base-content">4. Walk the path to MVP</h3>
+          <p class="text-base-content/70 text-sm">
+            A concrete path from zero to MVP, plus how to iterate once you launch.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="rounded-lg bg-base-200 p-6 space-y-3">
+      <h2 class="text-xl font-semibold text-base-content">
+        Grounded in Europe's recovery and digitalization framework
+      </h2>
+      <p class="text-base-content/70 text-sm">
+        Our assessments are built with the same lens used across the EU's
+        <span class="font-medium">NextGenerationEU</span>
+        recovery funds, Spain's
+        <span class="font-medium">ipyme.org</span>
+        SME support programs, and the
+        <span class="font-medium">
+          Plan de Recuperación, Transformación y Resiliencia
+        </span>
+        digital-transformation framework — so your business case speaks the
+        same language funders and support programs expect.
+      </p>
+    </section>
+
+    <section id="waitlist" class="space-y-4">
+      <div class="text-center space-y-2">
+        <h2 class="text-2xl font-semibold text-base-content">Join the waitlist</h2>
+        <p class="text-base-content/70">
+          We're not open yet. Leave your email and we'll let you know the
+          moment you can try it.
+        </p>
+      </div>
+
+      <%= if @signed_up do %>
+        <div class="alert alert-success max-w-md mx-auto">
+          <span>Thanks — you're on the list! We'll be in touch soon.</span>
+        </div>
+      <% else %>
+        <.simple_form
+          for={@form}
+          id="waitlist-signup-form"
+          phx-change="validate"
+          phx-submit="save"
+          class="max-w-md mx-auto"
+        >
+          <.input field={@form[:email]} type="email" label="Email" placeholder="you@example.com" />
+          <.input
+            field={@form[:country]}
+            type="select"
+            label="Where would you use this?"
+            options={@country_options}
+          />
+          <:actions>
+            <.button phx-disable-with="Joining...">Join the waitlist</.button>
+          </:actions>
+        </.simple_form>
+      <% end %>
+    </section>
+  </div>
+</div>
