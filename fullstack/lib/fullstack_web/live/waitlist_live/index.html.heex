@@ -1,18 +1,68 @@
 <div class="bg-base-100 min-h-screen">
-  <div class="max-w-3xl mx-auto px-4 py-16 space-y-16">
+  <div class="max-w-3xl mx-auto px-4 py-16 sm:py-24 space-y-16">
     <section class="text-center space-y-6">
-      <span class="badge badge-primary">Coming soon</span>
+      <span class="badge badge-primary badge-lg">Coming soon</span>
 
-      <h1 class="text-4xl font-bold text-base-content">
-        Know if your business idea works — before you spend a euro building it.
+      <h1 class="text-4xl sm:text-5xl font-bold text-base-content leading-tight">
+        Stop guessing whether your business idea will work.
       </h1>
 
-      <p class="text-lg text-base-content/70">
-        Chat with an AI agent mesh that turns your product idea into a full
-        business viability assessment: competitor analysis, market diagnosis,
-        SMART objectives, a financial picture for your first months, a path
-        from zero to MVP, and an iteration strategy.
+      <p class="text-lg sm:text-xl text-base-content/70 max-w-2xl mx-auto">
+        Built for entrepreneurs and small business owners who don't want to
+        spend months and savings on an idea that was never going to work.
+        Chat with an AI agent mesh that turns your idea into a full business
+        viability assessment: competitor analysis, market diagnosis, SMART
+        objectives, a financial picture for your first months, and a
+        concrete path from zero to MVP.
       </p>
+
+      <div>
+        <a href="#waitlist" class="btn btn-primary btn-lg">
+          Get early access
+        </a>
+      </div>
+
+      <div id="waitlist" class="pt-6">
+        <div class="rounded-lg border border-base-300 shadow-lg bg-base-100 p-6 sm:p-8 max-w-md mx-auto text-left">
+          <div class="text-center space-y-2 mb-6">
+            <h2 class="text-2xl font-semibold text-base-content">Join the waitlist</h2>
+            <p class="text-base-content/70">
+              We're not open yet. Leave your email and we'll let you know the
+              moment you can try it.
+            </p>
+          </div>
+
+          <%= if @signed_up do %>
+            <div class="alert alert-success">
+              <span>Thanks — you're on the list! We'll be in touch soon.</span>
+            </div>
+          <% else %>
+            <.simple_form
+              for={@form}
+              id="waitlist-signup-form"
+              phx-change="validate"
+              phx-submit="save"
+            >
+              <.input field={@form[:email]} type="email" label="Email" placeholder="you@example.com" />
+              <.input
+                field={@form[:country]}
+                type="select"
+                label="Where would you use this?"
+                options={@country_options}
+              />
+              <.input
+                field={@form[:discount_code]}
+                type="text"
+                label="Discount code (optional)"
+                placeholder="If you have one"
+              />
+              <:actions>
+                <.button phx-disable-with="Joining...">Join the waitlist</.button>
+              </:actions>
+            </.simple_form>
+          <% end %>
+        </div>
+      </div>
     </section>
 
     <section class="space-y-4">
@@ -62,41 +112,6 @@
         digital-transformation framework — so your business case speaks the
         same language funders and support programs expect.
       </p>
-    </section>
-
-    <section id="waitlist" class="space-y-4">
-      <div class="text-center space-y-2">
-        <h2 class="text-2xl font-semibold text-base-content">Join the waitlist</h2>
-        <p class="text-base-content/70">
-          We're not open yet. Leave your email and we'll let you know the
-          moment you can try it.
-        </p>
-      </div>
-
-      <%= if @signed_up do %>
-        <div class="alert alert-success max-w-md mx-auto">
-          <span>Thanks — you're on the list! We'll be in touch soon.</span>
-        </div>
-      <% else %>
-        <.simple_form
-          for={@form}
-          id="waitlist-signup-form"
-          phx-change="validate"
-          phx-submit="save"
-          class="max-w-md mx-auto"
-        >
-          <.input field={@form[:email]} type="email" label="Email" placeholder="you@example.com" />
-          <.input
-            field={@form[:country]}
-            type="select"
-            label="Where would you use this?"
-            options={@country_options}
-          />
-          <:actions>
-            <.button phx-disable-with="Joining...">Join the waitlist</.button>
-          </:actions>
-        </.simple_form>
-      <% end %>
     </section>
   </div>
 </div>

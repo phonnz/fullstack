@@ -7,6 +7,7 @@ defmodule Fullstack.Waitlist.Signup do
   schema "waitlist_signups" do
     field :email, :string
     field :country, :string
+    field :discount_code, :string
 
     timestamps()
   end
@@ -14,7 +15,7 @@ defmodule Fullstack.Waitlist.Signup do
   @doc false
   def changeset(signup, attrs) do
     signup
-    |> cast(attrs, [:email, :country])
+    |> cast(attrs, [:email, :country, :discount_code])
     |> validate_required([:email])
     |> validate_format(:email, ~r/^[^\s]+@[^\s]+$/, message: "must have the @ sign and no spaces")
     |> validate_length(:email, max: 160)

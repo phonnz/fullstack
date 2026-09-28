@@ -10,8 +10,10 @@ defmodule FullstackWeb.WaitlistLiveTest do
 
       assert view.module == FullstackWeb.WaitlistLive.Index
       assert html =~ "business"
+      assert html =~ "entrepreneur"
       assert html =~ "I don&#39;t know yet"
       assert has_element?(view, "form")
+      assert has_element?(view, "input[name='signup[discount_code]']")
     end
 
     test "submitting a valid email with no country creates a signup with country: nil", %{
@@ -38,6 +40,19 @@ defmodule FullstackWeb.WaitlistLiveTest do
       |> render_submit()
 
       assert [%Waitlist.Signup{email: "spain@example.com", country: "Spain"}] =
+               Fullstack.Repo.all(Waitlist.Signup)
+    end
+
+    test "submitting a valid email with a discount code stores that code", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/waitlist")
+
+      view
+      |> form("#waitlist-signup-form",
+        signup: %{email: "coded@example.com", discount_code: "SAVE20"}
+      )
+      |> render_submit()
+
+      assert [%Waitlist.Signup{email: "coded@example.com", discount_code: "SAVE20"}] =
                Fullstack.Repo.all(Waitlist.Signup)
     end
 

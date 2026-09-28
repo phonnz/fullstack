@@ -20,6 +20,20 @@ defmodule Fullstack.WaitlistTest do
       assert signup.country == nil
     end
 
+    test "create_signup/1 with a discount code stores it as-is" do
+      assert {:ok, %Signup{} = signup} =
+               Waitlist.create_signup(%{email: "discount@example.com", discount_code: "LAUNCH10"})
+
+      assert signup.discount_code == "LAUNCH10"
+    end
+
+    test "create_signup/1 without a discount code creates a signup with discount_code: nil" do
+      assert {:ok, %Signup{} = signup} =
+               Waitlist.create_signup(%{email: "nodiscount@example.com"})
+
+      assert signup.discount_code == nil
+    end
+
     test "create_signup/1 with invalid data returns error changeset" do
       assert {:error, %Ecto.Changeset{}} = Waitlist.create_signup(@invalid_attrs)
     end

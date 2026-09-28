@@ -64,6 +64,21 @@ GREEN (implementation) → REFACTOR.
       --warnings-as-errors`; work-unit commit (Conventional Commits, no
       co-author trailer per user's global rule)
 
+### Round 2 — hero redesign + discount code (2026-09-29)
+- [x] T8: Redesign hero section — focus copy/visual framing on business
+      people/entrepreneurs (not generic "your idea"), larger/more prominent
+      hero treatment
+- [x] T9: Central subscription box — make the signup form a visually prominent
+      centered card, pulled up near/into the hero rather than buried after
+      the "how it works" and "framework" sections
+- [x] T10: Add optional `discount_code` field — free-text capture only, no
+      validation against real codes (decided: no coupon system exists yet).
+      Migration to add nullable `discount_code` string column, schema
+      changeset update (cast, no validation), form field, context/changeset
+      + LiveView test coverage
+- [x] T11: Verification — `mix test` targeted files, `mix compile
+      --warnings-as-errors`; work-unit commit
+
 ## Acceptance criteria
 - `/waitlist` renders marketing copy + form without auth.
 - Valid email + no country selected → signup created with `country: nil`.
@@ -99,8 +114,59 @@ GREEN (implementation) → REFACTOR.
   49 pre-existing warnings across unrelated files (confirmed by grep: zero
   warnings reference any waitlist file); this condition pre-dates this
   feature and was not introduced by it.
-- Commit: `6eff8948273f49d367f7ebfc728111526236c786` —
+- Commit: `281d62996861d25d2571600634255a45affb5c35` —
   `feat(waitlist): add /waitlist landing page with email capture`.
+  (Self-referential: this line was updated after the commit that contains it,
+  so this file on disk now differs by this SHA string from what's in that
+  commit's tree — expected and harmless.)
+
+## Progress — Round 2 (2026-09-29)
+- Hero (T8): rewritten to address entrepreneurs/small business owners
+  directly — headline reframed around the pain point ("Stop guessing whether
+  your business idea will work"), subheadline explicitly names the audience
+  ("Built for entrepreneurs and small business owners...") while keeping the
+  concrete value list (competitor analysis, market diagnosis, SMART
+  objectives, financial picture, MVP path). Visual hierarchy strengthened:
+  larger badge (`badge-lg`), bigger headline (`text-4xl sm:text-5xl`), wider
+  subheadline max-width, and a visible `btn btn-primary btn-lg` CTA
+  ("Get early access") anchor-linking to `#waitlist`.
+- Central subscription box (T9): signup form moved out of the bottom
+  `<section>` and into a bordered/shadowed card
+  (`rounded-lg border border-base-300 shadow-lg bg-base-100 p-6 sm:p-8`,
+  `max-w-md mx-auto`) sitting directly inside the hero section, right below
+  the CTA button. The `id="waitlist"` anchor now lives on the wrapping div
+  around the card so the in-page CTA link still targets it. "How it works"
+  and the EU/Spain framework sections kept, now following the combined
+  hero+form block instead of preceding it.
+- Discount code (T10): nullable `discount_code` string column added via a
+  new migration (existing migration untouched), cast in the changeset with
+  no validation (free-text only, no coupon system exists), form field added
+  after email/country and before the submit button.
+- Files added:
+  `priv/repo/migrations/20260929000000_add_discount_code_to_waitlist_signups.exs`.
+- Files edited: `lib/fullstack/waitlist/signup.ex` (schema field + cast),
+  `lib/fullstack_web/live/waitlist_live/index.html.heex` (hero + form
+  repositioning + discount field), `test/fullstack/waitlist_test.exs`,
+  `test/fullstack_web/live/waitlist_live_test.exs`.
+- TDD evidence (T10, strict mode): extended both test files first
+  (discount_code context tests, LiveView discount_code input/submission
+  tests, entrepreneur-copy assertion), ran `mix test` before implementing —
+  RED confirmed via real compile error:
+  `unknown key :discount_code for struct Fullstack.Waitlist.Signup`
+  (schema field didn't exist yet, so pattern-matching the struct in the test
+  failed to compile). Implemented migration + schema + template, re-ran —
+  GREEN, no refactor needed.
+- Verification:
+  - `mix test test/fullstack/waitlist_test.exs` → 9 tests, 0 failures.
+  - `mix test test/fullstack_web/live/waitlist_live_test.exs` → 5 tests,
+    0 failures.
+  - `mix compile --warnings-as-errors` → fails, but only on the same 49
+    pre-existing warnings from Round 1 across unrelated files (grep
+    confirmed zero warnings reference any waitlist file); no regression.
+- Commit: (recorded after commit below).
+  (Self-referential: this line is one commit behind, same as Round 1 — the
+  doc is part of the commit it describes, so the SHA string itself can't be
+  known before the commit exists. Expected and harmless.)
 
 ## Next step
-Feature complete. None — awaiting review/merge per ordinary repository policy.
+Round 2 complete. No further waitlist work pending.
