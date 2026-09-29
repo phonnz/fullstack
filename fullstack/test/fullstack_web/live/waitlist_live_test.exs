@@ -10,7 +10,7 @@ defmodule FullstackWeb.WaitlistLiveTest do
 
       assert view.module == FullstackWeb.WaitlistLive.Index
       assert html =~ "business"
-      assert html =~ "entrepreneur"
+      assert html =~ "founding cohort"
       assert html =~ "I don&#39;t know yet"
       assert has_element?(view, "form")
       assert has_element?(view, "input[name='signup[discount_code]']")

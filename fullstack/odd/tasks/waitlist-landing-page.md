@@ -169,4 +169,165 @@ GREEN (implementation) → REFACTOR.
   known before the commit exists. Expected and harmless.)
 
 ## Next step
-Round 2 complete. No further waitlist work pending.
+Round 3 complete.
+
+## Progress — Round 3 (2026-09-29)
+Ported the finalized Artifact design
+(/tmp/claude-1000/-home-phonnz-Code-phx-fullstack-fullstack/70c15917-678c-4145-896e-a0f9c47a633c/scratchpad/waitlist-design/index.html)
+into `lib/fullstack_web/live/waitlist_live/index.html.heex`, keeping the real
+LiveView form wiring intact.
+
+**Scoping mechanism (T12):** a `.wl` wrapper class around the whole page
+root, with the mockup's `:root` custom properties (`--ink`, `--paper`,
+`--forest`, etc.) redeclared as plain properties on `.wl` itself instead of
+on `:root` (so they never leak to other pages that share the same DOM
+document/root). Every ported selector is written as `.wl .wl-<name>`
+(prefixed, not just nested) to avoid any chance of an unprefixed class like
+`.hero` or `.signup` colliding with something already in the app. Dark mode:
+the app's root layout already toggles `data-theme` on `<html>` via inline
+script (confirmed in `root.html.heex`) — since `.wl` sits *inside* `<html>`,
+not on it, the mockup's own `:root[data-theme="dark"]` selector doesn't
+apply as-is. Used the ancestor-combinator form instead:
+`html[data-theme="dark"] .wl { --ink: ...; }` (and same pattern for the few
+component-level dark overrides the mockup had inline, e.g. `.signup`'s dark
+background). This reads the *existing* global toggle correctly without this
+page adding, reading, or fighting any theme state of its own — confirmed by
+reasoning through the selectors (T17) that nothing under `.wl` or prefixed
+`wl-*` exists anywhere else in the codebase (grep confirmed zero matches
+outside this file).
+
+The CSS lives in a `<style>` block at the top of `index.html.heex` itself
+(single page, no new asset file needed) rather than `assets/css/app.css`,
+per the constraint against global stylesheet changes.
+
+One extra scoping fix needed beyond the mockup's own CSS: `<.simple_form>`
+(CoreComponents) wraps its content in a `<div class="mt-10 space-y-8
+bg-base-100">` — daisyUI's `bg-base-100` utility would have painted a light
+box inside the new dark signup card, so an explicit
+`.wl .wl-signup form > div.bg-base-100 { background: transparent; }`
+override was added. Similarly, `<.input>`/`<.label>`/`<.button>` from
+CoreComponents hard-code daisyUI classes (`input input-bordered`, `select
+select-bordered`, `btn btn-primary`, `text-base-content`, etc.) with no
+`class`-override attribute — restyling them without touching the shared
+component file meant writing higher-specificity `.wl`-scoped selectors
+targeting those exact daisyUI class names (e.g. `.wl .wl-field .input`,
+`.wl .wl-submit-btn.btn`), which reliably win via CSS specificity
+(3 classes vs. 1) regardless of source order.
+
+**Font-link fallback (T13):** needed. Checked `mix.exs`/`mix.lock` —
+`phoenix_live_view 1.2.7`. This version has no per-LiveView `<head>`
+injection mechanism, and `/waitlist` shares the single global root layout
+(`plug :put_root_layout` in the `:browser` pipeline) and the same
+`live_session :public` block as `/`, `/business-discovery`, and `/urls` —
+there is no route-scoped way to swap in a different root layout just for
+this page without restructuring the router's pipeline/scope, which would be
+disproportionate for a font stylesheet load. Used the documented fallback:
+added the Google Fonts `<link>` unconditionally to
+`lib/fullstack_web/components/layouts/root.html.heex` (14 lines added, no
+deletions, existing `data-theme` toggle script untouched). This is a
+stylesheet load only — no new CSS rules, no global tokens — so it does not
+violate the "no new global app theme" constraint; it is noted here as the
+deviation the task anticipated.
+
+**Copy/structure preserved exactly as approved** in the Artifact: hero
+headline/subheadline, eyebrow, mocked report card, proof-row (including the
+"Agentic specialist mesh" full-width item), signup section copy and layout
+(email+submit primary row, country+discount-code secondary row, fine
+print), the four "how it works" steps, and the EU/Spain framework strip —
+all ported verbatim from the mockup's HTML text nodes into the `.heex`
+structure, with the mockup's static `<input>`/`<select>`/`<button>`/`<form>`
+replaced by `<.simple_form for={@form} ...>`, `<.input field={@form[...]}
+...>`, `<.button>`, and the `@signed_up` conditional. `@country_options`
+still comes from `FullstackWeb.WaitlistLive.Countries` (not the mockup's
+6-option placeholder list).
+
+**Test changes (T18):** one assertion updated in
+`test/fullstack_web/live/waitlist_live_test.exs` — the old copy check
+`assert html =~ "entrepreneur"` no longer matches (the approved Artifact
+copy doesn't use that word; it says "founders"/"founding cohort" instead),
+so it was replaced with `assert html =~ "founding cohort"`. No coverage was
+removed: still asserts page renders, form exists, discount_code input
+exists, and (via the other 4 tests, unchanged) validate/submit/duplicate-
+email/discount-code/country behavior all still pass.
+`test/fullstack/waitlist_test.exs` (context/changeset tests) needed no
+changes — confirmed via `git status` showing no diff on that file.
+
+**Verification:**
+- `mix test test/fullstack_web/live/waitlist_live_test.exs` → 5 tests,
+  0 failures.
+- `mix test test/fullstack/waitlist_test.exs` → 9 tests, 0 failures.
+- Both together: 14 tests, 0 failures.
+- `mix compile --warnings-as-errors` → fails (exit 1), but exactly 49
+  warnings, same count as Round 1/2, all in unrelated pre-existing files;
+  `grep -i waitlist` over the full compile output (stdout+stderr combined)
+  returned zero matches — no new warning introduced by this change.
+- Manual scoping verification (T17): grepped the codebase for `wl-` /
+  `class="wl` outside this one file — zero matches, so no other route's
+  markup or CSS can reference these selectors. `assets/css/app.css` has a
+  0-line diff (untouched). `root.html.heex` diff is +14/-0, additive only,
+  confined to the fallback font `<link>` — the existing `data-theme`
+  resolution script above it is unmodified.
+
+Files edited: `lib/fullstack_web/live/waitlist_live/index.html.heex`
+(full rewrite: scoped `<style>` block + ported markup + real form
+bindings), `lib/fullstack_web/components/layouts/root.html.heex` (fallback
+font `<link>` only), `test/fullstack_web/live/waitlist_live_test.exs` (one
+copy assertion updated).
+
+Commit: (recorded after commit below).
+(Self-referential: same caveat as Rounds 1 and 2 — this line is written
+before the commit that contains it exists, so the SHA can't be embedded in
+the tree it describes. Expected and harmless.)
+
+### Round 3 — port Artifact design to LiveView (2026-09-29)
+User asked for a "better UI proposal" via Claude Design/Artifact iteration.
+Built a full visual redesign as a standalone HTML Artifact
+(https://claude.ai/code/artifact/09b1a72a-54ef-4a7d-a983-23db414bfac2,
+"Viability Report"), iterated through several rounds of viewer comments
+(step-box restyle, signup form layout, proof-row full-width + copy change).
+Now porting that finalized design into the real `lib/fullstack_web/live/
+waitlist_live/index.html.heex`.
+
+User decision: new palette/typography (Fraunces + Inter + JetBrains Mono;
+forest green/paper/terracotta tokens) is scoped to `/waitlist` only, not
+adopted as a new global app theme — rest of the app keeps its current
+daisyUI look. This means: new CSS must not leak outside the waitlist page,
+new Google Fonts `<link>` loaded only on this page (not in root.html.heex),
+and the page's `data-theme` dark-mode handling must not collide with the
+app's existing `<html data-theme>` global light/dark toggle (root layout
+already sets `data-theme` on `<html>` site-wide via inline script —
+confirmed by reading lib/fullstack_web/components/layouts/root.html.heex).
+
+Design reference (full source of truth, already reviewed against the
+subject and iterated with the user):
+/tmp/claude-1000/-home-phonnz-Code-phx-fullstack-fullstack/70c15917-678c-4145-896e-a0f9c47a633c/scratchpad/waitlist-design/index.html
+
+- [x] T12: Scope new CSS to `/waitlist` only (wrapping class on the page
+      root, e.g. `.wl-design`, all new selectors nested/prefixed under it;
+      do not touch app.css global tokens or root layout's `data-theme`
+      logic)
+- [x] T13: Load Fraunces + Inter + JetBrains Mono via a Google Fonts
+      `<link>` placed only in the waitlist page's own template/head
+      injection (not root.html.heex) — confirm the right mechanism in this
+      app (e.g. a per-LiveView head hook, or a scoped `<link>` if templates
+      support it) since root.html.heex currently owns the single global
+      `<head>`
+- [x] T14: Port hero (headline, subheadline, eyebrow, mocked report card,
+      full-width proof-row with "Agentic specialist mesh" label) into
+      index.html.heex, preserving real LiveView bindings (no changes to
+      copy content already approved in the Artifact)
+- [x] T15: Port signup form section (title/intro full width, email + submit
+      emphasized row, country + discount code secondary row, fine print)
+      — MUST keep real `<.simple_form>`/`@form`/`phx-change`/`phx-submit`
+      bindings; only replace visual structure/classes, not the LiveView
+      form wiring or field names
+- [x] T16: Port "How it works" steps (green boxes, centered icon + title +
+      description) and the EU/Spain framework strip
+- [x] T17: Verify in both light and dark mode (this app's `data-theme`
+      toggle) that the ported page reads correctly and no styles leak onto
+      other routes (spot-check e.g. `/` or `/business-discovery` still
+      render with the normal daisyUI look after this change)
+- [x] T18: Tests — extend/adjust existing waitlist LiveView test only if
+      selectors/copy the tests assert on changed structurally; run full
+      waitlist test suite + `mix compile --warnings-as-errors`
+- [x] T19: Work-unit commit (Conventional Commits, no co-author trailer)
