@@ -625,6 +625,16 @@ defmodule Fullstack.AccountsTest do
       end)
     end
 
+    test "admin?/1 is true only for the :admin role" do
+      assert Accounts.admin?(%User{role: :admin})
+      refute Accounts.admin?(%User{role: :staff})
+      refute Accounts.admin?(%User{role: :user})
+    end
+
+    test "admin?/1 is false for a nil user" do
+      refute Accounts.admin?(nil)
+    end
+
     test "the database rejects a role outside the enum type" do
       user = user_fixture()
 

@@ -164,6 +164,25 @@ defmodule FullstackWeb.UserAuth do
     end
   end
 
+  def on_mount(:ensure_admin, params, session, socket) do
+    case on_mount(:ensure_authenticated, params, session, socket) do
+      {:cont, socket} ->
+        if Accounts.admin?(socket.assigns.current_user) do
+          {:cont, socket}
+        else
+          # A 404, not a redirect. An authenticated non-admin must not be
+          # able to tell an admin-only route apart from one that does not
+          # exist — the same contract the Business Discovery LiveView
+          # applies to another user's conversation id.
+          raise Ecto.NoResultsError, queryable: Fullstack.Accounts.User
+        end
+
+      {:halt, socket} ->
+        # Not logged in at all: keep the ordinary login redirect.
+        {:halt, socket}
+    end
+  end
+
   def on_mount(:redirect_if_user_is_authenticated, _params, session, socket) do
     socket = mount_current_user(socket, session)
 

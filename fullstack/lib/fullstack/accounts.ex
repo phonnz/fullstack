@@ -98,6 +98,28 @@ defmodule Fullstack.Accounts do
   defp maybe_grant_bootstrap_admin(other), do: other
 
   @doc """
+  Returns true when the given user holds the `:admin` role.
+
+  Accepts `nil` so call sites can pass an unauthenticated `current_user`
+  without a guard. `:staff` is deliberately not an admin — it exists as a
+  role value but carries no privileges yet.
+
+  ## Examples
+
+      iex> admin?(%User{role: :admin})
+      true
+
+      iex> admin?(%User{role: :user})
+      false
+
+      iex> admin?(nil)
+      false
+
+  """
+  def admin?(%User{role: :admin}), do: true
+  def admin?(_user), do: false
+
+  @doc """
   Returns true when `email` is configured as a bootstrap admin.
 
   The comparison is case- and whitespace-insensitive because `users.email`
