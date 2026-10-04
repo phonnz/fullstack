@@ -1,0 +1,75 @@
+<.header>
+  {@evaluation.title || "Untitled evaluation"}
+  <:subtitle>
+    {@evaluation.user.email}
+  </:subtitle>
+  <:actions>
+    <.link navigate={~p"/evaluations"}>
+      <.button>Back to evaluations</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Owner">{@evaluation.user.email}</:item>
+  <:item title="Status">
+    <span class="badge badge-outline badge-sm">{@evaluation.status}</span>
+  </:item>
+  <:item title="Messages">{length(@messages)}</:item>
+  <:item title="Created">
+    <time datetime={NaiveDateTime.to_iso8601(@evaluation.inserted_at)}>
+      {Calendar.strftime(@evaluation.inserted_at, "%Y-%m-%d %H:%M")}
+    </time>
+  </:item>
+  <:item title="Updated">
+    <time datetime={NaiveDateTime.to_iso8601(@evaluation.updated_at)}>
+      {Calendar.strftime(@evaluation.updated_at, "%Y-%m-%d %H:%M")}
+    </time>
+  </:item>
+</.list>
+
+<section class="mt-11">
+  <h2 class="text-lg font-semibold leading-8 text-base-content">Validated data</h2>
+
+  <p :if={@validated_data == []} class="mt-2 text-sm text-muted">
+    No validated data captured yet.
+  </p>
+
+  <dl :if={@validated_data != []} class="mt-4 divide-y divide-base-300 border-t border-base-300">
+    <div :for={{key, value} <- @validated_data} class="flex gap-4 py-4 text-sm leading-6">
+      <dt class="w-1/4 flex-none font-semibold text-base-content">{key}</dt>
+      <dd class="whitespace-pre-wrap text-base-content">{value}</dd>
+    </div>
+  </dl>
+</section>
+
+<section class="mt-11">
+  <h2 class="text-lg font-semibold leading-8 text-base-content">Transcript</h2>
+
+  <p :if={@messages == []} class="mt-2 text-sm text-muted">
+    No messages in this conversation.
+  </p>
+
+  <ol :if={@messages != []} class="mt-4 space-y-4">
+    <li
+      :for={message <- @messages}
+      id={"message-#{message.id}"}
+      class="rounded-lg border border-base-300 p-4"
+    >
+      <div class="flex items-baseline justify-between gap-4">
+        <span class="text-xs font-semibold uppercase tracking-wide text-muted">
+          {message.role}
+        </span>
+        <time
+          datetime={NaiveDateTime.to_iso8601(message.inserted_at)}
+          class="text-xs text-muted"
+        >
+          {Calendar.strftime(message.inserted_at, "%Y-%m-%d %H:%M:%S")}
+        </time>
+      </div>
+      <p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content">
+        {message.content}
+      </p>
+    </li>
+  </ol>
+</section>
