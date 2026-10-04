@@ -232,6 +232,29 @@ defmodule FullstackWeb.UserAuth do
     end
   end
 
+  @doc """
+  Used for routes that require the user to hold the `:admin` role.
+
+  Delegates to `require_authenticated_user/2` first, so an anonymous
+  visitor still gets the ordinary login redirect with its `return_to`.
+  An authenticated non-admin gets a 404 instead of a redirect: an
+  admin-only route must be indistinguishable from one that does not
+  exist, or it confirms its own presence to anyone who probes it.
+
+  This covers the initial dead render. The matching `live_session` must
+  also declare `on_mount: {FullstackWeb.UserAuth, :ensure_admin}` to
+  cover the live socket connection and subsequent patches.
+  """
+  def require_admin_user(conn, opts) do
+    conn = require_authenticated_user(conn, opts)
+
+    cond do
+      conn.halted -> conn
+      Accounts.admin?(conn.assigns[:current_user]) -> conn
+      true -> raise Ecto.NoResultsError, queryable: Fullstack.Accounts.User
+    end
+  end
+
   defp put_token_in_session(conn, token) do
     conn
     |> put_session(:user_token, token)

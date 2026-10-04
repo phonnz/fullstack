@@ -56,8 +56,8 @@ defmodule FullstackWeb.Router do
     # New live_session for the authenticated Business Discovery chat (T9).
     # Placed BEFORE the catch-all `live "/:key", HomeLive.Urls` scope below,
     # so that scope does not swallow these routes. Named :business_discovery
-    # (not :require_authenticated_user, which is reserved for the /admin
-    # scope) and scoped at "/" per design/task instructions.
+    # (the /admin scope uses :admin) and scoped at "/" per design/task
+    # instructions.
     live_session :business_discovery,
       on_mount: [{FullstackWeb.UserAuth, :ensure_authenticated}] do
       live "/business-discovery/evaluate", BusinessDiscoveryLive.Evaluate, :index
@@ -131,11 +131,14 @@ defmodule FullstackWeb.Router do
     post "/users/log_in", UserSessionController, :create
   end
 
+  # Admin-only. Gated at both layers on purpose: the plug covers the initial
+  # dead render, the on_mount covers the live socket connection and any
+  # subsequent patch. Either one alone leaves a gap on the other path.
   scope "/admin", FullstackWeb do
-    pipe_through [:browser, :require_authenticated_user]
+    pipe_through [:browser, :require_admin_user]
 
-    live_session :require_authenticated_user,
-      on_mount: [{FullstackWeb.UserAuth, :ensure_authenticated}] do
+    live_session :admin,
+      on_mount: [{FullstackWeb.UserAuth, :ensure_admin}] do
       live "/posts", PostLive.Index, :index
       live "/posts/new", PostLive.Index, :new
       live "/posts/:id/edit", PostLive.Index, :edit

@@ -18,7 +18,7 @@ defmodule FullstackWeb.DeviceLiveTest do
 
   defp create_device(%{conn: conn}) do
     device = device_fixture()
-    user = Fullstack.AccountsFixtures.user_fixture()
+    user = Fullstack.AccountsFixtures.admin_fixture()
     %{conn: log_in_user(conn, user), device: device}
   end
 
