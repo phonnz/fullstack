@@ -23,6 +23,10 @@ defmodule FullstackWeb.Router do
     resources "/about", AboutController, only: [:index]
     get "/u/:key", UrlRedirectController, :index
 
+    live_session :waitlist, layout: false do
+      live "/waitlist", WaitlistLive.Index, :index
+    end
+
     # The site header renders inside the LiveView, so these public routes need
     # :current_user assigned to show the right account links. mount_current_user
     # uses assign_new and does not require a session, so anonymous mounts are fine.
@@ -38,8 +42,6 @@ defmodule FullstackWeb.Router do
       live "/channels-chat", ChannelsChatLive
 
       live "/business-discovery", BusinessDiscoveryLive.Index, :index
-
-      live "/waitlist", WaitlistLive.Index, :index
 
       live "/urls", UrlLive.Index, :index
       live "/urls/new", UrlLive.Index, :new
@@ -60,6 +62,20 @@ defmodule FullstackWeb.Router do
       on_mount: [{FullstackWeb.UserAuth, :ensure_authenticated}] do
       live "/business-discovery/evaluate", BusinessDiscoveryLive.Evaluate, :index
       live "/business-discovery/evaluate/:id", BusinessDiscoveryLive.Evaluate, :show
+    end
+
+    # Account settings belong to every authenticated user, not to admins.
+    # These routes previously sat inside the "/admin" scope and served at
+    # /admin/users/settings, which both mislabeled them and broke the header
+    # link in Layouts (it already pointed at ~p"/users/settings"). Gating
+    # "/admin" on the :admin role would otherwise have locked ordinary users
+    # out of their own password and email management.
+    #
+    # Must stay BEFORE the catch-all `live "/:key"` scope below.
+    live_session :user_settings,
+      on_mount: [{FullstackWeb.UserAuth, :ensure_authenticated}] do
+      live "/users/settings", UserSettingsLive, :edit
+      live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
     end
   end
 
@@ -143,8 +159,6 @@ defmodule FullstackWeb.Router do
 
       live "/transactions/:id", TransactionLive.Show, :show
       live "/transactions/:id/show/edit", TransactionLive.Show, :edit
-      live "/users/settings", UserSettingsLive, :edit
-      live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
       live "/devices", DeviceLive.Index, :index
       live "/devices/new", DeviceLive.Index, :new
       live "/devices/:id/edit", DeviceLive.Index, :edit
