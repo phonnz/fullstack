@@ -35,6 +35,28 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
     %{message | inserted_at: naive_datetime}
   end
 
+  # Counts the Repo queries `fun` issues, via telemetry, so an N+1 claim is
+  # measured rather than assumed.
+  defp count_queries(fun) do
+    handler_id = {__MODULE__, :query_counter, System.unique_integer()}
+    counter = :counters.new(1, [])
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:fullstack, :repo, :query],
+        fn _event, _measurements, _metadata, _config -> :counters.add(counter, 1, 1) end,
+        nil
+      )
+
+    try do
+      result = fun.()
+      {:counters.get(counter, 1), result}
+    after
+      :telemetry.detach(handler_id)
+    end
+  end
+
   describe "get_for_user/2" do
     test "S1.3: returns nil for a conversation owned by a different user" do
       owner = user_fixture()
@@ -88,6 +110,120 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
 
       assert Conversations.list_for_user(user.id) |> Enum.map(& &1.id) ==
                [newest.id, middle.id, oldest.id]
+    end
+  end
+
+  describe "list_all/1" do
+    test "returns conversations across every user, newest first" do
+      user_a = user_fixture()
+      user_b = user_fixture()
+
+      {:ok, oldest} = Conversations.create(user_a.id)
+      {:ok, newest} = Conversations.create(user_b.id)
+
+      now = NaiveDateTime.utc_now()
+      oldest = force_inserted_at(oldest, NaiveDateTime.add(now, -20, :second))
+      newest = force_inserted_at(newest, now)
+
+      assert Conversations.list_all() |> Enum.map(& &1.id) == [newest.id, oldest.id]
+    end
+
+    test "preloads the owning user" do
+      user = user_fixture()
+      {:ok, _record} = Conversations.create(user.id)
+
+      assert [record] = Conversations.list_all()
+      assert record.user.id == user.id
+      assert record.user.email == user.email
+    end
+
+    test "includes a message count" do
+      user = user_fixture()
+      {:ok, with_messages} = Conversations.create(user.id)
+      {:ok, without} = Conversations.create(user.id)
+
+      {:ok, _} = Conversations.append_message(with_messages.id, %{role: "user", content: "hi"})
+
+      {:ok, _} =
+        Conversations.append_message(with_messages.id, %{role: "assistant", content: "hello"})
+
+      counts =
+        Conversations.list_all()
+        |> Map.new(&{&1.id, &1.message_count})
+
+      assert counts[with_messages.id] == 2
+      assert counts[without.id] == 0
+    end
+
+    test "returns an empty list when there are no conversations" do
+      assert Conversations.list_all() == []
+    end
+
+    test "honours :limit and :offset" do
+      user = user_fixture()
+      {:ok, a} = Conversations.create(user.id)
+      {:ok, b} = Conversations.create(user.id)
+      {:ok, c} = Conversations.create(user.id)
+
+      now = NaiveDateTime.utc_now()
+      a = force_inserted_at(a, NaiveDateTime.add(now, -30, :second))
+      b = force_inserted_at(b, NaiveDateTime.add(now, -20, :second))
+      c = force_inserted_at(c, NaiveDateTime.add(now, -10, :second))
+
+      assert Conversations.list_all(limit: 2) |> Enum.map(& &1.id) == [c.id, b.id]
+      assert Conversations.list_all(limit: 2, offset: 2) |> Enum.map(& &1.id) == [a.id]
+    end
+
+    test "issues a bounded number of queries regardless of row count" do
+      user = user_fixture()
+
+      for _ <- 1..5 do
+        {:ok, record} = Conversations.create(user.id)
+        {:ok, _} = Conversations.append_message(record.id, %{role: "user", content: "hi"})
+      end
+
+      # A per-row preload or count would scale with the number of rows; the
+      # aggregate must stay flat. One query for the rows (with the join) plus
+      # at most one for the user preload.
+      {queries, records} = count_queries(fn -> Conversations.list_all() end)
+
+      assert length(records) == 5
+      assert queries <= 2, "expected at most 2 queries, observed #{queries}"
+    end
+  end
+
+  describe "get_any/1" do
+    test "returns a conversation regardless of owner" do
+      owner = user_fixture()
+      {:ok, record} = Conversations.create(owner.id)
+
+      assert found = Conversations.get_any(record.id)
+      assert found.id == record.id
+      assert found.user.id == owner.id
+    end
+
+    test "returns nil for an unknown id" do
+      assert Conversations.get_any(Ecto.UUID.generate()) == nil
+    end
+  end
+
+  describe "ownership enforcement is unchanged by the admin readers" do
+    test "get_for_user/2 still filters on the owner" do
+      owner = user_fixture()
+      other = user_fixture()
+      {:ok, record} = Conversations.create(owner.id)
+
+      assert Conversations.get_for_user(record.id, owner.id)
+      refute Conversations.get_for_user(record.id, other.id)
+    end
+
+    test "list_for_user/1 still filters on the owner" do
+      owner = user_fixture()
+      other = user_fixture()
+      {:ok, _record} = Conversations.create(owner.id)
+
+      assert length(Conversations.list_for_user(owner.id)) == 1
+      assert Conversations.list_for_user(other.id) == []
     end
   end
 

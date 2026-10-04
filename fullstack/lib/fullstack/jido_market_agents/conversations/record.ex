@@ -20,6 +20,10 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Record do
     field :status, :string, default: "active"
     field :validated_data, :map
 
+    # Populated only by `Conversations.list_all/1`, which aggregates the
+    # count in the same query instead of preloading messages per row.
+    field :message_count, :integer, virtual: true
+
     belongs_to :user, Fullstack.Accounts.User
 
     has_many :messages, Fullstack.JidoMarketAgents.Conversations.Message,

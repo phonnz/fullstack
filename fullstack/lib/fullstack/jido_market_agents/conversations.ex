@@ -7,10 +7,18 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   (`Fullstack.JidoMarketAgents.Conversations.Message`).
 
   Ownership is enforced as a `where` clause inside the query, never as a
-  caller-side check. There is deliberately no unscoped `get/1`: every
-  function that returns a conversation requires a `user_id` and filters on
-  it, so a call site cannot forget to guard against reading another user's
-  data (design decision D8).
+  caller-side check. In the user-facing API there is deliberately no
+  unscoped `get/1`: every function that serves an end user requires a
+  `user_id` and filters on it, so a call site cannot forget to guard
+  against reading another user's data (design decision D8).
+
+  `list_all/1` and `get_any/1` are the two audited exceptions. They exist
+  for the admin review screen at `/evaluations`, which must read across
+  users by definition, and each carries a warning in its own
+  documentation. They must only be reached from behind an admin
+  authorization check (`FullstackWeb.UserAuth`'s `:ensure_admin`) — never
+  from user-facing code, which continues to use `get_for_user/2` and
+  `list_for_user/1`.
   """
 
   import Ecto.Query, warn: false
@@ -56,6 +64,79 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
     Record
     |> where([r], r.id == ^id and r.user_id == ^user_id)
     |> Repo.one()
+  end
+
+  @doc """
+  Returns every conversation, newest first, with the owning user preloaded
+  and a `:message_count` virtual field set.
+
+  > #### Admin-authorized call sites only {: .warning}
+  >
+  > This function deliberately bypasses the ownership filter described in
+  > this module's documentation. It must only be reached from behind
+  > `FullstackWeb.UserAuth`'s `:ensure_admin` (or the equivalent
+  > `require_admin_user/2` plug). Do not call it from a user-facing
+  > LiveView or controller action.
+
+  The message count is an aggregate in the same query rather than a
+  preload, so the cost does not grow with the number of conversations.
+
+  ## Options
+
+    * `:limit` — maximum rows to return.
+    * `:offset` — rows to skip, for pagination.
+
+  ## Examples
+
+      iex> list_all()
+      [%Record{message_count: 2}, ...]
+
+      iex> list_all(limit: 25, offset: 50)
+      [%Record{}, ...]
+
+  """
+  def list_all(opts \\ []) do
+    Record
+    |> join(:left, [r], m in Message, on: m.conversation_id == r.id)
+    |> group_by([r], r.id)
+    |> order_by([r], desc: r.inserted_at)
+    |> select_merge([r, m], %{message_count: count(m.id)})
+    |> maybe_limit(Keyword.get(opts, :limit))
+    |> maybe_offset(Keyword.get(opts, :offset))
+    |> Repo.all()
+    |> Repo.preload(:user)
+  end
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, value), do: limit(query, ^value)
+
+  defp maybe_offset(query, nil), do: query
+  defp maybe_offset(query, value), do: offset(query, ^value)
+
+  @doc """
+  Gets a single conversation by id, regardless of owner, with the owning
+  user preloaded. Returns `nil` when it does not exist.
+
+  > #### Admin-authorized call sites only {: .warning}
+  >
+  > Like `list_all/1`, this bypasses the ownership filter on purpose and
+  > must sit behind an admin authorization check. User-facing code must
+  > use `get_for_user/2` instead.
+
+  ## Examples
+
+      iex> get_any(record.id)
+      %Record{}
+
+      iex> get_any(Ecto.UUID.generate())
+      nil
+
+  """
+  def get_any(id) do
+    Record
+    |> where([r], r.id == ^id)
+    |> Repo.one()
+    |> Repo.preload(:user)
   end
 
   @doc """
