@@ -505,4 +505,47 @@ defmodule Fullstack.AccountsTest do
       refute inspect(%User{password: "123456"}) =~ "password: \"123456\""
     end
   end
+
+  describe "user roles" do
+    test "a new user defaults to the :user role" do
+      assert %User{}.role == :user
+      assert user_fixture().role == :user
+    end
+
+    test "registration cannot set the role" do
+      {:ok, user} =
+        Accounts.register_user(
+          valid_user_attributes(email: "not-an-admin@example.com", role: :admin)
+        )
+
+      assert user.role == :user
+      assert Repo.get!(User, user.id).role == :user
+    end
+
+    test "role_changeset/2 accepts every valid role" do
+      user = user_fixture()
+
+      for role <- [:user, :staff, :admin] do
+        assert {:ok, updated} = user |> User.role_changeset(%{role: role}) |> Repo.update()
+        assert updated.role == role
+      end
+    end
+
+    test "role_changeset/2 rejects an unknown role" do
+      changeset = User.role_changeset(user_fixture(), %{role: :superuser})
+
+      refute changeset.valid?
+      assert %{role: ["is invalid"]} = errors_on(changeset)
+    end
+
+    test "the database rejects a role outside the enum type" do
+      user = user_fixture()
+
+      assert_raise Postgrex.Error, fn ->
+        Repo.query!("UPDATE users SET role = 'superuser' WHERE id = $1", [
+          Ecto.UUID.dump!(user.id)
+        ])
+      end
+    end
+  end
 end
