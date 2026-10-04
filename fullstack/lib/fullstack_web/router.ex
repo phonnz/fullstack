@@ -77,6 +77,20 @@ defmodule FullstackWeb.Router do
       live "/users/settings", UserSettingsLive, :edit
       live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
     end
+
+    # Admin-only review of every user's evaluations.
+    #
+    # One gate is enough here, unlike the "/admin" scope: on_mount runs for
+    # the dead render as well as the connected mount, and both routes are
+    # `live` with no controller action to reach separately. Verified: a plain
+    # GET as a non-admin raises, as an admin renders.
+    #
+    # Must stay BEFORE the catch-all `live "/:key"` scope below.
+    live_session :admin_evaluations,
+      on_mount: [{FullstackWeb.UserAuth, :ensure_admin}] do
+      live "/evaluations", EvaluationLive.Index, :index
+      live "/evaluations/:id", EvaluationLive.Show, :show
+    end
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
