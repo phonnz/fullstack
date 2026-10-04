@@ -78,7 +78,81 @@ defmodule Fullstack.Accounts do
     %User{}
     |> User.registration_changeset(attrs)
     |> Repo.insert()
+    |> maybe_grant_bootstrap_admin()
   end
+
+  # The role cannot ride in on the registration changeset (see
+  # User.role_changeset/2), so a configured bootstrap admin is promoted in a
+  # second write immediately after insert. An {:error, changeset} passes
+  # straight through, leaving register_user/1's contract unchanged.
+  defp maybe_grant_bootstrap_admin({:ok, %User{} = user}) do
+    if bootstrap_admin_email?(user.email) do
+      user
+      |> User.role_changeset(%{role: :admin})
+      |> Repo.update()
+    else
+      {:ok, user}
+    end
+  end
+
+  defp maybe_grant_bootstrap_admin(other), do: other
+
+  @doc """
+  Returns true when `email` is configured as a bootstrap admin.
+
+  The comparison is case- and whitespace-insensitive because `users.email`
+  is a `citext` column: a stricter check here than the database performs
+  would let `BOSS@example.com` register as a plain `:user` while still
+  colliding with `boss@example.com` on the unique index.
+
+  ## Examples
+
+      iex> bootstrap_admin_email?("boss@example.com")
+      true
+
+      iex> bootstrap_admin_email?("someone@example.com")
+      false
+
+  """
+  def bootstrap_admin_email?(email) when is_binary(email) do
+    normalized = normalize_email(email)
+
+    :fullstack
+    |> Application.get_env(:bootstrap_admin_emails, [])
+    |> Enum.any?(&(normalize_email(&1) == normalized))
+  end
+
+  def bootstrap_admin_email?(_email), do: false
+
+  @doc """
+  Grants the `:admin` role to every configured bootstrap admin that already
+  exists, and returns `{promoted_count, nil}`.
+
+  Idempotent: users already holding `:admin` are excluded, so a second run
+  promotes nobody. A no-op when nothing is configured.
+
+  Called by the `add_user_role` migration and safe to re-run from a console
+  or seed script.
+  """
+  def promote_bootstrap_admins do
+    emails = Application.get_env(:fullstack, :bootstrap_admin_emails, [])
+
+    case Enum.map(emails, &normalize_email/1) |> Enum.reject(&(&1 == "")) do
+      [] ->
+        {0, nil}
+
+      normalized ->
+        User
+        |> where([u], fragment("lower(?::text)", u.email) in ^normalized)
+        |> where([u], u.role != :admin)
+        |> Repo.update_all(set: [role: :admin])
+    end
+  end
+
+  defp normalize_email(email) when is_binary(email),
+    do: email |> String.trim() |> String.downcase()
+
+  defp normalize_email(_email), do: ""
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking user changes.

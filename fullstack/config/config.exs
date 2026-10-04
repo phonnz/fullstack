@@ -90,6 +90,11 @@ config :phoenix, :json_library, Jason
 config :money,
   default_currency: :EUR
 
+# Emails that are granted the :admin role automatically — both when the
+# add_user_role migration backfills existing rows and when one of these
+# addresses registers later. Empty by default; set per environment.
+config :fullstack, bootstrap_admin_emails: []
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

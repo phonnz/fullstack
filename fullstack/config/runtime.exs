@@ -51,6 +51,14 @@ if config_env() == :prod do
   host = System.get_env("PHX_HOST") || "agentson.live"
   port = String.to_integer(System.get_env("PORT") || "4000")
 
+  # Comma-separated so the admin set can change without a redeploy.
+  config :fullstack,
+         :bootstrap_admin_emails,
+         (System.get_env("BOOTSTRAP_ADMIN_EMAILS") || "gonzalezm.alfonso@gmail.com")
+         |> String.split(",", trim: true)
+         |> Enum.map(&String.trim/1)
+         |> Enum.reject(&(&1 == ""))
+
   config :fullstack, FullstackWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [

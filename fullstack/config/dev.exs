@@ -88,3 +88,6 @@ config :phoenix, :plug_init_mode, :runtime
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Bootstrap admin for local development.
+config :fullstack, bootstrap_admin_emails: ["gonzalezm.alfonso@gmail.com"]
