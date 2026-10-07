@@ -13,10 +13,10 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
     persists a message directly — it renders the user's own message
     optimistically into assigns, then replaces the transcript wholesale once
     the authoritative `payload.messages` arrives via PubSub.
-  - D3b: the GenServer id **is** the `Conversations.Record`'s binary_id. A
-    new conversation is created via `Conversations.create/1` first, then
-    `Conversation.ensure_started/2` is called with that id.
-  - D8: ownership is enforced as a query filter (`get_for_user/2`). There is
+  - D3b: the GenServer id **is** the `Conversations.Record`'s binary_id.
+    `Conversations.start_conversation/2` owns creation, ownership validation,
+    and runtime startup/restoration under that id.
+  - D8: the context enforces ownership as a query filter. There is
     no unscoped getter, so an id belonging to another user cannot be reached
     by editing the URL — it 404s (raises `Ecto.NoResultsError`), it never
     redirects (a redirect would confirm the id exists under another
@@ -30,7 +30,6 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
   use FullstackWeb, :live_view
 
   alias Fullstack.JidoMarketAgents
-  alias Fullstack.JidoMarketAgents.Conversation
   alias Fullstack.JidoMarketAgents.Conversations
 
   @impl true
@@ -49,56 +48,48 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
 
   @impl true
   def handle_params(%{"id" => id}, _uri, socket) do
-    current_user = socket.assigns.current_user
+    case Conversations.start_conversation(socket.assigns.current_user.id, id) do
+      {:ok, %Conversations.Record{} = record} ->
+        socket = unsubscribe_from_current(socket)
 
-    # D8: get_for_user/2 is the ONLY getter — ownership is a query filter,
-    # not a caller-side check. nil here means either the id does not exist
-    # at all, or it belongs to another user; both cases must look identical
-    # from the outside (S14.4), so we raise straight to Phoenix's 404
-    # instead of redirecting, which would confirm the id exists elsewhere.
-    record =
-      Conversations.get_for_user(id, current_user.id) ||
+        if connected?(socket), do: JidoMarketAgents.subscribe(record.id)
+
+        messages = Conversations.list_messages(record.id)
+
+        {:noreply,
+         socket
+         |> assign(:conversation, record)
+         |> assign(:messages, messages)
+         |> assign(:phase, nil)
+         |> assign(:error, nil)
+         |> assign(:rate_limited, nil)}
+
+      {:error, reason} when reason in [:not_found, :invalid_conversation_id] ->
+        # Missing, malformed, and foreign-owned identifiers are indistinguishable.
         raise Ecto.NoResultsError, queryable: Conversations.Record
 
-    {:ok, _pid} = Conversation.ensure_started(record.id, current_user.id)
-
-    socket = unsubscribe_from_current(socket)
-
-    if connected?(socket) do
-      JidoMarketAgents.subscribe(record.id)
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> clear_conversation()
+         |> put_flash(:error, "Unable to start the conversation. Please try again.")}
     end
-
-    messages = Conversations.list_messages(record.id)
-
-    {:noreply,
-     socket
-     |> assign(:conversation, record)
-     |> assign(:messages, messages)
-     |> assign(:phase, nil)
-     |> assign(:error, nil)
-     |> assign(:rate_limited, nil)}
   end
 
   def handle_params(_params, _uri, socket) do
-    socket = unsubscribe_from_current(socket)
-
-    {:noreply,
-     socket
-     |> assign(:conversation, nil)
-     |> assign(:messages, [])
-     |> assign(:phase, nil)
-     |> assign(:error, nil)
-     |> assign(:rate_limited, nil)}
+    {:noreply, clear_conversation(socket)}
   end
 
   @impl true
   def handle_event("new_conversation", _params, socket) do
-    current_user = socket.assigns.current_user
+    case Conversations.start_conversation(socket.assigns.current_user.id) do
+      {:ok, %Conversations.Record{} = record} ->
+        {:noreply, push_patch(socket, to: ~p"/business-discovery/evaluate/#{record.id}")}
 
-    {:ok, record} = Conversations.create(current_user.id)
-    {:ok, _pid} = Conversation.ensure_started(record.id, current_user.id)
-
-    {:noreply, push_patch(socket, to: ~p"/business-discovery/evaluate/#{record.id}")}
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Unable to start the conversation. Please try again.")}
+    end
   end
 
   def handle_event("select_conversation", %{"id" => id}, socket) do
@@ -235,6 +226,16 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
   end
 
   # Messages come in two shapes: persisted `Conversations.Message` structs
+  defp clear_conversation(socket) do
+    socket
+    |> unsubscribe_from_current()
+    |> assign(:conversation, nil)
+    |> assign(:messages, [])
+    |> assign(:phase, nil)
+    |> assign(:error, nil)
+    |> assign(:rate_limited, nil)
+  end
+
   # (loaded on selection, or arriving via an authoritative broadcast) and
   # the plain optimistic map assigned in the "send" event (D1). Both carry
   # `role`/`content`, so the template renders either without branching on

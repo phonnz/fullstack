@@ -111,7 +111,7 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
   end
 
   describe "S14.3 empty state still allows starting a conversation" do
-    test "renders an empty state and a new conversation can be started", %{conn: conn} do
+    test "renders an empty state and a new conversation can be started", %{conn: conn, user: user} do
       {:ok, view, html} = live(conn, @evaluate_path)
       assert html =~ "No conversation" or html =~ "Start a new"
 
@@ -119,7 +119,13 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
              |> element("button", "New conversation")
              |> render_click()
 
-      assert_patch(view)
+      path = assert_patch(view)
+      conversation_id = List.last(String.split(path, "/"))
+      assert Conversations.get_for_user(conversation_id, user.id)
+
+      assert [_] =
+               Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, conversation_id)
+
       assert view.module == FullstackWeb.BusinessDiscoveryLive.Evaluate
     end
   end
@@ -131,6 +137,68 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
 
       assert_raise Ecto.NoResultsError, fn ->
         live(conn, @evaluate_path <> "/" <> other_record.id)
+      end
+    end
+  end
+
+  describe "conversation start validation" do
+    test "subscribes before loading selected conversation history", %{conn: conn, user: user} do
+      {:ok, record} = Conversations.create(user.id)
+      {:ok, view, _html} = live(conn, @evaluate_path)
+      test_pid = self()
+      handler_id = {__MODULE__, :history_subscription, make_ref()}
+      topic = JidoMarketAgents.topic(record.id)
+
+      :ok =
+        :telemetry.attach(
+          handler_id,
+          [:fullstack, :repo, :query],
+          fn _event, _measurements, metadata, _config ->
+            if self() == view.pid and
+                 String.contains?(metadata.query, ~s(FROM "jido_conversation_messages")) do
+              subscribed? =
+                Enum.any?(Registry.lookup(Fullstack.PubSub, topic), fn {pid, _} ->
+                  pid == self()
+                end)
+
+              send(test_pid, {:history_subscription, subscribed?})
+            end
+          end,
+          nil
+        )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+      render_patch(view, @evaluate_path <> "/" <> record.id)
+      assert_receive {:history_subscription, true}
+    end
+
+    test "malformed and unknown identifiers return 404", %{conn: conn} do
+      for id <- ["not-a-uuid", "abcdefghijklmnop", Ecto.UUID.generate()] do
+        assert_raise Ecto.NoResultsError, fn ->
+          live(conn, @evaluate_path <> "/" <> id)
+        end
+
+        assert Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, id) == []
+      end
+    end
+
+    test "new conversation startup failure shows a safe error", %{conn: conn} do
+      {:ok, view, _html} = live(conn, @evaluate_path)
+      supervisor = Fullstack.JidoMarketAgents.ConversationSupervisor
+
+      on_exit(fn ->
+        Supervisor.restart_child(Fullstack.Supervisor, supervisor)
+      end)
+
+      :ok = Supervisor.terminate_child(Fullstack.Supervisor, supervisor)
+
+      try do
+        html = view |> element("button", "New conversation") |> render_click()
+        assert html =~ "Unable to start the conversation. Please try again."
+        refute html =~ "noproc"
+        refute_patched(view)
+      after
+        assert {:ok, _pid} = Supervisor.restart_child(Fullstack.Supervisor, supervisor)
       end
     end
   end
