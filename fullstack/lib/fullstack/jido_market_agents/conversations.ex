@@ -61,6 +61,62 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
 
   defp validate_start_id(_id, error), do: {:error, error}
 
+  @doc """
+  Validates and enqueues a user's message, creating or resuming the owned
+  conversation it belongs to, in a single write entry point.
+
+  With a `nil` conversation id, creates a new untitled conversation owned by
+  `user_id`. With an owned id whose runtime is live, resumes it and reuses the
+  running process. With an owned id whose runtime has stopped, rehydrates it
+  from persisted state (any status). With an id that does not exist, or that
+  belongs to a different user, returns `{:error, :not_found}` without
+  revealing which case applied. A blank or non-binary `message` returns
+  `{:error, :invalid_message}` before anything else is checked or changed.
+
+  No side effect of any kind (no row, no runtime, no buffered message) occurs
+  unless every validation passes. This context never persists `message`
+  itself — the `Conversation` GenServer is the sole writer of conversation
+  messages (design D1) — and never subscribes any process to PubSub; it only
+  enqueues `message` through `Fullstack.JidoMarketAgents.send_message/4`,
+  which debounces and rate limits per user.
+
+  Returns `{:ok, record}`. Invalid user or conversation id strings return
+  `:invalid_user_id` or `:invalid_conversation_id`; a blank or non-binary
+  message returns `:invalid_message`; missing and foreign-owned records both
+  return `:not_found`; creation returns its changeset error unchanged, while
+  runtime startup errors are tagged `:conversation_start_failed`.
+  """
+  @spec start_or_resume(term(), term(), term()) ::
+          {:ok, Record.t()}
+          | {:error,
+             :invalid_user_id
+             | :invalid_message
+             | :invalid_conversation_id
+             | :not_found
+             | Ecto.Changeset.t()
+             | {:conversation_start_failed, term()}}
+  def start_or_resume(user_id, message, conversation_id) do
+    with {:ok, user_id} <- validate_start_id(user_id, :invalid_user_id),
+         {:ok, message} <- validate_message(message),
+         {:ok, conversation_id} <- validate_conversation_id(conversation_id),
+         {:ok, record} <- find_or_create_conversation(user_id, conversation_id),
+         {:ok, _pid} <- ensure_conversation_started(record, user_id),
+         {:ok, :buffered, _conversation_id} <-
+           Fullstack.JidoMarketAgents.send_message(user_id, record.id, message, []) do
+      {:ok, record}
+    end
+  end
+
+  defp validate_message(message) when is_binary(message) do
+    if String.trim(message) == "" do
+      {:error, :invalid_message}
+    else
+      {:ok, message}
+    end
+  end
+
+  defp validate_message(_message), do: {:error, :invalid_message}
+
   defp find_or_create_conversation(user_id, nil), do: create(user_id)
 
   defp find_or_create_conversation(user_id, id) do
