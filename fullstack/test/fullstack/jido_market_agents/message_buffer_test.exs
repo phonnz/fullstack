@@ -17,9 +17,19 @@ defmodule Fullstack.JidoMarketAgents.MessageBufferTest do
   use ExUnit.Case, async: false
 
   alias Fullstack.JidoMarketAgents.MessageBuffer
+  alias Fullstack.JidoMarketAgents.MessageBufferSupervisor
   alias Fullstack.JidoMarketAgents.Conversation
 
   @debounce_ms Application.compile_env!(:fullstack, Fullstack.JidoMarketAgents)[:debounce_ms]
+  @registry Fullstack.JidoMarketAgents.ConversationRegistry
+
+  defp cleanup_buffer(user_id) do
+    on_exit(fn ->
+      for {pid, _} <- Registry.lookup(@registry, {:message_buffer, user_id}) do
+        DynamicSupervisor.terminate_child(MessageBufferSupervisor, pid)
+      end
+    end)
+  end
 
   defp unique_user, do: System.unique_integer([:positive])
   defp unique_conversation, do: System.unique_integer([:positive])
@@ -205,6 +215,23 @@ defmodule Fullstack.JidoMarketAgents.MessageBufferTest do
 
       assert_receive {:buffered,
                       %{conversation_id: ^conversation_id, message_count: 2, debounce_ms: ^ms}}
+    end
+  end
+
+  describe "concurrent first appends for one user" do
+    test "all concurrent first appends for a fresh user keep exactly one buffer process" do
+      user_id = unique_user()
+      conversation_id = unique_conversation()
+      cleanup_buffer(user_id)
+
+      tasks =
+        for _ <- 1..10,
+            do: Task.async(fn -> MessageBuffer.append(user_id, conversation_id, "hello") end)
+
+      results = Task.await_many(tasks)
+
+      assert Enum.all?(results, &(&1 == {:ok, :buffered, conversation_id}))
+      assert [{_pid, _}] = Registry.lookup(@registry, {:message_buffer, user_id})
     end
   end
 end

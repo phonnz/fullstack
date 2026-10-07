@@ -83,7 +83,14 @@ defmodule Fullstack.JidoMarketAgents.MessageBuffer do
         {:ok, pid}
 
       :not_found ->
-        DynamicSupervisor.start_child(MessageBufferSupervisor, {__MODULE__, user_id: user_id})
+        case DynamicSupervisor.start_child(
+               MessageBufferSupervisor,
+               {__MODULE__, user_id: user_id}
+             ) do
+          {:ok, pid} -> {:ok, pid}
+          {:error, {:already_started, pid}} -> {:ok, pid}
+          {:error, reason} -> {:error, reason}
+        end
     end
   end
 
