@@ -73,7 +73,7 @@ Engram `plan/conversations-start-or-resume-3` (revision 2, verified by the LiveV
   `{:conversation_start_failed, _}` with nothing buffered; concurrent first sends on one id keep
   one runtime. `@spec`/`@doc` added. Acceptance: focused runner green, format and whitespace
   checks exit 0. Commit: `2d2e824`.
-- [ ] **T2 — LiveView and template migration; remove `start_conversation/2`.** Route:
+- [x] **T2 — LiveView and template migration; remove `start_conversation/2`.** Route:
   **delegated direct** (writer trigger: 3 non-trivial files). RED first in
   `business_discovery_evaluate_test.exs`: empty state renders the composer; first send creates
   a record, patches to its URL, keeps the optimistic message after the patch; navigating to an
@@ -82,7 +82,7 @@ Engram `plan/conversations-start-or-resume-3` (revision 2, verified by the LiveV
   (`list_for_user(user.id) == []`); S14.3 rewritten; `start_conversation/2` tests folded into
   `start_or_resume/3` tests. Docs: D10 in `business-discovery-design.md`, S14.3 wording in
   `business-discovery-spec.md`. Acceptance: focused runner green, format and whitespace checks
-  exit 0, `JidoMarketAgents.resume/1` callers unaffected. Commit: pending.
+  exit 0, `JidoMarketAgents.resume/1` callers unaffected. Commit: `67e5851`.
 
 ## Verification and delivery
 
@@ -131,7 +131,39 @@ mix test test/fullstack/jido_market_agents/conversation_start_test.exs test/full
   difference from 93), format and whitespace checks exit 0. Commits: T0 `91d6a74`, T1 `2d2e824`.
   Running count of authored lines committed for this feature: 246 (T0 35, T1 211), docs excluded.
 
+- 2026-10-08: T2 writer (sonnet) done: RED 24 tests / 7 failures (new and rewritten tests only),
+  GREEN 24/0 and 6/6 repetitions, eight-file runner 89/0, `start_conversation/2` removed, D10 and
+  S14.3 written, telemetry and atom-role hunks preserved byte for byte. Independent verifier:
+  pass-with-concerns (C1-C5, C7-C10 pass; eight-file runner 89/0; admin `evaluation_live_test`
+  21/0). Concern: "new conversation startup failure shows a safe error" raised
+  `DBConnection.OwnershipError` in 2 of ~55 repeated runs (sandbox ownership lost by the LiveView
+  process during `Repo.insert`); the test's supervisor terminate/restore mechanics are unchanged
+  from the predecessor version, so it is tracked as a flake, not a T2 logic defect.
+- 2026-10-08: staged in isolation (blobs rebuilt from HEAD plus the selected hunks by old-side
+  line numbers; the telemetry helpers tail and the atom-role comment stay unstaged). Isolated run:
+  nine files (eight-file runner plus `evaluation_live_test.exs`) **109 tests, 0 failures**;
+  format check exit 0; `git diff --cached --check` exit 0 after normalizing the T1 tracker EOF.
+  Commit `67e5851` (+425/-233 across 8 files, of which 191 lines are trackers and the design
+  decision). Running authored total for the feature: T0 35, T1 211, T2 ~234 source/test lines.
+- Not committed on purpose: `odd/tasks/business-discovery-spec.md` (S14.3 rewording) is an
+  untracked pre-existing document; its first commit is the user's call.
+
+## Follow-ups (not started)
+
+- `RateLimiter.forward/2` drops `user_id` (rate_limiter.ex:174-185): a conversation process that
+  dies during the debounce window or a cooldown queue restarts unscoped. More reachable now that
+  records exist only because of a send.
+- Flaky `DBConnection.OwnershipError` in the startup-failure LiveView test (2/55); investigate the
+  sandbox ownership of the LiveView process when the runtime supervisor is terminated mid-test.
+- `facade_send_message_test.exs` flakes on `assert_receive {:mimo_request, _}` about once in four
+  full runs (pre-existing).
+- The message input is not cleared after a send (pre-existing; now visible in the empty-state
+  flow).
+- Refresh the stale `sdd-init/fullstack` project context (Phoenix 1.8.9, LiveView 1.2.7, Ecto
+  3.14.1).
+
 ## Next step
 
-Delegate T2 (LiveView, template, test rewrite, D10/S14.3 docs, removal of `start_conversation/2`)
-to a bounded writer with this tracker and the plan; base boundary for T2 is `2d2e824`.
+Feature complete on `ft-maestro-agents` as four work-unit commits (`db2d025`, `91d6a74`,
+`2d2e824`, `67e5851`). Push, pull request, and PR slicing (the feature exceeds the 400-line
+review budget) remain the user's decisions.
