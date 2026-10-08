@@ -114,19 +114,19 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
     test "renders an empty state and a new conversation can be started", %{conn: conn, user: user} do
       {:ok, view, html} = live(conn, @evaluate_path)
       assert html =~ "No conversation" or html =~ "Start a new"
+      assert html =~ "message-form"
 
       assert view
              |> element("button", "New conversation")
              |> render_click()
 
       path = assert_patch(view)
-      conversation_id = List.last(String.split(path, "/"))
-      assert Conversations.get_for_user(conversation_id, user.id)
+      assert path == @evaluate_path
+      assert Conversations.list_for_user(user.id) == []
+      assert Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, "") == []
 
-      assert [_] =
-               Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, conversation_id)
-
-      assert view.module == FullstackWeb.BusinessDiscoveryLive.Evaluate
+      html = render(view)
+      assert html =~ "message-form"
     end
   end
 
@@ -138,6 +138,102 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
       assert_raise Ecto.NoResultsError, fn ->
         live(conn, @evaluate_path <> "/" <> other_record.id)
       end
+    end
+  end
+
+  describe "the first message creates the conversation" do
+    test "submitting from the empty state creates the record, runtime, and patches to its url",
+         %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, @evaluate_path)
+
+      html =
+        view
+        |> form("#message-form", %{"message" => "what about Spain?"})
+        |> render_submit()
+
+      path = assert_patch(view)
+      conversation_id = List.last(String.split(path, "/"))
+
+      assert path == @evaluate_path <> "/" <> conversation_id
+      assert Conversations.get_for_user(conversation_id, user.id)
+
+      assert [_] =
+               Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, conversation_id)
+
+      assert html =~ "what about Spain?"
+      assert render(view) =~ "what about Spain?"
+
+      assert [conversation] = Conversations.list_for_user(user.id)
+      assert conversation.id == conversation_id
+      assert render(view) =~ conversation_id
+      assert JidoMarketAgents.buffer_status(user.id) == :buffering
+    end
+
+    test "the LiveView is subscribed to the new conversation's topic after the first send", %{
+      conn: conn
+    } do
+      {:ok, view, _html} = live(conn, @evaluate_path)
+
+      view
+      |> form("#message-form", %{"message" => "hello"})
+      |> render_submit()
+
+      path = assert_patch(view)
+      conversation_id = List.last(String.split(path, "/"))
+      topic = JidoMarketAgents.topic(conversation_id)
+
+      subscribers =
+        Registry.lookup(Fullstack.PubSub, topic)
+        |> Enum.filter(fn {pid, _} -> pid == view.pid end)
+
+      assert length(subscribers) == 1
+    end
+
+    test "navigating to an existing conversation does not start its runtime", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, record} = Conversations.create(user.id)
+      {:ok, _message} = Conversations.append_message(record.id, %{role: "user", content: "hi"})
+
+      {:ok, view, _html} = live(conn, @evaluate_path)
+      render_patch(view, @evaluate_path <> "/" <> record.id)
+
+      assert render(view) =~ "hi"
+
+      assert Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, record.id) == []
+    end
+
+    test "repeated sends keep exactly one subscription", %{conn: conn, user: user} do
+      record = start_conversation!(user)
+      {:ok, view, _html} = live(conn, @evaluate_path <> "/" <> record.id)
+
+      view
+      |> form("#message-form", %{"message" => "first"})
+      |> render_submit()
+
+      view
+      |> form("#message-form", %{"message" => "second"})
+      |> render_submit()
+
+      topic = JidoMarketAgents.topic(record.id)
+
+      subscribers =
+        Registry.lookup(Fullstack.PubSub, topic)
+        |> Enum.filter(fn {pid, _} -> pid == view.pid end)
+
+      assert length(subscribers) == 1
+    end
+
+    test "blank input in the empty state creates nothing", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, @evaluate_path)
+
+      view
+      |> form("#message-form", %{"message" => "   "})
+      |> render_submit()
+
+      refute_patched(view)
+      assert Conversations.list_for_user(user.id) == []
     end
   end
 
@@ -193,8 +289,12 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
       :ok = Supervisor.terminate_child(Fullstack.Supervisor, supervisor)
 
       try do
-        html = view |> element("button", "New conversation") |> render_click()
-        assert html =~ "Unable to start the conversation. Please try again."
+        html =
+          view
+          |> form("#message-form", %{"message" => "tell me about Spain"})
+          |> render_submit()
+
+        assert html =~ "Unable to send your message. Please try again."
         refute html =~ "noproc"
         refute_patched(view)
       after

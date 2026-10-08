@@ -246,6 +246,43 @@ every terminal event (`:research_complete`, `:error`, `:rate_limited`,
 the indicator up. A client-side timeout would add a failure mode of its own — claiming
 failure while work is still running. Out of scope, noted.
 
+### D10. The first message creates the conversation; navigation is read-only
+
+**Added 2026-10-08.** Replaces the two-step `start_conversation/2` flow (create-or-resume,
+then `push_patch`, then `handle_params` calling it again) with a single write entry point,
+`Conversations.start_or_resume/3`, whose second argument is always the user's message.
+
+**Decision.** "New conversation" only `push_patch`es to the base path — it creates no row
+and starts no runtime. `handle_params` becomes read-only: it loads an existing, owned
+record via `get_for_user/2` and `list_messages/1` and never calls a write function. The
+first `send` event is the only place a conversation is created: it calls
+`start_or_resume(user_id, message, nil)`, and on `{:ok, record}` the LiveView subscribes to
+the new topic itself (the context never subscribes its caller), then `push_patch`es to the
+record's url. A function-head match in `handle_params`
+(`%{assigns: %{conversation: %Record{id: id}}}`) recognizes this self-patch and skips the
+reload and the second subscribe, so the just-assigned optimistic message is not lost.
+
+**Alternative rejected:** keeping two context functions, `start_or_resume/3` for sends and
+a separate `open_conversation/2` for navigation that still creates on miss. That preserves
+runtime starts on read-only visits and gives two write paths to keep aligned — exactly what
+this decision removes.
+
+**Consequences.**
+- No empty rows: a `jido_conversations` row exists only once a message was actually sent.
+- No runtime start on navigation: opening an existing conversation never calls
+  `Conversation.ensure_started/2`; only a successful `start_or_resume/3` does.
+- The LiveView subscribes after `{:ok, record}` for a brand-new conversation, not before —
+  there is no id to subscribe to until the context returns one.
+- **Accepted loss:** `MessageBuffer.append/3` broadcasts `{:buffered, _}` synchronously
+  before replying, so for a conversation's first message that broadcast is emitted before
+  `start_or_resume/3` returns and is never received by the LiveView. This is deterministic,
+  not a race. The `send` clause sets `:phase :buffering` itself to cover it; later
+  broadcasts (extraction, research, error) arrive normally, behind the debounce timer and
+  the LLM call.
+- Malformed conversation ids are guarded in the LiveView (canonical 36-byte UUID text)
+  before reaching `get_for_user/2`, which would otherwise raise `Ecto.Query.CastError` (a
+  500) instead of 404ing.
+
 ---
 
 ## 4. Module layout

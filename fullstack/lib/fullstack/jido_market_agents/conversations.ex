@@ -27,27 +27,6 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   alias Fullstack.JidoMarketAgents.Conversations.Message
   alias Fullstack.JidoMarketAgents.Conversations.Record
 
-  @doc """
-  Creates or reopens a conversation for an authenticated user.
-
-  With no conversation id, creates an untitled record. Otherwise loads the
-  record through the ownership-scoped query and starts or reuses its runtime,
-  restoring persisted state when necessary. All persisted statuses may reopen.
-
-  Returns `{:ok, record}`. Invalid UUID
-  strings return `:invalid_user_id` or `:invalid_conversation_id`; missing and
-  foreign-owned records both return `:not_found`. Creation returns its changeset
-  error unchanged, while startup errors are tagged `:conversation_start_failed`.
-  """
-  def start_conversation(user_id, conversation_id \\ nil) do
-    with {:ok, user_id} <- validate_start_id(user_id, :invalid_user_id),
-         {:ok, conversation_id} <- validate_conversation_id(conversation_id),
-         {:ok, record} <- find_or_create_conversation(user_id, conversation_id),
-         {:ok, _pid} <- ensure_conversation_started(record, user_id) do
-      {:ok, record}
-    end
-  end
-
   defp validate_conversation_id(nil), do: {:ok, nil}
   defp validate_conversation_id(id), do: validate_start_id(id, :invalid_conversation_id)
 

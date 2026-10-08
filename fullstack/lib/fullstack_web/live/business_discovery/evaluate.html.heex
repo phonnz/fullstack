@@ -82,32 +82,34 @@
               <% end %>
           <% end %>
         </div>
-        <!-- Message input -->
-        <div class="bg-base-100 border-t border-base-300 px-6 py-4">
-          <form id="message-form" phx-submit="send" class="flex gap-2">
-            <input
-              type="text"
-              name="message"
-              placeholder="Tell us about your business idea..."
-              autocomplete="off"
-              class="input input-bordered flex-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            />
-            <button type="submit" class="btn btn-primary font-semibold">
-              Send
-            </button>
-          </form>
-        </div>
       <% else %>
-        <!-- No conversation selected -->
+        <!-- No conversation selected: typing a message below starts one. -->
         <div class="flex-1 flex items-center justify-center">
           <div class="text-center">
             <h3 class="mt-2 text-sm font-medium text-base-content">No conversation selected</h3>
             <p class="mt-1 text-sm text-muted">
-              Start a new conversation to begin evaluating your business idea.
+              Type your business idea below to start a new conversation.
             </p>
           </div>
         </div>
       <% end %>
+      <!-- Message input: one DOM node across both the empty state and a
+           selected conversation, so focus and draft survive the
+           nil -> record transition. -->
+      <div class="bg-base-100 border-t border-base-300 px-6 py-4">
+        <form id="message-form" phx-submit="send" class="flex gap-2">
+          <input
+            type="text"
+            name="message"
+            placeholder="Tell us about your business idea..."
+            autocomplete="off"
+            class="input input-bordered flex-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          />
+          <button type="submit" class="btn btn-primary font-semibold">
+            Send
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 </div>

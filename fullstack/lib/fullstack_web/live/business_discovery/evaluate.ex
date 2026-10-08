@@ -14,8 +14,10 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
     optimistically into assigns, then replaces the transcript wholesale once
     the authoritative `payload.messages` arrives via PubSub.
   - D3b: the GenServer id **is** the `Conversations.Record`'s binary_id.
-    `Conversations.start_conversation/2` owns creation, ownership validation,
-    and runtime startup/restoration under that id.
+    `Conversations.start_or_resume/3` owns creation, ownership validation,
+    and runtime startup/restoration under that id, driven by the user's
+    first message. Navigation (`handle_params`) is read-only: it never
+    starts a runtime, it only loads an existing, owned record (D10).
   - D8: the context enforces ownership as a query filter. There is
     no unscoped getter, so an id belonging to another user cannot be reached
     by editing the URL — it 404s (raises `Ecto.NoResultsError`), it never
@@ -47,32 +49,39 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
   end
 
   @impl true
+  # This is the self-patch right after the first send already created the
+  # record (see `send_message/3` below): the optimistic user message is not
+  # persisted yet (D1, persistence is async in the GenServer), so this
+  # clause is a no-op — no reload, and no second subscribe.
+  def handle_params(
+        %{"id" => id},
+        _uri,
+        %{assigns: %{conversation: %Conversations.Record{id: id}}} = socket
+      ) do
+    {:noreply, socket}
+  end
+
   def handle_params(%{"id" => id}, _uri, socket) do
-    case Conversations.start_conversation(socket.assigns.current_user.id, id) do
-      {:ok, %Conversations.Record{} = record} ->
-        socket = unsubscribe_from_current(socket)
+    with {:ok, _uuid} <- cast_conversation_id(id),
+         %Conversations.Record{} = record <-
+           Conversations.get_for_user(id, socket.assigns.current_user.id) do
+      socket = unsubscribe_from_current(socket)
 
-        if connected?(socket), do: JidoMarketAgents.subscribe(record.id)
+      if connected?(socket), do: JidoMarketAgents.subscribe(record.id)
 
-        messages = Conversations.list_messages(record.id)
+      messages = Conversations.list_messages(record.id)
 
-        {:noreply,
-         socket
-         |> assign(:conversation, record)
-         |> assign(:messages, messages)
-         |> assign(:phase, nil)
-         |> assign(:error, nil)
-         |> assign(:rate_limited, nil)}
-
-      {:error, reason} when reason in [:not_found, :invalid_conversation_id] ->
-        # Missing, malformed, and foreign-owned identifiers are indistinguishable.
-        raise Ecto.NoResultsError, queryable: Conversations.Record
-
-      {:error, _reason} ->
-        {:noreply,
-         socket
-         |> clear_conversation()
-         |> put_flash(:error, "Unable to start the conversation. Please try again.")}
+      {:noreply,
+       socket
+       |> assign(:conversation, record)
+       |> assign(:messages, messages)
+       |> assign(:phase, nil)
+       |> assign(:error, nil)
+       |> assign(:rate_limited, nil)}
+    else
+      # Malformed, missing, and foreign-owned identifiers are
+      # indistinguishable (D8) and all 404.
+      _ -> raise Ecto.NoResultsError, queryable: Conversations.Record
     end
   end
 
@@ -80,16 +89,20 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
     {:noreply, clear_conversation(socket)}
   end
 
+  # Mirrors `Conversations.validate_start_id/2`: `Ecto.UUID.cast/1` alone
+  # also accepts arbitrary 16-byte binaries, which is too lenient for text
+  # ids arriving from a URL param. Requiring canonical 36-byte UUID text
+  # keeps `get_for_user/2` from ever raising a `CastError` (a 500) on a
+  # malformed id — it must 404 instead.
+  defp cast_conversation_id(id) when is_binary(id) and byte_size(id) == 36 do
+    Ecto.UUID.cast(id)
+  end
+
+  defp cast_conversation_id(_id), do: :error
+
   @impl true
   def handle_event("new_conversation", _params, socket) do
-    case Conversations.start_conversation(socket.assigns.current_user.id) do
-      {:ok, %Conversations.Record{} = record} ->
-        {:noreply, push_patch(socket, to: ~p"/business-discovery/evaluate/#{record.id}")}
-
-      {:error, _reason} ->
-        {:noreply,
-         put_flash(socket, :error, "Unable to start the conversation. Please try again.")}
-    end
+    {:noreply, push_patch(socket, to: ~p"/business-discovery/evaluate")}
   end
 
   def handle_event("select_conversation", %{"id" => id}, socket) do
@@ -101,34 +114,7 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
       # S16.3: empty/whitespace-only input sends nothing.
       {:noreply, socket}
     else
-      current_user = socket.assigns.current_user
-      conversation = socket.assigns.conversation
-
-      # S16.2: subscribe BEFORE sending. handle_params already subscribed
-      # this LiveView to this conversation's topic when it was selected, so
-      # in the normal flow we are already subscribed here — but the
-      # ordering is made explicit anyway (re-subscribing to an already
-      # subscribed topic is a harmless no-op) because a broadcast arriving
-      # in the gap between send and subscribe would be lost forever: PubSub
-      # delivers only to processes subscribed at broadcast time, and there
-      # is no replay.
-      JidoMarketAgents.subscribe(conversation.id)
-
-      {:ok, :buffered, _conversation_id} =
-        JidoMarketAgents.send_message(current_user.id, conversation.id, message, [])
-
-      # D1: optimistic render only — the LiveView never persists this
-      # message itself. The GenServer is the sole writer of record; this
-      # entry is replaced wholesale the moment the authoritative
-      # `payload.messages` arrives (S16.1, S16.4).
-      optimistic = %{role: "user", content: message}
-
-      {:noreply,
-       socket
-       |> assign(:messages, socket.assigns.messages ++ [optimistic])
-       |> assign(:phase, :buffering)
-       |> assign(:error, nil)
-       |> assign(:rate_limited, nil)}
+      send_message(socket, message, socket.assigns.conversation)
     end
   end
 
@@ -201,6 +187,69 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
 
   # ── Private helpers ─────────────────────────────────────────────────────
 
+  # Empty state: start_or_resume/3 creates the record. The LiveView
+  # subscribes only after success — the context never subscribes the
+  # caller — then patches to the new conversation's url so handle_params'
+  # self-patch clause (above) sees it and skips the reload.
+  defp send_message(socket, message, nil) do
+    current_user = socket.assigns.current_user
+
+    case Conversations.start_or_resume(current_user.id, message, nil) do
+      {:ok, record} ->
+        JidoMarketAgents.subscribe(record.id)
+
+        {:noreply,
+         socket
+         |> assign_sent(record, message)
+         |> refresh_sidebar()
+         |> push_patch(to: ~p"/business-discovery/evaluate/#{record.id}")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Unable to send your message. Please try again.")}
+    end
+  end
+
+  # An already-selected conversation: handle_params already subscribed this
+  # LiveView to its topic, so no subscribe happens here. Re-subscribing on
+  # every send would stack duplicate registrations (phoenix_pubsub 2.2.0
+  # `subscribe/3` is a bare `Registry.register`).
+  defp send_message(socket, message, %Conversations.Record{id: id} = record) do
+    current_user = socket.assigns.current_user
+
+    case Conversations.start_or_resume(current_user.id, message, id) do
+      {:ok, _record} ->
+        {:noreply, assign_sent(socket, record, message)}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Unable to send your message. Please try again.")}
+    end
+  end
+
+  # D1: optimistic render only — the LiveView never persists this message
+  # itself. The GenServer is the sole writer of record; this entry is
+  # replaced wholesale the moment the authoritative `payload.messages`
+  # arrives (S16.1, S16.4).
+  defp assign_sent(socket, record, message) do
+    optimistic = %{role: "user", content: message}
+
+    socket
+    |> assign(:conversation, record)
+    |> assign(:messages, socket.assigns.messages ++ [optimistic])
+    |> assign(:phase, :buffering)
+    |> assign(:error, nil)
+    |> assign(:rate_limited, nil)
+  end
+
+  defp clear_conversation(socket) do
+    socket
+    |> unsubscribe_from_current()
+    |> assign(:conversation, nil)
+    |> assign(:messages, [])
+    |> assign(:phase, nil)
+    |> assign(:error, nil)
+    |> assign(:rate_limited, nil)
+  end
+
   defp replace_messages(socket, %{messages: messages}) when is_list(messages) do
     # S16.4: the transcript re-renders from the authoritative
     # payload.messages, replacing the optimistic entry (D1).
@@ -226,16 +275,6 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
   end
 
   # Messages come in two shapes: persisted `Conversations.Message` structs
-  defp clear_conversation(socket) do
-    socket
-    |> unsubscribe_from_current()
-    |> assign(:conversation, nil)
-    |> assign(:messages, [])
-    |> assign(:phase, nil)
-    |> assign(:error, nil)
-    |> assign(:rate_limited, nil)
-  end
-
   # (loaded on selection, or arriving via an authoritative broadcast) and
   # the plain optimistic map assigned in the "send" event (D1). Both carry
   # `role`/`content`, so the template renders either without branching on

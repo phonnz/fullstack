@@ -35,13 +35,13 @@ runtime `conversation.ex` without first reporting why it is necessary.
 
 ## Work unit
 
-- [ ] **T1 — Centralize authenticated create/resume/ownership validation**, wire Evaluate,
+- [x] **T1 — Centralize authenticated create/resume/ownership validation**, wire Evaluate,
   and add context/LiveView regressions. Route: **delegated direct**; triggers: mapping
   required 4+ files, preparation reading, and 2+ nontrivial source/test files.
   Acceptance: create works, reopening restores owned history and reuses runtime,
   invalid arguments cannot reach Ecto queries, foreign IDs disclose nothing, and
   startup failures are explicit. Implementation and writer checks: passed; independent
-  verification: passed; work-unit commit: pending. Keep T1 unchecked until commit evidence exists.
+  verification: passed; work-unit commit: `db2d025` (2026-10-08). Evidence below.
 
 ## Verification and delivery
 
@@ -90,3 +90,16 @@ only after the host restores runtime registration.
 
 Next: resolve delivery strategy, then isolate this
 feature from existing dirty edits and record the work-unit commit before checking T1 complete.
+
+## Closure (2026-10-08)
+
+- Work-unit commit `db2d025` `feat(conversations): centralize conversation start validation` on `ft-maestro-agents`.
+- Staged in isolation from the other uncommitted streams (telemetry, atom-role rendering): the five
+  authorized files only, with the telemetry and atom-role hunks of `evaluate.ex` and its test left
+  in the working tree untouched. Verified on exactly the staged content via `git stash --keep-index`:
+  focused runner exit 0, **63 tests, 0 failures**; scoped `mix format --check-formatted` exit 0;
+  `git diff --cached --check` exit 0. Dev `mix compile --warnings-as-errors` fails only on
+  pre-existing warnings in unrelated modules.
+- Superseded by `odd/tasks/conversation-start-or-resume.md`: `start_conversation/2` is replaced by
+  `start_or_resume/3` (the second argument is always a new message).
+- Engram mirror written through the CLI (`odd/conversation-start-validation/tasks`).
