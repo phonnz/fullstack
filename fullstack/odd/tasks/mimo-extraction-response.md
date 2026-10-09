@@ -15,7 +15,7 @@ Verify the user's carpet-business message, including an explicit market, at 1x a
 
 ## Work unit
 
-- [ ] **T1 — Make validator extraction deterministic and parse final JSON reliably.**
+- [x] **T1 — Make validator extraction deterministic and parse final JSON reliably.**
   Route: delegated direct; writer/preparation triggers (multiple non-trivial files).
   1. Observe failing regressions before implementation (strict TDD).
   2. Disable thinking for validator extraction; use the documented completion-token
@@ -57,9 +57,9 @@ Business market: custom home furniture.
 - Rollback: revert this unit's MiMo wire handling, parser, and focused regressions together.
 - Engram topic: odd/mimo-extraction-response/tasks. Mirror pending: runtime session
   identity unavailable; agent-attributed memory writes are prohibited.
-- Progress: T1 implemented; writer, parent spot check, and independent checks passed; commit pending.
-- Next step: commit the verified isolated T1 candidate; preserve unrelated dirty work.
-- Commit evidence: pending. Keep T1 unchecked until verification and commit are observed.
+- Progress: T1 complete; writer, parent spot check, and independent checks passed; committed as 1efab9d.
+- Next step: restart the running Phoenix application to load validator configuration; live MiMo verification needs explicit destination/credential authorization.
+- Commit evidence: 1efab9d, fix(mimo): restore reliable business-data extraction; 348 additions and 25 deletions (373 authored lines including this tracker).
 
 ## Implementation and observed evidence
 
