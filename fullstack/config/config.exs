@@ -30,7 +30,7 @@ config :fullstack, Fullstack.JidoMarketAgents,
   cooldown_ms: 15 * 60 * 1000,
   validator_backend:
     {Fullstack.JidoMarketAgents.LLM.Mimo,
-     model: "mimo-v2.5-pro", temperature: 0.3, max_tokens: 1024},
+     model: "mimo-v2.5-pro", temperature: 0.3, max_tokens: 1024, thinking: :disabled},
   researcher_backend:
     {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 1024}
 

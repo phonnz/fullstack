@@ -10,9 +10,10 @@ defmodule Fullstack.JidoMarketAgents.LLM.Mimo do
 
   ## Supported capabilities
 
-  Mimo supports `:json_object` (via `json_mode: true`), `:temperature` and
-  `:max_tokens`. It does NOT support `:json_schema` — the underlying API has
-  no schema-constrained-output parameter — nor `:effort`, which is not
+  Mimo supports `:json_object` (via `json_mode: true`), `:temperature`,
+  `:max_tokens` and an optional `:thinking` mode (`:enabled` or `:disabled`).
+  It does NOT support `:json_schema` — the underlying API has no
+  schema-constrained-output parameter — nor `:effort`, which is not
   implemented by this transport.
 
   ## `response_format` translation
@@ -28,7 +29,7 @@ defmodule Fullstack.JidoMarketAgents.LLM.Mimo do
 
   alias Fullstack.JidoMarketAgents.LLM.MimoClient
 
-  @configured_keys [:model, :temperature, :max_tokens]
+  @configured_keys [:model, :temperature, :max_tokens, :thinking]
 
   @impl true
   def chat_completion(messages, opts) do
@@ -52,8 +53,17 @@ defmodule Fullstack.JidoMarketAgents.LLM.Mimo do
 
   @impl true
   def validate_config(opts) do
-    with :ok <- reject_unsupported(opts) do
-      reject_unknown(opts)
+    with :ok <- reject_unsupported(opts),
+         :ok <- reject_unknown(opts) do
+      validate_thinking(opts)
+    end
+  end
+
+  defp validate_thinking(opts) do
+    case Keyword.fetch(opts, :thinking) do
+      :error -> :ok
+      {:ok, mode} when mode in [:enabled, :disabled] -> :ok
+      {:ok, _other} -> {:error, {:invalid_option, :thinking}}
     end
   end
 

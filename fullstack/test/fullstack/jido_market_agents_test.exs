@@ -6,6 +6,20 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
   alias Fullstack.JidoMarketAgents.LLM.MimoClient
 
+  @carpet_message "Mexico city, Mexico, Cutom carpets for the main saloon. Initial budget fort the busines 300 euros. The price for a carpet of 1.5 m x .30 m is 70 euros. Delivery in 2 weeks. Business market: custom home furniture."
+
+  # Canned provider output verifies plumbing, not live MiMo generation.
+  defp canned_carpet_fields do
+    %{
+      "country" => "Mexico",
+      "city" => "Mexico City",
+      "business_market" => "custom home furniture",
+      "initial_budget" => "300 euros",
+      "final_product_proposal" => "Custom carpet, 1.5 m x 0.30 m; delivery in 2 weeks",
+      "product_price" => "70 euros"
+    }
+  end
+
   setup_all do
     responses = start_supervised!({Agent, fn -> %{} end})
 
@@ -16,9 +30,15 @@ defmodule Fullstack.JidoMarketAgentsTest do
       {owner, content} = Agent.get(responses, &Map.get(&1, message, {nil, "{}"}))
       if owner, do: send(owner, {:mimo_request, request})
 
+      body =
+        case content do
+          {:response, body} -> body
+          _ -> %{choices: [%{message: %{content: content}}]}
+        end
+
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.send_resp(200, Jason.encode!(%{choices: [%{message: %{content: content}}]}))
+      |> Plug.Conn.send_resp(200, Jason.encode!(body))
     end
 
     server = start_supervised!({Bandit, plug: plug, ip: {127, 0, 0, 1}, port: 0})
@@ -43,6 +63,10 @@ defmodule Fullstack.JidoMarketAgentsTest do
     owner = self()
     Agent.update(responses, &Map.put(&1, message, {owner, content}))
     [%{"role" => "user", "content" => message}]
+  end
+
+  defp stub_mimo_response(responses, message, body) do
+    stub_mimo(responses, message, {:response, body})
   end
 
   # ── Helper ──────────────────────────────────────────────────────────────────
@@ -377,6 +401,51 @@ defmodule Fullstack.JidoMarketAgentsTest do
       refute Map.has_key?(agent.state, :unexpected_model_field)
     end
 
+    for multiplier <- [1, 5], format <- [:plain, :fenced] do
+      test "#{multiplier}x carpet message is complete with canned #{format} JSON", %{
+        mimo_responses: responses
+      } do
+        message = String.duplicate(@carpet_message, unquote(multiplier))
+        assert String.length(message) == String.length(@carpet_message) * unquote(multiplier)
+        assert byte_size(message) == byte_size(@carpet_message) * unquote(multiplier)
+        json = Jason.encode!(canned_carpet_fields())
+        content = if unquote(format) == :fenced, do: "```json\n#{json}\n```", else: json
+        stub_mimo(responses, message, content)
+
+        assert {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), message)
+        assert {:complete, data} = MarketValidator.check_completeness(agent)
+        assert data.business_market == "custom home furniture"
+        assert data.initial_budget == "300 euros"
+        assert data.product_price == "70 euros"
+        assert_receive {:mimo_request, request}
+        assert List.last(request["messages"])["content"] == message
+        assert request["thinking"] == %{"type" => "disabled"}
+        assert request["max_completion_tokens"] == 1024
+        refute Map.has_key?(request, "max_tokens")
+        assert request["response_format"] == %{"type" => "json_object"}
+      end
+    end
+
+    test "missing market remains incomplete after valid extraction", %{mimo_responses: responses} do
+      fields = Map.delete(canned_carpet_fields(), "business_market")
+      stub_mimo(responses, @carpet_message, Jason.encode!(fields))
+
+      assert {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), @carpet_message)
+      assert {:incomplete, [:business_market]} = MarketValidator.check_completeness(agent)
+    end
+
+    test "provider failures stay errors instead of missing-data classifications", %{
+      mimo_responses: responses
+    } do
+      for content <- ["", " \n", nil, [], %{}] do
+        message = "invalid final content: #{inspect(content)}"
+        stub_mimo(responses, message, content)
+
+        assert {:error, {:llm_failed, {:invalid_response, _reason, _metadata}}} =
+                 MarketValidator.extract_fields(MarketValidator.new(), message)
+      end
+    end
+
     test "empty JSON preserves previous fields", %{mimo_responses: responses} do
       stub_mimo(responses, "empty extraction", "{}")
       {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), %{country: "Spain"})
@@ -390,6 +459,46 @@ defmodule Fullstack.JidoMarketAgentsTest do
       messages = stub_mimo(responses, "json mode enabled", "{}")
       assert {:ok, "{}"} = MimoClient.chat_completion(messages, json_mode: true)
       assert_receive {:mimo_request, %{"response_format" => %{"type" => "json_object"}}}
+    end
+
+    test "rejects truncated final output and retains only safe diagnostics", %{
+      mimo_responses: responses
+    } do
+      response = %{
+        choices: [
+          %{
+            finish_reason: "length",
+            message: %{content: "{}", reasoning_content: "private reasoning sentinel"}
+          }
+        ],
+        usage: %{
+          completion_tokens: 1024,
+          completion_tokens_details: %{reasoning_tokens: 1020},
+          private_field: "private usage sentinel"
+        }
+      }
+
+      messages = stub_mimo_response(responses, "truncated extraction", response)
+
+      assert {:error, {:invalid_response, :truncated, metadata}} =
+               MimoClient.chat_completion(messages, json_mode: true)
+
+      assert metadata.finish_reason == "length"
+      assert metadata.usage["completion_tokens"] == 1024
+      assert metadata.usage["reasoning_tokens"] == 1020
+      refute inspect(metadata) =~ "private"
+    end
+
+    test "does not consume reasoning when the final answer is absent", %{
+      mimo_responses: responses
+    } do
+      messages =
+        stub_mimo_response(responses, "reasoning only", %{
+          choices: [%{finish_reason: "stop", message: %{reasoning_content: "{}"}}]
+        })
+
+      assert {:error, {:invalid_response, :invalid_content, _metadata}} =
+               MimoClient.chat_completion(messages, json_mode: true)
     end
 
     test "omits response_format by default and when disabled", %{mimo_responses: responses} do

@@ -201,15 +201,14 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     __MODULE__.set(agent, %{extraction_history: updated_history})
   end
 
-  defp parse_llm_json(content) do
-    # Try to extract JSON from the response (may be wrapped in markdown fences)
-    json_str =
-      case Regex.run(~r/```(?:json)?\s*(\{.*\})\s*```/s, content) do
-        [_, json] ->
-          json
+  defp parse_llm_json(content) when is_binary(content) do
+    # Decode the final answer once, accepting an optional enclosing JSON fence.
+    content = String.trim(content)
 
-        _ ->
-          String.trim(content)
+    json_str =
+      case Regex.run(~r/\A```(?:json)?\s*(.*?)\s*```\z/s, content, capture: :all_but_first) do
+        [json] -> json
+        nil -> content
       end
 
     case Jason.decode(json_str) do
@@ -218,6 +217,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       {:error, reason} -> {:error, {:json_parse, reason}}
     end
   end
+
+  defp parse_llm_json(_content), do: {:error, :invalid_content}
 
   defp normalize_map(map), do: ExtractionOutput.normalize_map(map)
 

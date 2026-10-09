@@ -84,6 +84,12 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
       assert :ok = Mimo.validate_config(max_tokens: 1024)
     end
 
+    test "accepts explicit thinking modes and rejects invalid modes" do
+      assert :ok = Mimo.validate_config(thinking: :disabled)
+      assert :ok = Mimo.validate_config(thinking: :enabled)
+      assert {:error, {:invalid_option, :thinking}} = Mimo.validate_config(thinking: :sometimes)
+    end
+
     test "rejects effort as unsupported" do
       assert {:error, {:unsupported_option, :effort}} =
                Mimo.validate_config(model: "mimo-v2.5-pro", effort: "high")
@@ -125,6 +131,18 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
   # -- chat_completion/2: option forwarding ------------------------------------
 
   describe "chat_completion/2 option forwarding" do
+    test "forwards explicit disabled thinking without changing the output contract", %{
+      mimo_responses: responses
+    } do
+      messages = stub_and_messages(responses, "thinking-disabled")
+
+      assert {:ok, "ok"} =
+               Mimo.chat_completion(messages, response_format: :text, thinking: :disabled)
+
+      assert_receive {:mimo_request, request}
+      assert request["thinking"] == %{"type" => "disabled"}
+    end
+
     test "model reaches the HTTP request body verbatim", %{mimo_responses: responses} do
       messages = stub_and_messages(responses, "model-forwarding")
 
@@ -148,7 +166,8 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
 
       assert_receive {:mimo_request, validator_request}
       assert validator_request["temperature"] == 0.3
-      assert validator_request["max_tokens"] == 1024
+      assert validator_request["max_completion_tokens"] == 1024
+      refute Map.has_key?(validator_request, "max_tokens")
 
       researcher_messages = stub_and_messages(responses, "researcher-role-config")
 
@@ -156,7 +175,9 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
                Mimo.chat_completion(researcher_messages, response_format: :text, max_tokens: 1024)
 
       assert_receive {:mimo_request, researcher_request}
-      assert researcher_request["max_tokens"] == 1024
+      assert researcher_request["max_completion_tokens"] == 1024
+      refute Map.has_key?(researcher_request, "max_tokens")
+      refute Map.has_key?(researcher_request, "thinking")
       # No cross-role leakage: researcher config never carried temperature, so
       # the request falls back to MimoClient's own default (0.7), not the
       # validator's 0.3.
