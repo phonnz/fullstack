@@ -171,7 +171,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
         case value do
           nil -> "  - #{label}: (not provided)"
           "" -> "  - #{label}: (not provided)"
-          v when is_map(v) -> "  - #{label}: #{inspect(v)}"
+          v when is_map(v) -> "  - #{label}: #{format_diagnosis_value(field, v)}"
           v -> "  - #{label}: #{v}"
         end
       end)
@@ -291,7 +291,31 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   defp humanize(:initial_budget), do: "initial budget"
   defp humanize(:final_product_proposal), do: "final product proposal"
   defp humanize(:product_price), do: "product price"
+  defp humanize(:team_size), do: "team size"
+  defp humanize(:current_tools_systems), do: "current tools and systems"
+  defp humanize(:repetitive_processes_pain_points), do: "repetitive processes and pain points"
+  defp humanize(:digital_maturity), do: "digital maturity"
+  defp humanize(:metrics_baselines), do: "baseline metrics"
   defp humanize(field), do: field |> to_string() |> String.replace("_", " ")
+
+  # Status-aware display for normalized diagnosis maps: stable,
+  # human-readable summaries instead of raw `inspect/1` output.
+  defp format_diagnosis_value(:team_size, %{status: "known", count: count}), do: "#{count}"
+  defp format_diagnosis_value(:team_size, %{status: status}), do: status
+  defp format_diagnosis_value(:digital_maturity, %{level: level}), do: level
+
+  defp format_diagnosis_value(field, %{items: items}) when is_list(items) and items != [] do
+    noun = if length(items) == 1, do: "item", else: "items"
+    labels = Enum.map_join(items, ", ", &item_label(field, &1))
+    "#{length(items)} #{noun} (#{labels})"
+  end
+
+  defp format_diagnosis_value(_field, %{status: status}), do: status
+
+  defp item_label(:current_tools_systems, %{name: name}), do: name
+  defp item_label(:repetitive_processes_pain_points, %{process: process}), do: process
+  defp item_label(:metrics_baselines, %{metric: metric}), do: metric
+  defp item_label(_field, _item), do: "item"
 
   defp capitalize_humanize(field) do
     case humanize(field) do

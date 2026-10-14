@@ -52,6 +52,55 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     end
   end
 
+  describe "prompt and summary rendering" do
+    test "missing prompt and summary render diagnosis fields without raw maps" do
+      prompt =
+        MarketValidator.format_missing_prompt([
+          :team_size,
+          :current_tools_systems,
+          :repetitive_processes_pain_points,
+          :digital_maturity,
+          :metrics_baselines
+        ])
+
+      assert prompt =~ "team size"
+      assert prompt =~ "current tools and systems"
+      assert prompt =~ "repetitive processes and pain points"
+      assert prompt =~ "digital maturity"
+      assert prompt =~ "baseline metrics"
+
+      {:ok, agent} =
+        MarketValidator.extract_fields(MarketValidator.new(), %{
+          "country" => "Spain",
+          "team_size" => %{"status" => "known", "count" => 5, "notes" => "two founders"},
+          "current_tools_systems" => %{
+            "status" => "known",
+            "items" => [
+              %{
+                "name" => "Slack",
+                "category" => "communication",
+                "purpose" => "team chat",
+                "integration_notes" => nil
+              }
+            ]
+          },
+          "repetitive_processes_pain_points" => %{"status" => "none", "items" => []},
+          "digital_maturity" => %{"level" => "manual", "evidence" => "spreadsheets"},
+          "metrics_baselines" => %{"status" => "unknown", "items" => []}
+        })
+
+      summary = MarketValidator.format_extraction_summary(agent)
+
+      refute summary =~ "%{"
+      assert summary =~ "Team size: 5"
+      assert summary =~ "Current tools and systems: 1 item"
+      assert summary =~ "Slack"
+      assert summary =~ "Repetitive processes and pain points: none"
+      assert summary =~ "Digital maturity: manual"
+      assert summary =~ "Baseline metrics: unknown"
+    end
+  end
+
   describe "check_completeness/1" do
     test "check_completeness/1 accepts explicit unknown and rejects top-level nil" do
       answered = %{
