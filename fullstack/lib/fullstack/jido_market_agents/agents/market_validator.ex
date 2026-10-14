@@ -98,8 +98,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
          ) do
       {:ok, content} ->
         case parse_llm_json(content) do
-          {:ok, extracted} ->
-            merge_extracted(agent, extracted, message)
+          {:ok, extracted, meta} ->
+            merge_extracted(agent, extracted, meta, meta.language_switch_requested, message)
 
           {:error, {:invalid_diagnosis, _field, _code}} = error ->
             error
@@ -119,8 +119,13 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     # without validation), so a malformed diagnosis is rejected before any
     # merge and prior data stays unchanged.
     case normalize_map(message) do
-      {:error, {:invalid_diagnosis, _field, _code}} = error -> error
-      extracted -> merge_extracted(agent, extracted, "map_input")
+      {:error, _reason} = error ->
+        error
+
+      extracted ->
+        meta = ExtractionOutput.language_metadata(message)
+        switch? = explicit_language_key?(message) or meta.language_switch_requested
+        merge_extracted(agent, extracted, meta, switch?, "map_input")
     end
   end
 
@@ -224,7 +229,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     end)
   end
 
-  defp merge_extracted(agent, extracted_map, source_message) do
+  defp merge_extracted(agent, extracted_map, meta, switch?, source_message) do
     # Only non-nil extracted values update state, using ATOM keys
     updates = select_updates(extracted_map)
 
@@ -243,9 +248,29 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     replacement =
       agent.state
       |> Map.merge(updates)
+      |> Map.put(:output_language, resolve_output_language(agent, meta, switch?))
       |> Map.put(:extraction_history, history)
 
     rebuild(agent, replacement)
+  end
+
+  # Pure language update policy (design (c)), isolated from field merging:
+  # the first valid hint sets the language (falling back to the system
+  # default when none arrives); later hints apply only on an explicit
+  # switch request, so the language never drifts silently. Invalid hints
+  # normalize to nil upstream and behave exactly like missing ones.
+  defp resolve_output_language(agent, %{output_language: hint}, switch?) do
+    prior = Map.get(agent.state, :output_language)
+
+    cond do
+      not is_nil(hint) and (is_nil(prior) or switch?) -> hint
+      is_nil(prior) -> ExtractionOutput.default_language()
+      true -> prior
+    end
+  end
+
+  defp explicit_language_key?(message) do
+    Map.has_key?(message, :output_language) or Map.has_key?(message, "output_language")
   end
 
   defp rebuild(agent, replacement) do
@@ -267,8 +292,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     case Jason.decode(json_str) do
       {:ok, map} when is_map(map) ->
         case normalize_map(map) do
-          {:error, {:invalid_diagnosis, _field, _code}} = error -> error
-          normalized -> {:ok, normalized}
+          {:error, _reason} = error -> error
+          normalized -> {:ok, normalized, ExtractionOutput.language_metadata(map)}
         end
 
       {:ok, _other} ->

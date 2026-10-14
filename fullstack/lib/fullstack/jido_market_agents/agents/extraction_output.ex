@@ -94,7 +94,15 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
 
     %{
       "type" => "object",
-      "properties" => properties,
+      "properties" =>
+        Map.merge(properties, %{
+          # Language wire metadata lives OUTSIDE `fields/0`: it is
+          # system-owned control data, not a business field. Both keys are
+          # covered by the closed schema so a supplied-schema CLI backend
+          # neither rejects nor discards them.
+          "output_language" => nullable_string(),
+          "language_switch_requested" => %{"type" => ["boolean", "null"]}
+        }),
       "required" => Enum.map(@fields, &to_string/1),
       "additionalProperties" => false
     }
@@ -233,9 +241,53 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   @spec normalize_map(map()) ::
           %{atom() => term()} | {:error, {:invalid_diagnosis, atom(), atom()}}
   def normalize_map(map) do
-    with {:ok, diagnosis} <- validate_diagnosis(map) do
+    with :ok <- reject_reserved(map),
+         {:ok, diagnosis} <- validate_diagnosis(map) do
       Map.merge(commercial_values(map), diagnosis)
     end
+  end
+
+  # Raw model output never contains owner control metadata (`_pipeline`,
+  # `_meta`) — it is attached by the owner after normalization. A client
+  # that injects these keys into an extraction payload is rejected.
+  @reserved_keys [{:_pipeline, "_pipeline"}, {:_meta, "_meta"}]
+
+  defp reject_reserved(map) do
+    Enum.find_value(@reserved_keys, :ok, fn {atom, string} ->
+      if Map.has_key?(map, atom) or Map.has_key?(map, string) do
+        {:error, {:reserved_key, atom}}
+      end
+    end)
+  end
+
+  @default_language "en"
+  @language_format ~r/\A[a-z]{2}(-[A-Za-z0-9]{2,8})?\z/
+
+  @doc "System-owned default output language when no hint is available."
+  @spec default_language() :: String.t()
+  def default_language, do: @default_language
+
+  @doc "Whether a value is a well-formed language hint (e.g. `\"es\"`, `\"pt-BR\"`)."
+  @spec valid_language?(term()) :: boolean()
+  def valid_language?(value) when is_binary(value), do: Regex.match?(@language_format, value)
+  def valid_language?(_value), do: false
+
+  @doc """
+  Extracts the language wire metadata from a raw extraction map (string or
+  atom keys). A missing or invalid `output_language` hint normalizes to
+  `nil` — it can never silently drift the current language.
+  """
+  @spec language_metadata(map()) :: %{
+          output_language: String.t() | nil,
+          language_switch_requested: boolean()
+        }
+  def language_metadata(map) do
+    hint = fetch_field(map, :output_language)
+
+    %{
+      output_language: if(valid_language?(hint), do: hint, else: nil),
+      language_switch_requested: fetch_field(map, :language_switch_requested) in [true, "true"]
+    }
   end
 
   @doc """

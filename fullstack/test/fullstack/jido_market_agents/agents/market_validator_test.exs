@@ -1,7 +1,72 @@
 defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
-  use ExUnit.Case, async: true
+  # Mutates and restores Application.get_env(:fullstack,
+  # Fullstack.JidoMarketAgents, ...) for the text-path tests, so this
+  # module must not run concurrently with other tests reading or writing
+  # the same application env key (see llm_test.exs for the same rule).
+  use ExUnit.Case, async: false
 
   alias Fullstack.JidoMarketAgents.Agents.{ExtractionOutput, MarketValidator}
+
+  @app :fullstack
+  @scope Fullstack.JidoMarketAgents
+
+  # Fake validator backend whose extraction answers carry language hints,
+  # mirroring the llm_test.exs / backend_dispatch_test.exs idiom.
+  defmodule LanguageFakeBackend do
+    @moduledoc false
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+
+    @impl true
+    def chat_completion(messages, opts) do
+      send(self(), {:backend_called, __MODULE__, messages, opts})
+      user = messages |> List.last() |> Map.fetch!("content")
+      {:ok, reply(user)}
+    end
+
+    defp reply("first text" <> _) do
+      Jason.encode!(%{
+        "country" => "Spain",
+        "output_language" => "es",
+        "language_switch_requested" => false
+      })
+    end
+
+    defp reply("silent hint" <> _) do
+      Jason.encode!(%{
+        "city" => "Barcelona",
+        "output_language" => "fr",
+        "language_switch_requested" => false
+      })
+    end
+
+    defp reply("explicit switch" <> _) do
+      Jason.encode!(%{
+        "output_language" => "en",
+        "language_switch_requested" => true
+      })
+    end
+
+    @impl true
+    def capabilities(_opts), do: [:json_object]
+
+    @impl true
+    def validate_config(_opts), do: :ok
+  end
+
+  setup do
+    original = Application.get_env(@app, @scope, [])
+
+    on_exit(fn ->
+      Application.put_env(@app, @scope, original)
+    end)
+
+    :ok
+  end
+
+  defp put_validator_backend(module) do
+    base = Application.get_env(@app, @scope, [])
+    Application.put_env(@app, @scope, Keyword.put(base, :validator_backend, {module, []}))
+  end
 
   @diagnosis_fields [
     :team_size,
@@ -213,6 +278,61 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
       # top-level nil does not erase
       assert agent.state.country == "Spain"
       assert agent.state.city == "Madrid"
+    end
+  end
+
+  describe "output language capture" do
+    test "first substantive text sets output_language and map input requires explicit or default language" do
+      # language is wire metadata outside fields/0, covered by the schema
+      schema = ExtractionOutput.schema()
+      assert "output_language" in Map.keys(schema["properties"])
+      assert "language_switch_requested" in Map.keys(schema["properties"])
+      refute "output_language" in schema["required"]
+      refute :output_language in ExtractionOutput.fields()
+
+      put_validator_backend(LanguageFakeBackend)
+
+      # first substantive text sets the language from the extraction answer
+      {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), "first text please")
+      assert agent.state.output_language == "es"
+
+      # a later hint without an explicit switch request never drifts
+      {:ok, agent} = MarketValidator.extract_fields(agent, "silent hint follows")
+      assert agent.state.output_language == "es"
+
+      # an explicit switch request switches
+      {:ok, agent} = MarketValidator.extract_fields(agent, "explicit switch to English")
+      assert agent.state.output_language == "en"
+
+      # map input: default language when no explicit key
+      {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), %{country: "Spain"})
+      assert agent.state.output_language == "en"
+
+      # map input: explicit key switches (client override)
+      {:ok, agent} =
+        MarketValidator.extract_fields(agent, %{"output_language" => "es", "city" => "Madrid"})
+
+      assert agent.state.output_language == "es"
+
+      # missing hint: no drift
+      {:ok, agent} = MarketValidator.extract_fields(agent, %{business_market: "fintech"})
+      assert agent.state.output_language == "es"
+
+      # invalid hint: no drift
+      {:ok, agent} =
+        MarketValidator.extract_fields(agent, %{
+          "output_language" => "Spanish!",
+          "initial_budget" => "5000 EUR"
+        })
+
+      assert agent.state.output_language == "es"
+
+      # owner control metadata is rejected from client extraction input
+      assert {:error, {:reserved_key, :_pipeline}} =
+               MarketValidator.extract_fields(MarketValidator.new(), %{
+                 "_pipeline" => %{"cursor" => 1},
+                 "country" => "Spain"
+               })
     end
   end
 
