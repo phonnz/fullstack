@@ -351,6 +351,14 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
     else
       _ -> {:error, :invalid_transition}
     end
+  rescue
+    error in Postgrex.Error ->
+      # Repo.transaction has already rolled back before this rescue runs.
+      # Keep raw database messages (which can contain customer data) private.
+      {:error, {:persistence_failed, (error.postgres || %{})[:code] || :database_error}}
+
+    _error in DBConnection.ConnectionError ->
+      {:error, {:persistence_failed, :connection_error}}
   end
 
   defp normalize_transition(transition) when is_map(transition) do

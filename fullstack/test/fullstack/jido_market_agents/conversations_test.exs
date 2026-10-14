@@ -1,5 +1,5 @@
 defmodule Fullstack.JidoMarketAgents.ConversationsTest do
-  use Fullstack.DataCase, async: true
+  use Fullstack.DataCase, async: false
 
   import Fullstack.AccountsFixtures
 
@@ -433,6 +433,80 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
       end
 
       assert Conversations.list_messages(record.id) == []
+    end
+
+    defp fail_stage_write(table, operation, id_column, id) do
+      # Transaction-local trigger state rolls back with the sandbox. Run this
+      # module synchronously so table DDL cannot block other async DB tests.
+      Ecto.Adapters.SQL.query!(Repo, """
+      CREATE FUNCTION pg_temp.fail_b4_stage_write() RETURNS trigger AS $$
+      BEGIN RAISE EXCEPTION 'injected private persistence failure'; END;
+      $$ LANGUAGE plpgsql
+      """)
+
+      Ecto.Adapters.SQL.query!(Repo, """
+      CREATE TRIGGER fail_b4_stage_write BEFORE #{operation} ON #{table}
+      FOR EACH ROW WHEN (NEW.#{id_column} = '#{id}'::uuid)
+      EXECUTE FUNCTION pg_temp.fail_b4_stage_write()
+      """)
+    end
+
+    defp assert_failed_boundary_unchanged(user, record) do
+      assert Conversations.get_for_user(record.id, user.id) == record
+      assert Conversations.list_messages(record.id) == []
+      assert is_nil(Conversations.get_for_user(record.id, user.id).business_analysis)
+      refute_received {:analysis_complete, _}
+      refute_received {:run_stage, _}
+      refute_received :run_research
+    end
+
+    test "persist_stage_transition/4 leaves no message or result when update fails" do
+      user = user_fixture()
+      transition = stage_transition()
+      {:ok, record} = stage_record(user, transition)
+      fail_stage_write("jido_conversations", "UPDATE", "id", record.id)
+
+      assert {:error, {:persistence_failed, :raise_exception}} =
+               Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+      assert_failed_boundary_unchanged(user, record)
+    end
+
+    test "stage transition message insert failure rolls back without success or enqueue" do
+      user = user_fixture()
+      transition = stage_transition()
+      {:ok, record} = stage_record(user, transition)
+      fail_stage_write("jido_conversation_messages", "INSERT", "conversation_id", record.id)
+
+      assert {:error, {:persistence_failed, :raise_exception}} =
+               Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+      assert_failed_boundary_unchanged(user, record)
+    end
+
+    test "message and record changeset failures return tagged errors with no partial writes" do
+      user = user_fixture()
+      transition = stage_transition()
+      {:ok, record} = stage_record(user, transition)
+
+      assert {:error, {:message, %Ecto.Changeset{}}} =
+               Conversations.persist_stage_transition(user.id, record.id, 0, %{
+                 transition
+                 | content: ""
+               })
+
+      assert_failed_boundary_unchanged(user, record)
+
+      assert {:error, {:record, %Ecto.Changeset{}}} =
+               Conversations.persist_stage_transition(user.id, record.id, 0, %{
+                 transition
+                 | status: "bogus"
+               })
+
+      assert_failed_boundary_unchanged(user, record)
+
+      assert {:ok, :committed, _} =
+               Conversations.persist_stage_transition(user.id, record.id, 0, transition)
     end
 
     test "manual nonfinal boundaries stay active and typed messages use durable sequence" do
