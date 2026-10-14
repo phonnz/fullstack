@@ -1,8 +1,11 @@
 defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   @moduledoc """
-  Shared domain contract for the six market-entry extraction fields:
-  `country`, `city`, `business_market`, `initial_budget`,
-  `final_product_proposal`, `product_price`.
+  Shared domain contract for the market-entry extraction fields: the six
+  commercial scalars (`country`, `city`, `business_market`, `initial_budget`,
+  `final_product_proposal`, `product_price`) plus the five structured
+  diagnosis fields (`team_size`, `current_tools_systems`,
+  `repetitive_processes_pain_points`, `digital_maturity`,
+  `metrics_baselines`).
 
   This module owns:
 
@@ -35,10 +38,15 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     :business_market,
     :initial_budget,
     :final_product_proposal,
-    :product_price
+    :product_price,
+    :team_size,
+    :current_tools_systems,
+    :repetitive_processes_pain_points,
+    :digital_maturity,
+    :metrics_baselines
   ]
 
-  @doc "Returns the six extractable field atoms, in canonical order."
+  @doc "Returns the eleven extractable field atoms, in canonical order."
   @spec fields() :: [atom()]
   def fields, do: @fields
 

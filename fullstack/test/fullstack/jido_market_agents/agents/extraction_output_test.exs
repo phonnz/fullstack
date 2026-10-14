@@ -38,9 +38,9 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       end
     end
 
-    test "declares exactly the six known fields, no more, no fewer" do
+    test "declares exactly the canonical field keys, no more, no fewer" do
       schema = ExtractionOutput.schema()
-      expected_keys = Enum.map(@fields, &to_string/1) |> Enum.sort()
+      expected_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> Enum.sort()
 
       assert Map.keys(schema["properties"]) |> Enum.sort() == expected_keys
       assert Enum.sort(schema["required"]) == expected_keys
@@ -57,7 +57,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       schema = ExtractionOutput.schema()
 
       all_null =
-        Map.new(@fields, fn field -> {to_string(field), nil} end)
+        Map.new(ExtractionOutput.fields(), fn field -> {to_string(field), nil} end)
 
       # Every required key is present; every value is one of the schema's
       # declared types (null); no keys outside `properties`.
@@ -73,8 +73,35 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
   end
 
   describe "fields/0" do
-    test "returns the six extractable field atoms" do
-      assert Enum.sort(ExtractionOutput.fields()) == Enum.sort(@fields)
+    test "fields/0 returns commercial and diagnosis fields in canonical order" do
+      assert ExtractionOutput.fields() == [
+               :country,
+               :city,
+               :business_market,
+               :initial_budget,
+               :final_product_proposal,
+               :product_price,
+               :team_size,
+               :current_tools_systems,
+               :repetitive_processes_pain_points,
+               :digital_maturity,
+               :metrics_baselines
+             ]
+    end
+
+    test "keeps the six commercial field atoms in canonical relative order" do
+      fields = ExtractionOutput.fields()
+
+      commercial = [
+        :country,
+        :city,
+        :business_market,
+        :initial_budget,
+        :final_product_proposal,
+        :product_price
+      ]
+
+      assert Enum.filter(fields, &(&1 in commercial)) == commercial
     end
   end
 
@@ -97,7 +124,12 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
                business_market: "fintech",
                initial_budget: "50000",
                final_product_proposal: "Payment app",
-               product_price: "9.99"
+               product_price: "9.99",
+               team_size: nil,
+               current_tools_systems: nil,
+               repetitive_processes_pain_points: nil,
+               digital_maturity: nil,
+               metrics_baselines: nil
              }
     end
 
