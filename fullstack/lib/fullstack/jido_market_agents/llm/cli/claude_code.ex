@@ -106,7 +106,8 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCode do
   def chat_completion(messages, opts) do
     {response_format, opts} = Keyword.pop(opts, :response_format, :text)
 
-    with {:ok, system_prompt, user_prompt} <- extract_messages(messages),
+    with :ok <- validate_response_format(response_format),
+         {:ok, system_prompt, user_prompt} <- extract_messages(messages),
          {:ok, command} <- fetch_command(opts) do
       argv = build_argv(opts, response_format, system_prompt, user_prompt)
       env = opts |> Keyword.get(:env, %{}) |> to_env_map()
@@ -239,31 +240,158 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCode do
   # forbids any other key, and each property's `type` constrains the
   # value's JSON type. Payload keys come from the supplied schema — never
   # from any extraction field registry.
-  defp validate_structured_schema(structured, schema) when is_map(schema) do
-    properties = Map.get(schema, "properties", %{})
-    required = Map.get(schema, "required", [])
-    closed? = Map.get(schema, "additionalProperties", true) == false
+  defp validate_structured_schema(structured, schema) when is_map(schema),
+    do: validate_value(structured, schema)
 
-    keys_ok? =
-      Enum.all?(required, &Map.has_key?(structured, &1)) and
-        (not closed? or Enum.all?(Map.keys(structured), &Map.has_key?(properties, &1)))
+  defp validate_structured_schema(_structured, _schema), do: {:error, :invalid_supplied_schema}
 
-    types_ok? =
-      Enum.all?(structured, fn {key, value} ->
-        case Map.get(properties, key) do
-          nil -> true
-          property -> value_matches_type?(value, Map.get(property, "type"))
+  # Schema keywords this adapter enforces locally, plus pure annotations.
+  # Anything else (pattern, oneOf, $ref, ...) would silently skip a
+  # validation rule, so it is rejected BEFORE Runner.run/3.
+  @supported_schema_keywords ~w(
+    type properties required additionalProperties items enum
+    minimum maximum minItems maxItems
+    description title default examples $schema $id
+  )
+
+  defp validate_response_format(:text), do: :ok
+
+  defp validate_response_format({:json_object, schema}), do: walk_schema_keywords(schema)
+
+  defp validate_response_format(_other), do: {:error, :invalid_response_format}
+
+  defp walk_schema_keywords(node) when is_map(node) do
+    case Enum.find(Map.keys(node), &(&1 not in @supported_schema_keywords)) do
+      nil ->
+        Enum.reduce_while(schema_children(node), :ok, fn child, :ok ->
+          case walk_schema_keywords(child) do
+            :ok -> {:cont, :ok}
+            error -> {:halt, error}
+          end
+        end)
+
+      key ->
+        {:error, {:unsupported_schema_keyword, key}}
+    end
+  end
+
+  defp walk_schema_keywords(_node), do: {:error, :invalid_supplied_schema}
+
+  defp schema_children(node) do
+    props =
+      case Map.get(node, "properties") do
+        properties when is_map(properties) -> Map.values(properties)
+        _other -> []
+      end
+
+    case Map.get(node, "items") do
+      nil -> props
+      items -> [items | props]
+    end
+  end
+
+  # Recursive value-vs-schema walk: object nodes (properties/required/
+  # additionalProperties), array nodes (items/minItems/maxItems), enums,
+  # scalar and nullable (type-list) nodes, and numeric bounds. Violations
+  # use two standardized tags at every depth: :schema_key_mismatch for
+  # key rules, :schema_type_mismatch for type/enum/bounds/count rules.
+  defp validate_value(value, node) when is_map(node) do
+    with :ok <- validate_enum(value, node),
+         :ok <- validate_type(value, node),
+         :ok <- validate_object(value, node),
+         :ok <- validate_array(value, node) do
+      validate_numeric_bounds(value, node)
+    end
+  end
+
+  defp validate_value(_value, _node), do: {:error, :invalid_supplied_schema}
+
+  defp validate_enum(value, %{"enum" => choices}) when is_list(choices) do
+    if Enum.any?(choices, &(&1 == value)), do: :ok, else: {:error, :schema_type_mismatch}
+  end
+
+  defp validate_enum(_value, _node), do: :ok
+
+  defp validate_type(value, node) do
+    if value_matches_type?(value, Map.get(node, "type")),
+      do: :ok,
+      else: {:error, :schema_type_mismatch}
+  end
+
+  defp validate_object(value, node) when is_map(value) do
+    case Map.get(node, "properties") do
+      properties when is_map(properties) ->
+        required = Map.get(node, "required", [])
+        closed? = Map.get(node, "additionalProperties", true) == false
+
+        keys_ok? =
+          Enum.all?(required, &Map.has_key?(value, &1)) and
+            (not closed? or Enum.all?(Map.keys(value), &Map.has_key?(properties, &1)))
+
+        if keys_ok? do
+          Enum.reduce_while(value, :ok, fn {key, child_value}, :ok ->
+            case Map.get(properties, key) do
+              nil ->
+                {:cont, :ok}
+
+              child_node ->
+                case validate_value(child_value, child_node) do
+                  :ok -> {:cont, :ok}
+                  error -> {:halt, error}
+                end
+            end
+          end)
+        else
+          {:error, :schema_key_mismatch}
         end
-      end)
+
+      _no_properties ->
+        :ok
+    end
+  end
+
+  defp validate_object(_value, _node), do: :ok
+
+  defp validate_array(value, node) when is_list(value) do
+    min = Map.get(node, "minItems")
+    max = Map.get(node, "maxItems")
 
     cond do
-      not keys_ok? -> {:error, :schema_key_mismatch}
-      not types_ok? -> {:error, :schema_type_mismatch}
+      is_integer(min) and length(value) < min ->
+        {:error, :schema_type_mismatch}
+
+      is_integer(max) and length(value) > max ->
+        {:error, :schema_type_mismatch}
+
+      true ->
+        case Map.get(node, "items") do
+          nil -> :ok
+          items_node -> Enum.reduce_while(value, :ok, &validate_item(&1, items_node, &2))
+        end
+    end
+  end
+
+  defp validate_array(_value, _node), do: :ok
+
+  defp validate_item(item, items_node, :ok) do
+    case validate_value(item, items_node) do
+      :ok -> {:cont, :ok}
+      error -> {:halt, error}
+    end
+  end
+
+  defp validate_numeric_bounds(value, node) when is_number(value) do
+    min = Map.get(node, "minimum")
+    max = Map.get(node, "maximum")
+
+    cond do
+      is_number(min) and value < min -> {:error, :schema_type_mismatch}
+      is_number(max) and value > max -> {:error, :schema_type_mismatch}
       true -> :ok
     end
   end
 
-  defp validate_structured_schema(_structured, _schema), do: {:error, :invalid_supplied_schema}
+  defp validate_numeric_bounds(_value, _node), do: :ok
 
   defp value_matches_type?(_value, nil), do: true
 
