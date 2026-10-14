@@ -2,7 +2,7 @@ defmodule Fullstack.JidoMarketAgents.LLM do
   @moduledoc """
   Role-based dispatch to a configured `Fullstack.JidoMarketAgents.LLM.Backend`.
 
-  Each agent role (`:validator`, `:researcher`) is independently mapped to a
+  Each agent role (`:validator`, `:researcher`, `:analyzer`, `:systems`, `:strategy`) is independently mapped to a
   `{module, opts}` pair through application configuration:
 
       config :fullstack, Fullstack.JidoMarketAgents,
@@ -122,7 +122,7 @@ defmodule Fullstack.JidoMarketAgents.LLM do
   def backend(role), do: resolve_and_validate(role)
 
   @doc """
-  Validates both `:validator` and `:researcher` role configuration at boot
+  Validates all five role configurations and pipeline defaults at boot
   (or on demand).
 
   For each role, this confirms: the configured entry is a well-formed
@@ -135,17 +135,41 @@ defmodule Fullstack.JidoMarketAgents.LLM do
   there is no caller-provided `response_format` at boot time; capability
   checks happen per-call in `chat_completion/3`.
 
-  Returns `:ok` if both roles are structurally valid, or
+  Returns `:ok` if all roles and pipeline defaults are structurally valid, or
   `{:error, {role, reason}}` naming the first role that failed.
   """
   @spec validate_config() :: :ok | {:error, {role(), term()}}
   def validate_config do
-    Enum.reduce_while([:validator, :researcher], :ok, fn role, :ok ->
+    Enum.reduce_while(@roles, :ok, fn role, :ok ->
       case resolve_and_validate(role) do
         {:ok, _} -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, {role, reason}}}
       end
     end)
+    |> case do
+      :ok -> validate_pipeline_config()
+      error -> error
+    end
+  end
+
+  defp validate_pipeline_config do
+    config = Application.get_env(@app, @scope, [])
+    language = Keyword.get(config, :default_output_language)
+    timeout = Keyword.get(config, :stage_timeout_ms)
+
+    cond do
+      not is_binary(language) ->
+        {:error, {:invalid_pipeline_config, :default_output_language}}
+
+      not Regex.match?(~r/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/, language) ->
+        {:error, {:invalid_pipeline_config, :default_output_language}}
+
+      not is_integer(timeout) or timeout <= 0 ->
+        {:error, {:invalid_pipeline_config, :stage_timeout_ms}}
+
+      true ->
+        :ok
+    end
   end
 
   # -- Caller option policy -------------------------------------------------

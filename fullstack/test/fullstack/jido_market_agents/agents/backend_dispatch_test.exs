@@ -252,4 +252,69 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
       refute_received {:backend_called, FakeBackend, _tag, _opts}
     end
   end
+
+  test "validate_config/0 checks all five role backends" do
+    config = Application.get_env(@app, @scope, [])
+
+    roles = [
+      validator: :validator_backend,
+      researcher: :researcher_backend,
+      analyzer: :analyzer_backend,
+      systems: :systems_backend,
+      strategy: :strategy_backend
+    ]
+
+    for {role, key} <- roles do
+      Application.put_env(@app, @scope, Keyword.put(config, key, :invalid))
+
+      assert {:error, {^role, {:invalid_backend_config, ^role, :invalid}}} =
+               Fullstack.JidoMarketAgents.LLM.validate_config()
+    end
+
+    Application.put_env(@app, @scope, config)
+    assert :ok = Fullstack.JidoMarketAgents.LLM.validate_config()
+
+    # Approved B3 deployment defaults: bounded JSON output, not measured token sufficiency.
+    assert config[:default_output_language] == "en"
+    assert config[:stage_timeout_ms] == 120_000
+
+    for {key, budget} <- [
+          researcher_backend: 4096,
+          analyzer_backend: 6144,
+          systems_backend: 8192,
+          strategy_backend: 8192
+        ] do
+      assert {Fullstack.JidoMarketAgents.LLM.Mimo, opts} = config[key]
+      assert opts[:max_tokens] == budget
+    end
+
+    Application.put_env(
+      @app,
+      @scope,
+      Keyword.put(config, :default_output_language, "not a language")
+    )
+
+    assert {:error, {:invalid_pipeline_config, :default_output_language}} =
+             Fullstack.JidoMarketAgents.LLM.validate_config()
+
+    Application.put_env(@app, @scope, Keyword.put(config, :stage_timeout_ms, :infinity))
+
+    assert {:error, {:invalid_pipeline_config, :stage_timeout_ms}} =
+             Fullstack.JidoMarketAgents.LLM.validate_config()
+
+    overrides =
+      for {role, key} <- roles,
+          do:
+            {key,
+             {FakeBackend,
+              model: Atom.to_string(role), max_tokens: byte_size(Atom.to_string(role))}}
+
+    Application.put_env(@app, @scope, Keyword.merge(config, overrides))
+
+    for {role, _key} <- roles do
+      assert {:ok, {FakeBackend, opts}} = Fullstack.JidoMarketAgents.LLM.backend(role)
+      assert opts[:model] == Atom.to_string(role)
+      assert opts[:max_tokens] == byte_size(Atom.to_string(role))
+    end
+  end
 end

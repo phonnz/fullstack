@@ -28,11 +28,22 @@ config :fullstack, Fullstack.JidoMarketAgents,
   rate_limit_count: 10,
   rate_limit_window_ms: 30 * 60 * 1000,
   cooldown_ms: 15 * 60 * 1000,
+  # Approved deployment budgets; JSON completeness still requires runtime measurement.
+  default_output_language: "en",
+  stage_timeout_ms: 120_000,
+  systems_knowledge_max_chars: 24_000,
+  strategy_knowledge_max_chars: 24_000,
   validator_backend:
     {Fullstack.JidoMarketAgents.LLM.Mimo,
      model: "mimo-v2.5-pro", temperature: 0.3, max_tokens: 1024, thinking: :disabled},
   researcher_backend:
-    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 1024}
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 4096},
+  analyzer_backend:
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 6144},
+  systems_backend:
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 8192},
+  strategy_backend:
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 8192}
 
 # Configures the endpoint
 config :fullstack, FullstackWeb.Endpoint,
