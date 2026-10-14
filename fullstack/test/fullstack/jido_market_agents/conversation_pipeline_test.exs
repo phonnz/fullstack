@@ -283,4 +283,122 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert Conversations.get_for_user(id, user.id).systems_strategy["quarterly_focus"] ==
              "Improve acquisition"
   end
+
+  def tech do
+    objective = %{
+      specific: "Automate one repeated task",
+      measurable: "Reduce time by 20%",
+      achievable: "Use existing resources",
+      relevant: "Reduce operating cost",
+      time_bound: "Within 8 weeks"
+    }
+
+    cost = %{amount: 0, currency: "EUR", unit: "currency", period: "one_time"}
+
+    components =
+      Map.new([:subscriptions, :development, :training, :integration, :maintenance], &{&1, cost})
+      |> Map.put(:subscriptions, %{cost | amount: 20, period: "monthly"})
+      |> Map.put(:maintenance, %{cost | amount: 30, period: "monthly"})
+      |> Map.put(:development, %{cost | amount: 1000})
+      |> Map.put(:training, %{cost | amount: 200})
+      |> Map.put(:integration, %{cost | amount: 300})
+
+    %{
+      diagnosis: %{
+        prioritized_areas: ["Support", "Operations"],
+        baseline_status: "measured",
+        notes: "Measured current work"
+      },
+      smart_objectives: Enum.map(["Support", "Operations"], &Map.put(objective, :area, &1)),
+      kpis:
+        Enum.map(["Cycle time", "Errors", "Cost"], fn name ->
+          %{
+            name: name,
+            baseline: 20,
+            baseline_status: "measured",
+            unit: "count",
+            period: "monthly",
+            source: "Operations log",
+            target: 16
+          }
+        end),
+      tool_selection: %{
+        tool: "Workflow automation",
+        criteria:
+          Map.new(
+            [
+              :implementation_ease,
+              :scalability,
+              :integration,
+              :total_cost,
+              :support_community,
+              :compliance_security
+            ],
+            &{&1, "Evaluate this criterion against current systems"}
+          )
+      },
+      budget_roi: %{
+        currency: "EUR",
+        components: components,
+        assumptions: %{
+          baseline_status: "measured",
+          baseline_value: 100,
+          baseline_source: "Operations log",
+          monthly_benefit: 200,
+          benefit_currency: "EUR",
+          benefit_unit: "currency",
+          benefit_period: "monthly",
+          horizon_months: 12
+        },
+        roi: %{status: "calculated", percentage: 9999, payback_months: 0, reason: nil}
+      },
+      pilot: %{
+        process: "Support triage",
+        team: "Two team members",
+        start_day: 21,
+        duration_weeks: 4,
+        end_day: 30,
+        success_metrics: ["Cycle time"],
+        feedback: "Weekly team feedback"
+      },
+      scaling: %{
+        decision: "pending",
+        approach: "phased",
+        review_day: 48,
+        lessons_learned: [],
+        expansion_plan: "Scale only after pilot evidence"
+      },
+      action_plan_30_days:
+        Enum.map([{1, 5}, {6, 10}, {11, 20}, {21, 30}], fn {first, last} ->
+          %{
+            start_day: first,
+            end_day: last,
+            phase: "Prepare and launch",
+            actions: ["Complete this phase"]
+          }
+        end)
+    }
+  end
+
+  test "systems success persists then completes tech strategy", %{id: id, user: user} do
+    Conversation.send_message(id, data())
+
+    for {role, output} <- [
+          {"researcher", research()},
+          {"analyzer", analysis()},
+          {"systems", systems()}
+        ] do
+      assert_receive {:provider, worker, ^role, _}, 1_000
+      reply(worker, output)
+    end
+
+    assert_receive {:systems_complete, %{status: :building_strategy}}, 1_000
+    assert_receive {:provider, worker, "strategy", messages}, 1_000
+    assert List.last(messages)["content"] =~ "Improve acquisition"
+    reply(worker, tech())
+    assert_receive {:tech_strategy_complete, %{status: :completed}}, 1_000
+    record = Conversations.get_for_user(id, user.id)
+    assert record.status == "completed"
+    assert record.tech_strategy["budget_roi"]["roi"]["percentage"] != 9999
+  end
 end

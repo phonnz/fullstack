@@ -15,7 +15,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher}
   alias Fullstack.JidoMarketAgents.Conversations
-  alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, SystemsAgent}
+  alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, SystemsAgent, StrategyAgent}
   alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
 
   @pubsub Fullstack.PubSub
@@ -555,24 +555,41 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
      end)}
   end
 
+  defp run_stage(state, :tech_strategy) do
+    agent =
+      StrategyAgent.new(
+        state: %{
+          validated_data: business_data(state),
+          research_output: clean_result(state.results[:research]),
+          analysis_output: clean_result(state.results[:analysis]),
+          systems_output: clean_result(state.results[:systems]),
+          refinements: %{},
+          output_language: state.validator_agent.state.output_language
+        }
+      )
+
+    {:noreply,
+     launch(state, :tech_strategy, fn ->
+       AgentTelemetry.span(:tech_strategy, %{conversation_id: state.id}, fn ->
+         StrategyAgent.build(agent)
+       end)
+     end)}
+  end
+
   defp business_data(state),
     do: Map.drop(state.validated_data || %{}, ["_pipeline", :_pipeline, "_meta", :_meta])
 
   defp clean_result(result), do: Map.drop(result || %{}, ["_meta", :_meta])
 
   defp stage_success(state, stage, result) do
-    next =
-      case stage do
-        :research -> :analysis
-        :analysis -> :systems
-        :systems -> nil
-      end
+    next = Enum.at(@stages, Enum.find_index(@stages, &(&1 == stage)) + 1)
 
     status =
       case stage do
         :research -> :analyzing
         :analysis -> :building_strategy
-        :systems -> :completed
+        :systems -> :building_strategy
+        :tech_strategy -> :completed
       end
 
     fingerprint = stage_input_fingerprint(state, stage)
@@ -656,6 +673,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
+  defp stage_event(:tech_strategy), do: :tech_strategy_complete
   defp stage_event(:systems), do: :systems_complete
   defp stage_event(:analysis), do: :analysis_complete
   defp stage_event(:research), do: :research_complete
