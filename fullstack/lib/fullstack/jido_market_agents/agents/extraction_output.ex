@@ -53,6 +53,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
 
   @team_size_statuses ["known", "unknown"]
 
+  @collection_statuses ["known", "none", "unknown"]
+
   @maturity_levels ["unknown", "manual", "digitized", "integrated", "optimized"]
 
   @doc "Returns the eleven extractable field atoms, in canonical order."
@@ -141,7 +143,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     closed_object(
       ["object", "null"],
       %{
-        "status" => enum_string(["known", "none", "unknown"]),
+        "status" => enum_string(@collection_statuses),
         "items" => item_array(item)
       },
       ["status", "items"]
@@ -165,7 +167,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     closed_object(
       ["object", "null"],
       %{
-        "status" => enum_string(["known", "none", "unknown"]),
+        "status" => enum_string(@collection_statuses),
         "items" => item_array(item)
       },
       ["status", "items"]
@@ -263,7 +265,67 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
 
   defp normalize_diagnosis_field(:team_size, raw), do: normalize_team_size(raw)
   defp normalize_diagnosis_field(:digital_maturity, raw), do: normalize_digital_maturity(raw)
+
+  defp normalize_diagnosis_field(:current_tools_systems, raw),
+    do: normalize_item_collection(:current_tools_systems, raw, &normalize_tool_item/1)
+
+  defp normalize_diagnosis_field(:repetitive_processes_pain_points, raw),
+    do:
+      normalize_item_collection(
+        :repetitive_processes_pain_points,
+        raw,
+        &normalize_pain_item/1
+      )
+
   defp normalize_diagnosis_field(_field, raw), do: {:ok, normalize_value(raw)}
+
+  defp normalize_item_collection(_field, nil, _item_fun), do: {:ok, nil}
+
+  defp normalize_item_collection(field, raw, item_fun) when is_map(raw) do
+    items = fetch_field(raw, :items)
+
+    case enum_value(fetch_field(raw, :status)) do
+      status when status in ["none", "unknown"] ->
+        if is_nil(items) or items == [] do
+          {:ok, %{status: status, items: []}}
+        else
+          {:error, {:invalid_diagnosis, field, :items_not_allowed}}
+        end
+
+      "known" ->
+        normalize_known_items(field, items, item_fun)
+
+      _other ->
+        {:error, {:invalid_diagnosis, field, :invalid_status}}
+    end
+  end
+
+  defp normalize_item_collection(field, _raw, _item_fun),
+    do: {:error, {:invalid_diagnosis, field, :invalid_shape}}
+
+  defp normalize_known_items(field, [], _item_fun),
+    do: {:error, {:invalid_diagnosis, field, :items_required}}
+
+  defp normalize_known_items(field, items, item_fun) when is_list(items) do
+    result =
+      Enum.reduce_while(items, {:ok, []}, fn item, {:ok, acc} ->
+        case item_fun.(item) do
+          {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case result do
+      {:ok, normalized} -> {:ok, %{status: "known", items: Enum.reverse(normalized)}}
+      error -> error
+    end
+  end
+
+  defp normalize_known_items(field, nil, _item_fun),
+    do: {:error, {:invalid_diagnosis, field, :items_required}}
+
+  defp normalize_known_items(field, _items, _item_fun),
+    do: {:error, {:invalid_diagnosis, field, :invalid_items}}
 
   defp normalize_team_size(nil), do: {:ok, nil}
 
@@ -307,6 +369,62 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
 
   defp normalize_digital_maturity(_raw),
     do: {:error, {:invalid_diagnosis, :digital_maturity, :invalid_shape}}
+
+  defp normalize_tool_item(item) when is_map(item) do
+    with {:ok, name} <- required_text(fetch_field(item, :name)),
+         {:ok, category} <- item_text(fetch_field(item, :category)),
+         {:ok, purpose} <- item_text(fetch_field(item, :purpose)),
+         {:ok, integration_notes} <- item_text(fetch_field(item, :integration_notes)) do
+      {:ok,
+       %{
+         name: name,
+         category: category,
+         purpose: purpose,
+         integration_notes: integration_notes
+       }}
+    else
+      {:error, _reason} -> {:error, {:invalid_diagnosis, :current_tools_systems, :invalid_item}}
+    end
+  end
+
+  defp normalize_tool_item(_item),
+    do: {:error, {:invalid_diagnosis, :current_tools_systems, :invalid_item}}
+
+  defp normalize_pain_item(item) when is_map(item) do
+    with {:ok, process} <- required_text(fetch_field(item, :process)),
+         {:ok, pain_point} <- required_text(fetch_field(item, :pain_point)),
+         {:ok, frequency} <- item_text(fetch_field(item, :frequency)),
+         {:ok, time_cost} <- item_text(fetch_field(item, :time_cost)),
+         {:ok, error_cost} <- item_text(fetch_field(item, :error_cost)) do
+      {:ok,
+       %{
+         process: process,
+         pain_point: pain_point,
+         frequency: frequency,
+         time_cost: time_cost,
+         error_cost: error_cost
+       }}
+    else
+      {:error, _reason} ->
+        {:error, {:invalid_diagnosis, :repetitive_processes_pain_points, :invalid_item}}
+    end
+  end
+
+  defp normalize_pain_item(_item),
+    do: {:error, {:invalid_diagnosis, :repetitive_processes_pain_points, :invalid_item}}
+
+  defp required_text(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> {:error, :blank}
+      _not_blank -> {:ok, value}
+    end
+  end
+
+  defp required_text(_value), do: {:error, :not_text}
+
+  defp item_text(nil), do: {:ok, nil}
+  defp item_text(value) when is_binary(value), do: {:ok, value}
+  defp item_text(_value), do: {:error, :not_text}
 
   defp known_count(count) when is_integer(count) and count >= 0, do: {:ok, count}
   defp known_count(_count), do: {:error, {:invalid_diagnosis, :team_size, :invalid_count}}

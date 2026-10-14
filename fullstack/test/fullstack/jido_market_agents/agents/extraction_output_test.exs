@@ -286,6 +286,81 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       assert {:error, {:invalid_diagnosis, :digital_maturity, :invalid_level}} =
                ExtractionOutput.normalize_map(%{"digital_maturity" => %{"level" => "excel"}})
     end
+
+    test "normalize_map/1 validates tools and pain point collections" do
+      normalized =
+        ExtractionOutput.normalize_map(%{
+          "current_tools_systems" => %{
+            "status" => "known",
+            "items" => [
+              %{"name" => "Excel", "purpose" => "invoicing", "integration_notes" => nil},
+              %{name: "Trello", category: "pm"}
+            ]
+          },
+          "repetitive_processes_pain_points" => %{
+            "status" => "known",
+            "items" => [
+              %{
+                "process" => "invoicing",
+                "pain_point" => "manual entry",
+                "time_cost" => "2h/week"
+              }
+            ]
+          }
+        })
+
+      assert normalized.current_tools_systems == %{
+               status: "known",
+               items: [
+                 %{name: "Excel", category: nil, purpose: "invoicing", integration_notes: nil},
+                 %{name: "Trello", category: "pm", purpose: nil, integration_notes: nil}
+               ]
+             }
+
+      assert normalized.repetitive_processes_pain_points == %{
+               status: "known",
+               items: [
+                 %{
+                   process: "invoicing",
+                   pain_point: "manual entry",
+                   frequency: nil,
+                   time_cost: "2h/week",
+                   error_cost: nil
+                 }
+               ]
+             }
+
+      # none/unknown normalize to a complete field with empty items.
+      cleared =
+        ExtractionOutput.normalize_map(%{
+          "current_tools_systems" => %{"status" => "none"},
+          "repetitive_processes_pain_points" => %{"status" => "unknown"}
+        })
+
+      assert cleared.current_tools_systems == %{status: "none", items: []}
+      assert cleared.repetitive_processes_pain_points == %{status: "unknown", items: []}
+
+      assert {:error, {:invalid_diagnosis, :current_tools_systems, :items_not_allowed}} =
+               ExtractionOutput.normalize_map(%{
+                 "current_tools_systems" => %{
+                   "status" => "none",
+                   "items" => [%{"name" => "Excel"}]
+                 }
+               })
+
+      assert {:error, {:invalid_diagnosis, :repetitive_processes_pain_points, :items_required}} =
+               ExtractionOutput.normalize_map(%{
+                 "repetitive_processes_pain_points" => %{"status" => "known", "items" => []}
+               })
+
+      assert {:error, {:invalid_diagnosis, :current_tools_systems, :invalid_item}} =
+               ExtractionOutput.normalize_map(%{
+                 "current_tools_systems" => %{
+                   "status" => "known",
+                   "items" => [%{"category" => "pm"}]
+                 }
+               })
+    end
   end
 
   describe "normalize_map/1" do
