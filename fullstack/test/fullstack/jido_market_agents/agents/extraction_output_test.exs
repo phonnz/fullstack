@@ -38,6 +38,26 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       end
     end
 
+    test "schema/0 defines closed team_size status count and notes" do
+      team_size = ExtractionOutput.schema()["properties"]["team_size"]
+
+      assert team_size["type"] == ["object", "null"]
+
+      assert team_size["properties"]["status"] == %{
+               "type" => "string",
+               "enum" => ["known", "unknown"]
+             }
+
+      assert team_size["properties"]["count"] == %{
+               "type" => ["integer", "null"],
+               "minimum" => 0
+             }
+
+      assert team_size["properties"]["notes"] == %{"type" => ["string", "null"]}
+      assert team_size["required"] == ["status", "count", "notes"]
+      assert team_size["additionalProperties"] == false
+    end
+
     test "declares exactly the canonical field keys, no more, no fewer" do
       schema = ExtractionOutput.schema()
       expected_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> Enum.sort()

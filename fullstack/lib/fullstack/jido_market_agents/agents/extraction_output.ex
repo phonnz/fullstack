@@ -62,14 +62,29 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   @spec schema() :: map()
   def schema do
     properties =
-      Map.new(@fields, fn field ->
-        {to_string(field), %{"type" => ["string", "null"]}}
-      end)
+      @fields
+      |> Map.new(fn field -> {to_string(field), nullable_string()} end)
+      |> Map.put("team_size", team_size_schema())
 
     %{
       "type" => "object",
       "properties" => properties,
       "required" => Enum.map(@fields, &to_string/1),
+      "additionalProperties" => false
+    }
+  end
+
+  defp nullable_string, do: %{"type" => ["string", "null"]}
+
+  defp team_size_schema do
+    %{
+      "type" => ["object", "null"],
+      "properties" => %{
+        "status" => %{"type" => "string", "enum" => ["known", "unknown"]},
+        "count" => %{"type" => ["integer", "null"], "minimum" => 0},
+        "notes" => nullable_string()
+      },
+      "required" => ["status", "count", "notes"],
       "additionalProperties" => false
     }
   end
