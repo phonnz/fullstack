@@ -150,12 +150,19 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       assert item["additionalProperties"] == false
     end
 
-    test "declares exactly the canonical field keys, no more, no fewer" do
+    test "declares exactly the canonical field keys plus language wire metadata" do
       schema = ExtractionOutput.schema()
-      expected_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> Enum.sort()
+      field_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> Enum.sort()
 
-      assert Map.keys(schema["properties"]) |> Enum.sort() == expected_keys
-      assert Enum.sort(schema["required"]) == expected_keys
+      # language wire metadata is covered by the closed schema but lives
+      # OUTSIDE fields/0 (system-owned, not a business field)
+      metadata_keys = ["language_switch_requested", "output_language"]
+
+      assert Map.keys(schema["properties"]) |> Enum.sort() ==
+               Enum.sort(field_keys ++ metadata_keys)
+
+      # only the business fields are required
+      assert Enum.sort(schema["required"]) == field_keys
     end
 
     test "round-trips through Jason.encode/1" do

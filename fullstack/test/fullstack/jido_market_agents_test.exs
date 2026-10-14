@@ -10,14 +10,34 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
   # Canned provider output verifies plumbing, not live MiMo generation.
   defp canned_carpet_fields do
+    Map.merge(
+      %{
+        "country" => "Mexico",
+        "city" => "Mexico City",
+        "business_market" => "custom home furniture",
+        "initial_budget" => "300 euros",
+        "final_product_proposal" => "Custom carpet, 1.5 m x 0.30 m; delivery in 2 weeks",
+        "product_price" => "70 euros"
+      },
+      diagnosis_unknowns_json()
+    )
+  end
+
+  # Explicit-unknown diagnosis answers: the completeness contract requires
+  # an explicit answer for every diagnosis field — an explicit "unknown"
+  # state counts as collected.
+  defp diagnosis_unknowns do
     %{
-      "country" => "Mexico",
-      "city" => "Mexico City",
-      "business_market" => "custom home furniture",
-      "initial_budget" => "300 euros",
-      "final_product_proposal" => "Custom carpet, 1.5 m x 0.30 m; delivery in 2 weeks",
-      "product_price" => "70 euros"
+      team_size: %{status: "unknown", count: nil, notes: nil},
+      current_tools_systems: %{status: "unknown", items: []},
+      repetitive_processes_pain_points: %{status: "unknown", items: []},
+      digital_maturity: %{level: "unknown", evidence: nil},
+      metrics_baselines: %{status: "unknown", items: []}
     }
+  end
+
+  defp diagnosis_unknowns_json do
+    Map.new(diagnosis_unknowns(), fn {key, value} -> {Atom.to_string(key), value} end)
   end
 
   setup_all do
@@ -96,13 +116,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       agent = MarketValidator.new()
 
       {:ok, agent} =
-        MarketValidator.set(agent, %{
-          country: "Spain",
-          business_market: "fintech",
-          initial_budget: "50000",
-          final_product_proposal: "Payment app",
-          product_price: "9.99"
-        })
+        MarketValidator.set(
+          agent,
+          Map.merge(
+            %{
+              country: "Spain",
+              business_market: "fintech",
+              initial_budget: "50000",
+              final_product_proposal: "Payment app",
+              product_price: "9.99"
+            },
+            diagnosis_unknowns()
+          )
+        )
 
       assert {:complete, data} = MarketValidator.check_completeness(agent)
       assert data.country == "Spain"
@@ -113,13 +139,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       agent = MarketValidator.new()
 
       {:ok, agent} =
-        MarketValidator.set(agent, %{
-          country: "Spain",
-          business_market: "fintech",
-          initial_budget: "50000",
-          final_product_proposal: "Payment app",
-          product_price: "9.99"
-        })
+        MarketValidator.set(
+          agent,
+          Map.merge(
+            %{
+              country: "Spain",
+              business_market: "fintech",
+              initial_budget: "50000",
+              final_product_proposal: "Payment app",
+              product_price: "9.99"
+            },
+            diagnosis_unknowns()
+          )
+        )
 
       assert {:complete, _} = MarketValidator.check_completeness(agent)
     end
@@ -158,13 +190,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       agent = MarketValidator.new()
 
       {:ok, agent} =
-        MarketValidator.set(agent, %{
-          country: "Spain",
-          business_market: "fintech",
-          initial_budget: "50000",
-          final_product_proposal: "Payment app",
-          product_price: "9.99"
-        })
+        MarketValidator.set(
+          agent,
+          Map.merge(
+            %{
+              country: "Spain",
+              business_market: "fintech",
+              initial_budget: "50000",
+              final_product_proposal: "Payment app",
+              product_price: "9.99"
+            },
+            diagnosis_unknowns()
+          )
+        )
 
       assert {:complete, data} = MarketValidator.validate_data(agent)
       assert data.country == "Spain"
@@ -203,13 +241,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       agent = MarketValidator.new()
 
       {:ok, agent} =
-        MarketValidator.set(agent, %{
-          country: "Spain",
-          business_market: "fintech",
-          initial_budget: "50000",
-          final_product_proposal: "Payment app",
-          product_price: "9.99"
-        })
+        MarketValidator.set(
+          agent,
+          Map.merge(
+            %{
+              country: "Spain",
+              business_market: "fintech",
+              initial_budget: "50000",
+              final_product_proposal: "Payment app",
+              product_price: "9.99"
+            },
+            diagnosis_unknowns()
+          )
+        )
 
       summary = MarketValidator.format_extraction_summary(agent)
       assert summary =~ "Country: Spain"
@@ -379,15 +423,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
     end
 
     test "normalizes complete JSON through the same schema", %{mimo_responses: responses} do
-      fields = %{
-        "country" => "Spain",
-        "city" => "Madrid",
-        "business_market" => "fintech",
-        "initial_budget" => 50000,
-        "final_product_proposal" => "Payment app",
-        "product_price" => 9.99,
-        "unexpected_model_field" => "ignored"
-      }
+      fields =
+        Map.merge(
+          %{
+            "country" => "Spain",
+            "city" => "Madrid",
+            "business_market" => "fintech",
+            "initial_budget" => 50000,
+            "final_product_proposal" => "Payment app",
+            "product_price" => 9.99,
+            "unexpected_model_field" => "ignored"
+          },
+          diagnosis_unknowns_json()
+        )
 
       stub_mimo(responses, "complete extraction", Jason.encode!(fields))
 
@@ -547,13 +595,17 @@ defmodule Fullstack.JidoMarketAgentsTest do
       id = "test-complete-#{System.unique_integer([:positive])}"
       JidoMarketAgents.subscribe(id)
 
-      data = %{
-        country: "Spain",
-        business_market: "fintech",
-        initial_budget: "50000 EUR",
-        final_product_proposal: "Mobile payment app",
-        product_price: "9.99 EUR"
-      }
+      data =
+        Map.merge(
+          %{
+            country: "Spain",
+            business_market: "fintech",
+            initial_budget: "50000 EUR",
+            final_product_proposal: "Mobile payment app",
+            product_price: "9.99 EUR"
+          },
+          diagnosis_unknowns()
+        )
 
       assert {:ok, :accepted, ^id} = JidoMarketAgents.send_message(id, data)
       assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
@@ -574,11 +626,17 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       # Turn 3: remaining fields → should trigger research
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{status: :researching}}, 2_000
 
@@ -679,13 +737,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       JidoMarketAgents.subscribe(id)
 
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 country: "Spain",
-                 business_market: "fintech",
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     country: "Spain",
+                     business_market: "fintech",
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
     end
@@ -759,13 +823,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       # Send complete data to trigger research
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 country: "Spain",
-                 business_market: "fintech",
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     country: "Spain",
+                     business_market: "fintech",
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{status: :researching}}, 2_000
 
@@ -833,13 +903,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       JidoMarketAgents.subscribe(id)
 
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 country: "Spain",
-                 business_market: "fintech",
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     country: "Spain",
+                     business_market: "fintech",
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{status: :researching}}, 2_000
 
@@ -897,11 +973,17 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       # Turn 3 — complete data
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{status: :researching}}, 2_000
     end
