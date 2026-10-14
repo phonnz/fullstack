@@ -133,7 +133,12 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
         business_market: "fintech",
         initial_budget: "50000 EUR",
         final_product_proposal: "Mobile payment app",
-        product_price: "9.99 EUR"
+        product_price: "9.99 EUR",
+        team_size: %{status: "unknown", count: nil, notes: nil},
+        current_tools_systems: %{status: "unknown", items: []},
+        repetitive_processes_pain_points: %{status: "unknown", items: []},
+        digital_maturity: %{level: "unknown", evidence: nil},
+        metrics_baselines: %{status: "unknown", items: []}
       }
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, complete_data)
@@ -229,7 +234,12 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
                Conversation.send_message(id, %{
                  initial_budget: "50000 EUR",
                  final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
+                 product_price: "9.99 EUR",
+                 team_size: %{status: "unknown", count: nil, notes: nil},
+                 current_tools_systems: %{status: "unknown", items: []},
+                 repetitive_processes_pain_points: %{status: "unknown", items: []},
+                 digital_maturity: %{level: "unknown", evidence: nil},
+                 metrics_baselines: %{status: "unknown", items: []}
                })
 
       assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}},

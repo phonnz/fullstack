@@ -185,14 +185,20 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       {:ok, _pid2} = kill_and_await_restart(id, pid)
       Conversation.subscribe(id)
 
-      # Turn 3, post-rehydration: give ONLY the remaining required fields.
-      # If country/business_market had been lost, completeness would fail
-      # and this would come back as :needs_data instead of :researching.
+      # Turn 3, post-rehydration: give ONLY the remaining required fields
+      # (the diagnosis contract now requires explicit diagnosis answers
+      # too). If country/business_market had been lost, completeness would
+      # fail and this would come back as :needs_data instead of :researching.
       assert {:ok, :accepted, ^id} =
                Conversation.send_message(id, %{
                  initial_budget: "50000 EUR",
                  final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
+                 product_price: "9.99 EUR",
+                 team_size: %{status: "unknown", count: nil, notes: nil},
+                 current_tools_systems: %{status: "unknown", items: []},
+                 repetitive_processes_pain_points: %{status: "unknown", items: []},
+                 digital_maturity: %{level: "unknown", evidence: nil},
+                 metrics_baselines: %{status: "unknown", items: []}
                })
 
       assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}},
@@ -213,6 +219,84 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       {:ok, _pid} = Conversation.ensure_started(id, user.id)
 
       assert {:ok, []} = Conversation.list_messages(id)
+    end
+  end
+
+  # ── Legacy six-field rows (pre-diagnosis contract) ──────────────────────────
+
+  describe "legacy six-field validated_data rows" do
+    test "pre-existing six-field row restores then waits for missing diagnosis" do
+      user = user_fixture()
+      {:ok, created} = Conversations.create(user.id)
+      id = created.id
+
+      # A row persisted BEFORE the diagnosis contract existed: exactly the
+      # old six flat fields, all complete (it used to qualify as complete).
+      legacy = %{
+        "country" => "Spain",
+        "city" => "Madrid",
+        "business_market" => "fintech",
+        "initial_budget" => "50000 EUR",
+        "final_product_proposal" => "Mobile payment app",
+        "product_price" => "9.99 EUR"
+      }
+
+      {:ok, record} =
+        Conversations.update_state(created, %{
+          status: "completed",
+          validated_data: legacy
+        })
+
+      assert record.validated_data == legacy
+
+      # Read-only attachment: restores without a crash and without any
+      # provider work.
+      {:ok, pid} = Conversation.ensure_started(id, user.id)
+      assert Process.alive?(pid)
+      Conversation.subscribe(id)
+
+      assert {:ok, _messages} = Conversation.list_messages(id)
+      assert {:ok, :completed, _messages} = Conversation.resume(id)
+      refute_received {:mimo_request, _}
+
+      # Explicit execution requalifies the diagnosis contract: the legacy
+      # six fields must NOT produce false completeness — the conversation
+      # waits for the missing diagnosis answers.
+      assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
+
+      assert_receive {:extraction_complete,
+                      %{conversation_id: ^id, status: :needs_data} = payload},
+                     2_000
+
+      follow_up = List.last(payload.messages)
+      assert follow_up.role == :assistant
+      # The follow-up requests the missing diagnosis answers explicitly
+      assert follow_up.content =~
+               "I still need: team size, current tools and systems, repetitive processes and pain points, digital maturity, baseline metrics"
+
+      # Explicit execution #2: a full diagnosis answer requalifies the
+      # legacy row as complete.
+      diagnosis = %{
+        team_size: %{status: "unknown", count: nil, notes: nil},
+        current_tools_systems: %{status: "unknown", items: []},
+        repetitive_processes_pain_points: %{status: "unknown", items: []},
+        digital_maturity: %{level: "unknown", evidence: nil},
+        metrics_baselines: %{status: "unknown", items: []}
+      }
+
+      assert {:ok, :accepted, ^id} = Conversation.send_message(id, diagnosis)
+
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
+
+      # The requalified diagnosis answers survive another process death:
+      # the next turn must not re-ask for them.
+      {:ok, pid2} = kill_and_await_restart(id, pid)
+      assert Process.alive?(pid2)
+      Conversation.subscribe(id)
+
+      assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
+
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
     end
   end
 
