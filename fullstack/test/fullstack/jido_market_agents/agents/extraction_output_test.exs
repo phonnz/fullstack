@@ -201,6 +201,33 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
              ]
     end
 
+    test "commercial_fields/0 and diagnosis_fields/0 partition the canonical field registry" do
+      commercial = [
+        :country,
+        :city,
+        :business_market,
+        :initial_budget,
+        :final_product_proposal,
+        :product_price
+      ]
+
+      diagnosis = [
+        :team_size,
+        :current_tools_systems,
+        :repetitive_processes_pain_points,
+        :digital_maturity,
+        :metrics_baselines
+      ]
+
+      assert ExtractionOutput.commercial_fields() == commercial
+      assert ExtractionOutput.diagnosis_fields() == diagnosis
+      assert length(ExtractionOutput.commercial_fields()) == 6
+      assert length(ExtractionOutput.diagnosis_fields()) == 5
+
+      assert ExtractionOutput.commercial_fields() ++ ExtractionOutput.diagnosis_fields() ==
+               ExtractionOutput.fields()
+    end
+
     test "keeps the six commercial field atoms in canonical relative order" do
       fields = ExtractionOutput.fields()
 

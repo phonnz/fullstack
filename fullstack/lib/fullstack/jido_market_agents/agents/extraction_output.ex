@@ -32,13 +32,16 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   by this module.
   """
 
-  @fields [
+  @commercial_fields [
     :country,
     :city,
     :business_market,
     :initial_budget,
     :final_product_proposal,
-    :product_price,
+    :product_price
+  ]
+
+  @diagnosis_fields [
     :team_size,
     :current_tools_systems,
     :repetitive_processes_pain_points,
@@ -46,9 +49,19 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     :metrics_baselines
   ]
 
+  @fields @commercial_fields ++ @diagnosis_fields
+
   @doc "Returns the eleven extractable field atoms, in canonical order."
   @spec fields() :: [atom()]
   def fields, do: @fields
+
+  @doc "Returns the six commercial scalar field atoms, in canonical order."
+  @spec commercial_fields() :: [atom()]
+  def commercial_fields, do: @commercial_fields
+
+  @doc "Returns the five structured diagnosis field atoms, in canonical order."
+  @spec diagnosis_fields() :: [atom()]
+  def diagnosis_fields, do: @diagnosis_fields
 
   @doc """
   Returns a closed JSON-schema object for CLI structured-output generation.
