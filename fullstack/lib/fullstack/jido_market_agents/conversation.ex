@@ -42,6 +42,9 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :messages,
     :validator_agent,
     :researcher_agent,
+    :analyzer_agent,
+    :systems_agent,
+    :strategy_agent,
     :status,
     :validated_data,
     :user_id,
@@ -183,6 +186,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
              mode: restored_record_mode(record),
              pending_stage: restored_stage(pipeline_control(record)["pending_stage"]),
              validated_data: record.validated_data,
+             result_maps: %{
+               analysis: record.business_analysis,
+               systems: record.systems_strategy,
+               tech_strategy: record.tech_strategy
+             },
              messages: Enum.map(Conversations.list_messages(record.id), &restored_message/1)
            }}
       end
@@ -252,17 +260,28 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   defp pipeline_control_from_data(data), do: (data || %{})["_pipeline"] || %{}
 
-  defp restored_results(messages) do
-    Enum.reduce(messages, %{}, fn message, results ->
-      type = message.metadata["type"] || message.metadata[:type]
+  # Downstream stages are durable in the record's nullable result columns
+  # ("persisted result maps"); only research is durable in a typed message.
+  # A cleared column means the boundary was invalidated, so columns win
+  # unconditionally over any surviving history message.
+  defp restored_results(messages, result_maps) do
+    %{
+      research: restored_research(messages),
+      analysis: result_maps.analysis,
+      systems: result_maps.systems,
+      tech_strategy: result_maps.tech_strategy
+    }
+    |> Enum.reject(fn {_stage, result} -> is_nil(result) end)
+    |> Map.new()
+  end
 
-      case type do
-        "market_research" -> Map.put(results, :research, message.metadata["result"])
-        "business_analysis" -> Map.put(results, :analysis, message.metadata["result"])
-        "systems_strategy" -> Map.put(results, :systems, message.metadata["result"])
-        "tech_strategy" -> Map.put(results, :tech_strategy, message.metadata["result"])
-        _ -> results
-      end
+  defp restored_research(messages) do
+    Enum.find_value(Enum.reverse(messages), fn message ->
+      metadata = Map.get(message, :metadata, %{})
+      type = metadata["type"] || metadata[:type]
+
+      if type == "market_research",
+        do: metadata["result"] || metadata[:result]
     end)
   end
 
@@ -317,7 +336,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   defp fresh_state(id, user_id, researcher) do
-    %__MODULE__{
+    state = %__MODULE__{
       id: id,
       messages: [],
       validator_agent: MarketValidator.new(id: "#{id}_validator"),
@@ -330,6 +349,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       record_id: nil,
       persisted_count: 0
     }
+
+    rebuild_analysis_agents(state)
   end
 
   # Rehydration (R5/D3/D4): rebuilds the validator agent only through its
@@ -339,7 +360,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp restored_state(id, user_id, researcher, restored) do
     validator = rebuild_validator(id, restored.validated_data)
 
-    %__MODULE__{
+    state = %__MODULE__{
       id: id,
       messages: restored.messages,
       validator_agent: validator,
@@ -352,12 +373,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       boundary_version:
         pipeline_control_from_data(restored.validated_data)["boundary_version"] || 0,
       input_fingerprint: pipeline_control_from_data(restored.validated_data)["input_fingerprint"],
-      results: restored_results(restored.messages),
+      results: restored_results(restored.messages, restored.result_maps),
       validated_data: restored.validated_data,
       user_id: user_id,
       record_id: restored.record_id,
       persisted_count: length(restored.messages)
     }
+
+    rebuild_analysis_agents(state)
   end
 
   defp rebuild_validator(id, nil) do
@@ -384,6 +407,70 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         {:ok, validator} = MarketValidator.set(validator, replacement)
         validator
     end
+  end
+
+  # Rehydration (P54): every downstream agent is rebuilt from the persisted
+  # result maps with `new/1` plus one `set/2` of each COMPLETE normalized
+  # map. Jido's generated `set/2` deep-merges nested maps, so partial
+  # updates would preserve stale nested keys — always replace, never merge,
+  # and never serialize a Jido struct into or out of persistence.
+  defp rebuild_analysis_agents(state) do
+    %{
+      state
+      | analyzer_agent:
+          build_downstream(
+            BusinessAnalyzer,
+            downstream_inputs(state, [
+              {:research_output, MarketResearchOutput, state.results[:research]}
+            ])
+          ),
+        systems_agent:
+          build_downstream(
+            SystemsAgent,
+            downstream_inputs(state, [
+              {:research_output, MarketResearchOutput, state.results[:research]},
+              {:analysis_output, BusinessAnalysisOutput, state.results[:analysis]}
+            ])
+          ),
+        strategy_agent:
+          build_downstream(
+            StrategyAgent,
+            downstream_inputs(state, [
+              {:research_output, MarketResearchOutput, state.results[:research]},
+              {:analysis_output, BusinessAnalysisOutput, state.results[:analysis]},
+              {:systems_output, SystemsStrategyOutput, state.results[:systems]}
+            ])
+          )
+    }
+  end
+
+  defp downstream_inputs(state, upstreams) do
+    base = %{
+      validated_data: business_data(state),
+      refinements: %{},
+      output_language: state.validator_agent.state.output_language
+    }
+
+    Enum.reduce(upstreams, base, fn {key, module, raw}, inputs ->
+      result_input(inputs, key, module, raw)
+    end)
+  end
+
+  # A persisted result map carries its `"_meta"` envelope and JSON-roundtrip
+  # string keys; the closed output contracts reject reserved keys outright,
+  # so clean and normalize first and skip absent or invalid maps rather than
+  # letting `new/1` raise during initialization.
+  defp result_input(inputs, key, module, raw) do
+    case module.normalize_map(clean_result(raw)) do
+      {:error, _} -> inputs
+      normalized -> Map.put(inputs, key, normalized)
+    end
+  end
+
+  defp build_downstream(module, inputs) do
+    module.new(state: inputs)
+  rescue
+    ArgumentError -> module.new(state: %{refinements: %{}})
   end
 
   # The language is system-owned control metadata (`validated_data["_pipeline"]`),
@@ -693,15 +780,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   defp run_stage(state, :analysis) do
-    agent =
-      BusinessAnalyzer.new(
-        state: %{
-          validated_data: business_data(state),
-          research_output: clean_result(state.results[:research]),
-          refinements: %{},
-          output_language: state.validator_agent.state.output_language
-        }
-      )
+    agent = state.analyzer_agent
 
     start_stage(state, :analysis, fn ->
       AgentTelemetry.span(:analysis, %{conversation_id: state.id}, fn ->
@@ -711,16 +790,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   defp run_stage(state, :systems) do
-    agent =
-      SystemsAgent.new(
-        state: %{
-          validated_data: business_data(state),
-          research_output: clean_result(state.results[:research]),
-          analysis_output: clean_result(state.results[:analysis]),
-          refinements: %{},
-          output_language: state.validator_agent.state.output_language
-        }
-      )
+    agent = state.systems_agent
 
     start_stage(state, :systems, fn ->
       AgentTelemetry.span(:systems, %{conversation_id: state.id}, fn ->
@@ -730,17 +800,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   defp run_stage(state, :tech_strategy) do
-    agent =
-      StrategyAgent.new(
-        state: %{
-          validated_data: business_data(state),
-          research_output: clean_result(state.results[:research]),
-          analysis_output: clean_result(state.results[:analysis]),
-          systems_output: clean_result(state.results[:systems]),
-          refinements: %{},
-          output_language: state.validator_agent.state.output_language
-        }
-      )
+    agent = state.strategy_agent
 
     start_stage(state, :tech_strategy, fn ->
       AgentTelemetry.span(:tech_strategy, %{conversation_id: state.id}, fn ->
@@ -785,12 +845,13 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
     case commit_stage(state, transition) do
       {:ok, outcome, state} ->
-        state = %{
-          state
-          | status: status,
-            pending_stage: next,
-            results: Map.put(state.results, stage, result)
-        }
+        state =
+          rebuild_analysis_agents(%{
+            state
+            | status: status,
+              pending_stage: next,
+              results: Map.put(state.results, stage, result)
+          })
 
         state =
           if outcome == :committed,
@@ -1134,7 +1195,10 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
     case persist_owned_boundary(state, attrs) do
       {:ok, state} ->
-        state = if changed, do: %{state | results: %{}}, else: state
+        state =
+          if changed,
+            do: rebuild_analysis_agents(%{state | results: %{}}),
+            else: state
 
         if changed and state.record_id do
           broadcast(state, :stage_invalidated, %{

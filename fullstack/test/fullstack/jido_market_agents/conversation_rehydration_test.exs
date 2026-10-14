@@ -393,8 +393,192 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
     end
   end
 
-  # ── No-duplicate-on-resume ──────────────────────────────────────────────────
+  # ── P54: downstream agents rebuilt from persisted result maps ──────────────
 
+  # A persisted result map as `persist_stage_transition` writes it: JSON-ish
+  # string keys plus the reserved `"_meta"` envelope.
+  defp persisted_analysis do
+    %{
+      "viable_offer" => nil,
+      "evidence" => [],
+      "blocker" => "Demand unknown",
+      "experiment" => "Interview buyers",
+      "stale_note" => "must not survive normalization",
+      "_meta" => %{"stage" => "analysis", "boundary_version" => 3}
+    }
+  end
+
+  defp persisted_systems do
+    base = %{
+      "current_state" => "Needs work",
+      "priority" => "high",
+      "actions" => ["Act"],
+      "kpis" => ["Leads"],
+      "pitfall" => "Skip nothing"
+    }
+
+    systems =
+      Map.new(
+        [:acquisition, :authority, :conversion, :delivery_retention, :referrals, :information],
+        &{to_string(&1), base}
+      )
+
+    systems =
+      systems
+      |> Map.put(
+        "authority",
+        Map.put(base, "layers", %{
+          "personal_discourse" => "Discourse",
+          "third_party_endorsement" => "Endorse",
+          "success_cases" => "Cases"
+        })
+      )
+      |> Map.put(
+        "conversion",
+        Map.put(base, "phases", %{
+          "qualification" => "Qualify",
+          "education_nurturing" => "Educate",
+          "proposal" => "Propose",
+          "close" => "Close"
+        })
+      )
+      |> Map.put(
+        "information",
+        base
+        |> Map.put("kpis", ["Leads", "Conversion", "Retention"])
+        |> Map.put("upward_information_flow", %{
+          "channel" => "Weekly",
+          "incentive" => "Ack",
+          "review_cadence" => "Weekly"
+        })
+      )
+
+    %{
+      "systems" => systems,
+      "sequencing" => [
+        "acquisition",
+        "authority",
+        "conversion",
+        "delivery_retention",
+        "referrals",
+        "information"
+      ],
+      "quarterly_focus" => "Improve acquisition",
+      "_meta" => %{"stage" => "systems", "boundary_version" => 4}
+    }
+  end
+
+  describe "analysis agents rebuild from persisted result maps" do
+    test "rehydration reconstructs all agents with new/1 and set/2" do
+      user = user_fixture()
+      {:ok, created} = Conversations.create(user.id)
+      id = created.id
+
+      facts = %{
+        "country" => "Spain",
+        "city" => "Madrid",
+        "business_market" => "fintech",
+        "initial_budget" => "50000 EUR",
+        "final_product_proposal" => "Payment app",
+        "product_price" => "10 EUR",
+        "team_size" => %{"status" => "unknown", "count" => nil, "notes" => nil},
+        "current_tools_systems" => %{"status" => "unknown", "items" => []},
+        "repetitive_processes_pain_points" => %{"status" => "unknown", "items" => []},
+        "digital_maturity" => %{"level" => "unknown", "evidence" => nil},
+        "metrics_baselines" => %{"status" => "unknown", "items" => []}
+      }
+
+      research = %{
+        "market_evidence" => [],
+        "market_gaps" => [],
+        "demand_signals" => [],
+        "sources" => [],
+        "limitations" => ["No retrieval"],
+        "_meta" => %{"stage" => "research", "boundary_version" => 2}
+      }
+
+      {:ok, record} =
+        Conversations.update_state(created, %{
+          status: "building_strategy",
+          validated_data: facts,
+          business_analysis: persisted_analysis(),
+          systems_strategy: persisted_systems()
+        })
+
+      {:ok, _message} =
+        Conversations.append_message(id, %{
+          role: "assistant",
+          content: "research",
+          metadata: %{"type" => "market_research", "result" => research}
+        })
+
+      {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+      state = :sys.get_state(pid)
+
+      # Every agent is a live `%Jido.Agent{}` rebuilt through `new/1` + `set/2`
+      # from maps — never a deserialized struct.
+      alias Fullstack.JidoMarketAgents.Agents
+
+      assert state.validator_agent.agent_module == Agents.MarketValidator
+      assert state.researcher_agent.agent_module == Agents.MarketResearcher
+      assert state.analyzer_agent.agent_module == Agents.BusinessAnalyzer
+      assert state.systems_agent.agent_module == Agents.SystemsAgent
+      assert state.strategy_agent.agent_module == Agents.StrategyAgent
+
+      # Full normalized replacement maps: `"_meta"` and stale extra keys
+      # must not survive into agent state.
+      assert state.analyzer_agent.state.research_output == %{
+               market_evidence: [],
+               market_gaps: [],
+               demand_signals: [],
+               sources: [],
+               limitations: ["No retrieval"]
+             }
+
+      assert state.analyzer_agent.state.validated_data.country == "Spain"
+
+      assert state.analyzer_agent.state.validated_data.team_size == %{
+               status: "unknown",
+               count: nil,
+               notes: nil
+             }
+
+      assert state.systems_agent.state.analysis_output == %{
+               viable_offer: nil,
+               evidence: [],
+               blocker: "Demand unknown",
+               experiment: "Interview buyers"
+             }
+
+      assert state.strategy_agent.state.analysis_output == %{
+               viable_offer: nil,
+               evidence: [],
+               blocker: "Demand unknown",
+               experiment: "Interview buyers"
+             }
+
+      assert state.strategy_agent.state.systems_output.quarterly_focus == "Improve acquisition"
+
+      assert state.strategy_agent.state.systems_output.sequencing == [
+               "acquisition",
+               "authority",
+               "conversion",
+               "delivery_retention",
+               "referrals",
+               "information"
+             ]
+
+      assert state.strategy_agent.state.systems_output.systems.acquisition == %{
+               current_state: "Needs work",
+               priority: "high",
+               actions: ["Act"],
+               kpis: ["Leads"],
+               pitfall: "Skip nothing"
+             }
+    end
+  end
+
+  # ── No-duplicate-on-resume ──────────────────────────────────────────────────
   describe "No duplicate persistence after rehydration" do
     test "restored messages are not re-persisted; only the new turn adds rows" do
       user = user_fixture()
