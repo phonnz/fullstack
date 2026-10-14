@@ -209,4 +209,78 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert Conversations.get_for_user(id, user.id).business_analysis["blocker"] ==
              "Demand unknown"
   end
+
+  def systems do
+    system = %{
+      current_state: "Needs improvement",
+      priority: "high",
+      actions: ["Run an experiment"],
+      kpis: ["Leads"],
+      pitfall: "Do not skip foundational work"
+    }
+
+    systems =
+      Map.new(
+        [:acquisition, :authority, :conversion, :delivery_retention, :referrals, :information],
+        &{&1, system}
+      )
+      |> Map.update!(
+        :authority,
+        &Map.put(&1, :layers, %{
+          personal_discourse: "Explain proven capabilities",
+          third_party_endorsement: "Collect endorsements",
+          success_cases: "Collect customer outcomes"
+        })
+      )
+      |> Map.update!(
+        :conversion,
+        &Map.put(&1, :phases, %{
+          qualification: "Identify suitable buyers",
+          education_nurturing: "Explain the problem",
+          proposal: "Present the offer",
+          close: "Agree on the next step"
+        })
+      )
+      |> Map.update!(
+        :information,
+        &Map.merge(&1, %{
+          kpis: ["Leads", "Conversion", "Retention"],
+          upward_information_flow: %{
+            channel: "Weekly frontline feedback",
+            incentive: "Recognize actionable feedback",
+            review_cadence: "Weekly"
+          }
+        })
+      )
+
+    %{
+      systems: systems,
+      sequencing:
+        Enum.map(
+          [:acquisition, :authority, :conversion, :delivery_retention, :referrals, :information],
+          &to_string/1
+        ),
+      quarterly_focus: "Improve acquisition"
+    }
+  end
+
+  test "analysis success persists then schedules systems", %{id: id, user: user} do
+    Conversation.send_message(id, data())
+    assert_receive {:provider, worker, "researcher", _}, 1_000
+    reply(worker, research())
+    assert_receive {:provider, worker, "analyzer", _}, 1_000
+    reply(worker, analysis())
+    assert_receive {:analysis_complete, %{status: :building_strategy}}, 1_000
+
+    assert Conversations.get_for_user(id, user.id).business_analysis["blocker"] ==
+             "Demand unknown"
+
+    assert_receive {:provider, worker, "systems", messages}, 1_000
+    assert List.last(messages)["content"] =~ "Demand unknown"
+    reply(worker, systems())
+    assert_receive {:systems_complete, _}, 1_000
+
+    assert Conversations.get_for_user(id, user.id).systems_strategy["quarterly_focus"] ==
+             "Improve acquisition"
+  end
 end

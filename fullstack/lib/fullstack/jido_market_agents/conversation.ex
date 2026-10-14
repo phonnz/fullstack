@@ -15,7 +15,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher}
   alias Fullstack.JidoMarketAgents.Conversations
-  alias Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer
+  alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, SystemsAgent}
   alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
 
   @pubsub Fullstack.PubSub
@@ -535,14 +535,46 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
      end)}
   end
 
+  defp run_stage(state, :systems) do
+    agent =
+      SystemsAgent.new(
+        state: %{
+          validated_data: business_data(state),
+          research_output: clean_result(state.results[:research]),
+          analysis_output: clean_result(state.results[:analysis]),
+          refinements: %{},
+          output_language: state.validator_agent.state.output_language
+        }
+      )
+
+    {:noreply,
+     launch(state, :systems, fn ->
+       AgentTelemetry.span(:systems, %{conversation_id: state.id}, fn ->
+         SystemsAgent.build(agent)
+       end)
+     end)}
+  end
+
   defp business_data(state),
     do: Map.drop(state.validated_data || %{}, ["_pipeline", :_pipeline, "_meta", :_meta])
 
   defp clean_result(result), do: Map.drop(result || %{}, ["_meta", :_meta])
 
   defp stage_success(state, stage, result) do
-    next = if stage == :research, do: :analysis, else: nil
-    status = if stage == :research, do: :analyzing, else: :completed
+    next =
+      case stage do
+        :research -> :analysis
+        :analysis -> :systems
+        :systems -> nil
+      end
+
+    status =
+      case stage do
+        :research -> :analyzing
+        :analysis -> :building_strategy
+        :systems -> :completed
+      end
+
     fingerprint = stage_input_fingerprint(state, stage)
     state = %{state | input_fingerprint: fingerprint}
     state = persist_status(state, state.status)
@@ -624,6 +656,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
+  defp stage_event(:systems), do: :systems_complete
   defp stage_event(:analysis), do: :analysis_complete
   defp stage_event(:research), do: :research_complete
 
