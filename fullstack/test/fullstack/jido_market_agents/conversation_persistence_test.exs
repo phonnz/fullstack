@@ -14,6 +14,17 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
   alias Fullstack.JidoMarketAgents.Conversation
   alias Fullstack.JidoMarketAgents.Conversations
 
+  defmodule StructuredResearchBackend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(_, _),
+      do:
+        {:ok,
+         ~s({"market_evidence":[],"market_gaps":[],"demand_signals":[],"sources":[],"limitations":["No retrieval"]})}
+  end
+
   setup_all do
     responses = start_supervised!({Agent, fn -> %{} end})
 
@@ -260,5 +271,45 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
 
       assert length(db_messages) == length(in_memory_messages)
     end
+  end
+
+  test "structured research persists string content and normalized result metadata" do
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    Application.put_env(
+      :fullstack,
+      Fullstack.JidoMarketAgents,
+      Keyword.put(config, :researcher_backend, {StructuredResearchBackend, []})
+    )
+
+    on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    user = user_fixture()
+    id = start_conversation_for(user)
+
+    data = %{
+      country: "Spain",
+      business_market: "fintech",
+      initial_budget: "50000 EUR",
+      final_product_proposal: "Payment app",
+      product_price: "10 EUR",
+      team_size: %{status: "unknown", count: nil, notes: nil},
+      current_tools_systems: %{status: "unknown", items: []},
+      repetitive_processes_pain_points: %{status: "unknown", items: []},
+      digital_maturity: %{level: "unknown", evidence: nil},
+      metrics_baselines: %{status: "unknown", items: []}
+    }
+
+    assert {:ok, :accepted, ^id} = Conversation.send_message(id, data)
+    assert_receive {:research_complete, %{conversation_id: ^id}}, 2_000
+    record = find_record(user)
+
+    result =
+      Conversations.list_messages(record.id)
+      |> Enum.find(&(&1.metadata["type"] == "research_result"))
+
+    assert is_binary(result.content)
+    assert Jason.decode!(result.content) == result.metadata["result"]
+    assert result.metadata["result"]["sources"] == []
+    assert result.metadata["result"]["limitations"] == ["No retrieval"]
   end
 end

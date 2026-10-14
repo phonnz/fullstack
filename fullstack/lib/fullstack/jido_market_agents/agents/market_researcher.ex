@@ -17,13 +17,6 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
   alias Fullstack.JidoMarketAgents.Agents.MarketResearchOutput
 
   def research(agent) do
-    country = agent.state.country
-    city = agent.state[:city]
-    market = agent.state.business_market
-    product = agent.state.final_product_proposal
-
-    location = if city && city != "", do: "#{city}, #{country}", else: country
-
     prompt = prompt(agent)
 
     messages = [
@@ -38,7 +31,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
            response_format: {:json_object, MarketResearchOutput.schema()}
          ) do
       {:ok, content} ->
-        {:ok, %{research_result: content, location: location, market: market, product: product}}
+        parse_result(content)
 
       {:error, reason} ->
         {:error, {:research_failed, reason}}
@@ -63,4 +56,30 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
     Distinguish market hypotheses from user facts; do not decide a viable offer or a strategy.
     """
   end
+
+  defp parse_result(content) when is_binary(content) do
+    content = String.trim(content)
+
+    json =
+      case Regex.run(~r/\A```(?:json)?\s*(.*?)\s*```\z/s, content, capture: :all_but_first) do
+        [json] -> json
+        nil -> content
+      end
+
+    case Jason.decode(json) do
+      {:ok, raw} when is_map(raw) ->
+        case MarketResearchOutput.normalize_map(raw) do
+          {:error, _} = error -> error
+          result -> {:ok, result}
+        end
+
+      {:ok, _} ->
+        {:error, {:parse_failed, :not_a_map}}
+
+      {:error, reason} ->
+        {:error, {:parse_failed, {:json_parse, reason}}}
+    end
+  end
+
+  defp parse_result(_content), do: {:error, {:parse_failed, :invalid_content}}
 end

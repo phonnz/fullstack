@@ -4,7 +4,12 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
   # writing the same application env key (see llm_test.exs for the same rule).
   use ExUnit.Case, async: false
 
-  alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher, ExtractionOutput}
+  alias Fullstack.JidoMarketAgents.Agents.{
+    MarketValidator,
+    MarketResearcher,
+    ExtractionOutput,
+    MarketResearchOutput
+  }
 
   @app :fullstack
   @scope Fullstack.JidoMarketAgents
@@ -60,11 +65,13 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
     @impl true
     def chat_completion(_messages, opts) do
       send(self(), {:backend_called, __MODULE__, opts})
-      {:ok, "researcher backend reply"}
+
+      {:ok,
+       ~s({"market_evidence":[],"market_gaps":[],"demand_signals":[],"sources":[],"limitations":["No retrieval"]})}
     end
 
     @impl true
-    def capabilities(_opts), do: []
+    def capabilities(_opts), do: [:json_object]
 
     @impl true
     def validate_config(_opts), do: :ok
@@ -126,7 +133,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
   end
 
   describe "MarketResearcher.research/1 dispatch" do
-    test "calls LLM.chat_completion(:researcher, ..., response_format: :text)" do
+    test "calls LLM.chat_completion(:researcher, ..., response_format: {:json_object, schema})" do
       put_backends(
         {FakeValidatorBackend, model: "v-model"},
         {FakeResearcherBackend, model: "r-model"}
@@ -143,11 +150,11 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
           })
         end)
 
-      assert {:ok, %{research_result: "researcher backend reply"}} =
+      assert {:ok, %{market_evidence: [], limitations: ["No retrieval"]}} =
                MarketResearcher.research(agent)
 
       assert_received {:backend_called, FakeResearcherBackend, opts}
-      assert Keyword.get(opts, :response_format) == :text
+      assert Keyword.get(opts, :response_format) == {:json_object, MarketResearchOutput.schema()}
       assert Keyword.get(opts, :model) == "r-model"
 
       # The validator backend is never touched by research.

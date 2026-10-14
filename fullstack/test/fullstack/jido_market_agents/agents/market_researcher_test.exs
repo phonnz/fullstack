@@ -51,4 +51,36 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcherTest do
     assert prompt =~ "demand_signals"
     assert prompt == MarketResearcher.prompt(agent)
   end
+
+  test "research/1 normalizes JSON and tags provider or parse failure", %{agent: agent} do
+    raw = %{
+      "market_evidence" => [%{"claim" => " Rival offers payments "}],
+      "limitations" => ["No retrieval"]
+    }
+
+    Process.put(:research_reply, {:ok, Jason.encode!(raw)})
+    assert {:ok, result} = MarketResearcher.research(agent)
+    assert result == MarketResearchOutput.normalize_map(raw)
+    assert hd(result.market_evidence).verification_status == "unverified"
+    Process.put(:research_reply, {:ok, "```json\n#{Jason.encode!(raw)}\n```"})
+    assert {:ok, ^result} = MarketResearcher.research(agent)
+    Process.put(:research_reply, {:error, :offline})
+    assert {:error, {:research_failed, :offline}} = MarketResearcher.research(agent)
+    Process.put(:research_reply, {:ok, "not JSON"})
+
+    assert {:error, {:parse_failed, {:json_parse, %Jason.DecodeError{}}}} =
+             MarketResearcher.research(agent)
+
+    Process.put(:research_reply, {:ok, "[]"})
+    assert {:error, {:parse_failed, :not_a_map}} = MarketResearcher.research(agent)
+    Process.put(:research_reply, {:ok, nil})
+    assert {:error, {:parse_failed, :invalid_content}} = MarketResearcher.research(agent)
+    Process.put(:research_reply, {:ok, ~s({"sources":["invented"]})})
+
+    assert {:error, {:invalid_market_research, :sources, :retrieval_unavailable}} =
+             MarketResearcher.research(agent)
+
+    Process.put(:research_reply, {:ok, ~s({"_pipeline":{}})})
+    assert {:error, {:reserved_key, :_pipeline}} = MarketResearcher.research(agent)
+  end
 end

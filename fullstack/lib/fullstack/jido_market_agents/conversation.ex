@@ -369,9 +369,9 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       {:ok, result} ->
         research_msg = %{
           role: :assistant,
-          content: result.research_result,
+          content: Jason.encode!(result, pretty: true),
           timestamp: DateTime.utc_now(),
-          metadata: %{type: :research_result}
+          metadata: %{type: :research_result, result: result}
         }
 
         state = %{
