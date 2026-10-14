@@ -10,7 +10,13 @@ defmodule Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer do
       output_language: [type: :string, required: false, default: nil]
     ]
 
-  alias Fullstack.JidoMarketAgents.Agents.{ExtractionOutput, MarketResearchOutput}
+  alias Fullstack.JidoMarketAgents.Agents.{
+    ExtractionOutput,
+    MarketResearchOutput,
+    BusinessAnalysisOutput
+  }
+
+  alias Fullstack.JidoMarketAgents.LLM
 
   defoverridable new: 1, set: 2
 
@@ -97,4 +103,47 @@ defmodule Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer do
     #{Jason.encode!(envelope)}
     """
   end
+
+  def analyze(agent) do
+    messages = [
+      %{
+        "role" => "system",
+        "content" => "Analyze business viability without inventing evidence."
+      },
+      %{"role" => "user", "content" => prompt(agent)}
+    ]
+
+    case LLM.chat_completion(:analyzer, messages,
+           response_format: {:json_object, BusinessAnalysisOutput.schema()}
+         ) do
+      {:ok, content} -> parse_result(content)
+      {:error, reason} -> {:error, {:analysis_failed, reason}}
+    end
+  end
+
+  defp parse_result(content) when is_binary(content) do
+    content = String.trim(content)
+
+    json =
+      case Regex.run(~r/\A```(?:json)?\s*(.*?)\s*```\z/s, content, capture: :all_but_first) do
+        [json] -> json
+        nil -> content
+      end
+
+    case Jason.decode(json) do
+      {:ok, raw} when is_map(raw) ->
+        case BusinessAnalysisOutput.normalize_map(raw) do
+          {:error, _} = error -> error
+          result -> {:ok, result}
+        end
+
+      {:ok, _} ->
+        {:error, {:parse_failed, :not_a_map}}
+
+      {:error, reason} ->
+        {:error, {:parse_failed, {:json_parse, reason}}}
+    end
+  end
+
+  defp parse_result(_content), do: {:error, {:parse_failed, :invalid_content}}
 end

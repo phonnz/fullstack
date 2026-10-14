@@ -77,6 +77,19 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
     def validate_config(_opts), do: :ok
   end
 
+  defmodule FakeAnalyzerBackend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(_, opts) do
+      send(self(), {:backend_called, __MODULE__, opts})
+
+      {:ok,
+       ~s({"viable_offer":null,"evidence":[],"blocker":"Demand unknown","experiment":"Interview buyers"})}
+    end
+  end
+
   setup do
     original = Application.get_env(@app, @scope, [])
 
@@ -323,5 +336,34 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
       assert opts[:model] == Atom.to_string(role)
       assert opts[:max_tokens] == byte_size(Atom.to_string(role))
     end
+  end
+
+  test "business analyzer uses its independent configured JSON backend" do
+    config = Application.get_env(@app, @scope, [])
+
+    Application.put_env(
+      @app,
+      @scope,
+      Keyword.put(
+        config,
+        :analyzer_backend,
+        {FakeAnalyzerBackend, model: "only-analyzer", max_tokens: 2345}
+      )
+    )
+
+    assert {:ok, %{viable_offer: nil}} =
+             Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer.analyze(
+               Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer.new()
+             )
+
+    assert_received {:backend_called, FakeAnalyzerBackend, opts}
+    assert opts[:model] == "only-analyzer"
+    assert opts[:max_tokens] == 2345
+
+    assert opts[:response_format] ==
+             {:json_object, Fullstack.JidoMarketAgents.Agents.BusinessAnalysisOutput.schema()}
+
+    refute_received {:backend_called, FakeValidatorBackend, _}
+    refute_received {:backend_called, FakeResearcherBackend, _}
   end
 end

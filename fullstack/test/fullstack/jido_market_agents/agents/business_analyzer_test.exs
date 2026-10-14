@@ -1,6 +1,30 @@
 defmodule Fullstack.JidoMarketAgents.Agents.BusinessAnalyzerTest do
   use ExUnit.Case, async: false
-  alias Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer
+  alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, BusinessAnalysisOutput}
+
+  defmodule Backend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(messages, opts) do
+      send(self(), {:analysis_dispatch, messages, opts})
+      Process.get(:analysis_reply, {:ok, "{}"})
+    end
+  end
+
+  setup do
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    Application.put_env(
+      :fullstack,
+      Fullstack.JidoMarketAgents,
+      Keyword.put(config, :analyzer_backend, {Backend, model: "analyzer-test"})
+    )
+
+    on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    :ok
+  end
 
   test "new/1 and set/2 accept validated data research and refinements" do
     agent =
@@ -80,5 +104,62 @@ defmodule Fullstack.JidoMarketAgents.Agents.BusinessAnalyzerTest do
     assert envelope.market_hypotheses == agent.state.research_output
     assert envelope.refinements == %{offer: "No new staff"}
     assert envelope.output_language == "es"
+  end
+
+  test "analyze/1 normalizes structured output and tags failures" do
+    agent = BusinessAnalyzer.new()
+
+    raw = %{
+      viable_offer: %{
+        name: "Booking",
+        target_customer: "Shops",
+        value_proposition: "Faster booking",
+        price: 100,
+        evidence_refs: ["e1"]
+      },
+      evidence: [
+        %{
+          id: "e1",
+          claim: "Needs faster booking",
+          source_kind: "user_input",
+          source_ref: "validated_data.pain_points"
+        }
+      ],
+      blocker: nil,
+      experiment: nil
+    }
+
+    Process.put(:analysis_reply, {:ok, Jason.encode!(raw)})
+    assert {:ok, result} = BusinessAnalyzer.analyze(agent)
+    assert result == BusinessAnalysisOutput.normalize_map(raw)
+    assert result.viable_offer.price == "100"
+    assert_received {:analysis_dispatch, messages, opts}
+    assert List.last(messages)["content"] == BusinessAnalyzer.prompt(agent)
+    assert opts[:response_format] == {:json_object, BusinessAnalysisOutput.schema()}
+    assert opts[:model] == "analyzer-test"
+
+    Process.put(
+      :analysis_reply,
+      {:ok, ~s({"viable_offer":null,"blocker":"Demand unknown","experiment":"Interview buyers"})}
+    )
+
+    assert {:ok, %{viable_offer: nil, blocker: "Demand unknown"}} =
+             BusinessAnalyzer.analyze(agent)
+
+    Process.put(:analysis_reply, {:error, :offline})
+    assert {:error, {:analysis_failed, :offline}} = BusinessAnalyzer.analyze(agent)
+    Process.put(:analysis_reply, {:ok, "not JSON"})
+
+    assert {:error, {:parse_failed, {:json_parse, %Jason.DecodeError{}}}} =
+             BusinessAnalyzer.analyze(agent)
+
+    Process.put(:analysis_reply, {:ok, "[]"})
+    assert {:error, {:parse_failed, :not_a_map}} = BusinessAnalyzer.analyze(agent)
+    Process.put(:analysis_reply, {:ok, nil})
+    assert {:error, {:parse_failed, :invalid_content}} = BusinessAnalyzer.analyze(agent)
+    Process.put(:analysis_reply, {:ok, "{}"})
+
+    assert {:error, {:invalid_business_analysis, :viable_offer, :blocker_experiment_required}} =
+             BusinessAnalyzer.analyze(agent)
   end
 end
