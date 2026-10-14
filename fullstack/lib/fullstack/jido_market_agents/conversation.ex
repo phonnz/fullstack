@@ -31,18 +31,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   @default_timeout 15_000
   @stages [:research, :analysis, :systems, :tech_strategy]
 
-  # The six flat fields extracted by `MarketValidator` (its schema, minus
-  # `extraction_history` — excluded per design D3). Shared by the T4
-  # partial-persistence fix (`partial_validated_data/1`) and rehydration
-  # (`normalize_validated_data_map/1`).
-  @validator_fields [
-    :country,
-    :city,
-    :business_market,
-    :initial_budget,
-    :final_product_proposal,
-    :product_price
-  ]
+  # Rehydration/persistence field allow-list, sourced from
+  # `ExtractionOutput.fields/0` (six commercial scalars + five diagnosis
+  # fields — never `extraction_history`, excluded per design D3). Shared by
+  # the T4 partial-persistence fix (`partial_validated_data/1`) and
+  # rehydration (`normalize_validated_data_map/1`).
 
   defstruct [
     :id,
@@ -374,40 +367,85 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp rebuild_validator(id, validated_data) when is_map(validated_data) do
     validator = MarketValidator.new(id: "#{id}_validator")
 
-    case normalize_validated_data_map(validated_data) do
+    replacement =
+      case restored_output_language(validated_data) do
+        nil ->
+          normalize_validated_data_map(validated_data)
+
+        language ->
+          Map.put(normalize_validated_data_map(validated_data), :output_language, language)
+      end
+
+    case replacement do
       empty when map_size(empty) == 0 ->
         validator
 
-      normalized ->
-        {:ok, validator} = MarketValidator.set(validator, normalized)
+      replacement ->
+        {:ok, validator} = MarketValidator.set(validator, replacement)
         validator
     end
   end
 
+  # The language is system-owned control metadata (`validated_data["_pipeline"]`),
+  # restored through `set/2` like any other validated state. Missing or
+  # invalid values leave it unset so the next turn re-derives it.
+  defp restored_output_language(data) do
+    control = Map.get(data, "_pipeline") || Map.get(data, :_pipeline)
+
+    hint =
+      if is_map(control),
+        do: Map.get(control, "output_language") || Map.get(control, :output_language)
+
+    if ExtractionOutput.valid_language?(hint), do: hint, else: nil
+  end
+
   # `validated_data` round-trips through a `:map` (jsonb-like) column, so
   # its keys may come back as strings or already as atoms — never assume
-  # either. Only the six known validator fields are accepted, mapped via
-  # `String.to_existing_atom/1` (safe: these atoms already exist, defined
-  # in `MarketValidator`'s schema) rather than `String.to_atom/1` on
-  # arbitrary database content. Nil values are dropped so `set/2` only
-  # receives fields that actually have data.
+  # either. Only the fields in `ExtractionOutput.fields/0` are accepted,
+  # mapped via `String.to_existing_atom/1` (safe: these atoms already
+  # exist, defined in `MarketValidator`'s schema) rather than
+  # `String.to_atom/1` on arbitrary database content. Nil values are
+  # dropped so `set/2` only receives fields that actually have data.
+  #
+  # Diagnosis values are re-normalized through `ExtractionOutput`
+  # (jsonb round-trips turn nested atom keys into strings, and a
+  # pre-existing six-field row has no diagnosis keys at all): missing
+  # diagnosis keys normalize to `nil`, so the rebuilt validator always
+  # receives the complete normalized diagnosis map (design (d)) and a
+  # legacy row simply requalifies by waiting for the missing answers.
   defp normalize_validated_data_map(data) do
-    Map.new(
-      for {key, value} <- data,
-          not is_nil(value),
-          field = validator_field_key(key),
-          not is_nil(field) do
-        {field, value}
-      end
-    )
+    scalars =
+      Map.new(
+        for {key, value} <- data,
+            not is_nil(value),
+            field = validator_field_key(key),
+            not is_nil(field),
+            field in ExtractionOutput.commercial_fields() do
+          {field, value}
+        end
+      )
+
+    Map.merge(scalars, rehydrated_diagnosis(data))
+  end
+
+  defp rehydrated_diagnosis(data) do
+    case ExtractionOutput.validate_diagnosis(data) do
+      {:ok, diagnosis} ->
+        diagnosis
+
+      {:error, _reason} ->
+        # A malformed legacy diagnosis payload never blocks display: it
+        # rehydrates as unanswered and is re-asked on explicit execution.
+        Map.new(ExtractionOutput.diagnosis_fields(), fn field -> {field, nil} end)
+    end
   end
 
   defp validator_field_key(key) when is_atom(key) do
-    if key in @validator_fields, do: key, else: nil
+    if key in ExtractionOutput.fields(), do: key, else: nil
   end
 
   defp validator_field_key(key) when is_binary(key) do
-    if key in Enum.map(@validator_fields, &Atom.to_string/1) do
+    if key in Enum.map(ExtractionOutput.fields(), &Atom.to_string/1) do
       String.to_existing_atom(key)
     else
       nil
@@ -1184,11 +1222,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   #
   # Shape choice: fields are included even when nil/empty (not filtered
   # out), the same shape `extract_data/1` returns for the complete case.
-  # This keeps `validated_data` a fixed 6-key map in both branches, so
-  # rehydration (`normalize_validated_data_map/1` below) has one shape to
-  # handle rather than two.
+  # This keeps `validated_data` a fixed 11-key map in both branches (the
+  # `ExtractionOutput.fields/0` shape), so rehydration
+  # (`normalize_validated_data_map/1` below) has one shape to handle
+  # rather than two.
   defp partial_validated_data(validator_agent) do
-    Map.new(@validator_fields, fn field -> {field, Map.get(validator_agent.state, field)} end)
+    Map.new(ExtractionOutput.fields(), fn field ->
+      {field, Map.get(validator_agent.state, field)}
+    end)
   end
 
   defp broadcast(state, event, extra) do
@@ -1202,6 +1243,18 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       |> Map.put(:request_ref, state.request_ref)
       |> Map.put(:conversation_id, state.id)
       |> Map.put(:messages, state.messages)
+      |> Map.put(:output_language, state.validator_agent.state.output_language)
+
+    # Last thing the backend does for this turn. A `broadcast.emitted`
+    # with no matching `liveview.handled` means the response was produced
+    # and the UI dropped it — which was entirely invisible before, since
+    # the LiveView's catch-all `handle_info/2` returns `{:noreply, socket}`
+    # without a trace.
+    AgentTelemetry.emit(
+      [:fullstack, :jido_market_agents, :broadcast, :emitted],
+      %{message_count: length(state.messages)},
+      %{conversation_id: state.id, event: event, status: status}
+    )
 
     Phoenix.PubSub.broadcast(@pubsub, topic(state.id), {event, payload})
     state
@@ -1218,7 +1271,12 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     do: normalize_validated_data(%{state | validated_data: %{}})
 
   defp normalize_validated_data(%{validated_data: data} = state) when is_map(data) do
+    # Owner-attached control metadata: system-owned JSON-safe state lives
+    # under the reserved `validated_data["_pipeline"]` area — outside the
+    # user-editable business fields. `output_language` is restored from
+    # here after a process death.
     control = %{
+      "output_language" => state.validator_agent.state.output_language,
       "run_ref" => state.run_ref,
       "request_ref" => state.request_ref,
       "input_fingerprint" => state.input_fingerprint,
