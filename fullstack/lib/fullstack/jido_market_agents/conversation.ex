@@ -446,15 +446,25 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       state.task != nil ->
         {:reply, {:error, :busy}, state}
 
-      stage != state.pending_stage ->
-        {:reply, {:error, :missing_prerequisite}, state}
-
       stage not in @stages ->
         {:reply, {:error, :invalid_stage}, state}
 
       true ->
-        {:noreply, state} = run_stage(%{state | mode: :manual}, stage)
-        {:reply, :accepted, state}
+        case cached_stage(state, stage) do
+          {:ok, result, state} ->
+            {:reply, {:ok, result}, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+
+          :miss ->
+            if stage == state.pending_stage do
+              {:noreply, state} = run_stage(%{state | mode: :manual}, stage)
+              {:reply, :accepted, state}
+            else
+              {:reply, {:error, :missing_prerequisite}, state}
+            end
+        end
     end
   end
 
@@ -568,6 +578,32 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     timeout = if is_integer(configured) and configured > 0, do: configured, else: 120_000
     timer = Process.send_after(self(), {:stage_timeout, task.ref}, timeout)
     %{state | task: task, task_stage: stage, task_timer: timer}
+  end
+
+  defp cached_stage(%{user_id: nil}, _stage), do: :miss
+
+  defp cached_stage(state, stage) do
+    binding = %{run_ref: state.run_ref, request_ref: state.request_ref}
+
+    case Conversations.cached_stage_result(
+           state.user_id,
+           state.record_id,
+           state.boundary_version,
+           binding,
+           stage,
+           stage_input_fingerprint(state, stage),
+           contract_version(stage)
+         ) do
+      {:ok, %{result: nil}} ->
+        :miss
+
+      {:ok, snapshot} ->
+        messages = Enum.map(snapshot.messages, &restored_message/1)
+        {:ok, snapshot.result, %{state | messages: messages, persisted_count: length(messages)}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp run_stage(state, :research) do

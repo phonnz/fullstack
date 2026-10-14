@@ -469,4 +469,177 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
       quarterly_focus: "Improve acquisition"
     }
   end
+
+  test "same fingerprint replay does not duplicate result message" do
+    user = user_fixture()
+    run = Ecto.UUID.generate()
+    request = Ecto.UUID.generate()
+
+    control = %{
+      "run_ref" => run,
+      "request_ref" => request,
+      "input_fingerprint" => "same-input",
+      "boundary_version" => 0
+    }
+
+    {:ok, record} = Conversations.create(user.id, %{validated_data: %{"_pipeline" => control}})
+
+    transition = %{
+      stage: :analysis,
+      run_ref: run,
+      request_ref: request,
+      input_fingerprint: "same-input",
+      contract_version: "business-analysis/1",
+      result_digest: "same-result",
+      completed_at: "2026-10-14T12:00:00Z",
+      result: %{viable_offer: nil, evidence: [], blocker: "Unknown", experiment: "Interview"},
+      status: :active,
+      mode: :manual,
+      pending_stage: :systems
+    }
+
+    assert {:ok, :committed, _} =
+             Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+    replay = %{transition | completed_at: "2026-10-14T13:00:00Z"}
+    owner = self()
+    handler = "replay-lock-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      [:fullstack, :repo, :query],
+      fn _, _, metadata, _ -> send(owner, {:sql, metadata.query}) end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+    outcome = Conversations.persist_stage_transition(user.id, record.id, 1, replay)
+    assert length(Conversations.list_messages(record.id)) == 1
+    assert {:ok, :replayed, snapshot} = outcome
+    assert snapshot.record.business_analysis["_meta"]["completed_at"] == transition.completed_at
+    assert_receive {:sql, query}
+    assert is_binary(query)
+    assert Enum.any?(drain_queries([query]), &String.contains?(&1, "FOR UPDATE"))
+
+    assert {:error, :not_found} =
+             Conversations.persist_stage_transition(user_fixture().id, record.id, 1, replay)
+  end
+
+  defp drain_queries(acc) do
+    receive do
+      {:sql, query} -> drain_queries([query | acc])
+    after
+      0 -> acc
+    end
+  end
+
+  defmodule CountingResearchBackend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(_, opts) do
+      send(opts[:owner], :paid_research)
+      StructuredResearchBackend.chat_completion([], [])
+    end
+  end
+
+  test "cached manual calls return durable results directly without messages or events" do
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    Application.put_env(
+      :fullstack,
+      Fullstack.JidoMarketAgents,
+      Keyword.put(config, :researcher_backend, {CountingResearchBackend, owner: self()})
+    )
+
+    on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    user = user_fixture()
+    id = start_conversation_for(user)
+    [{pid, _}] = Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, id)
+    run = Ecto.UUID.generate()
+    request = Ecto.UUID.generate()
+
+    Conversation.send_message(id, %{
+      __pipeline_request__: true,
+      message: complete_input(),
+      run_ref: run,
+      request_ref: request,
+      mode: :manual
+    })
+
+    assert_receive {:extraction_complete, _}, 1_000
+    assert :accepted = GenServer.call(pid, {:run_stage, :research, run, request})
+    assert_receive :paid_research, 1_000
+    assert_receive {:research_complete, payload}, 1_000
+    count = length(Conversations.list_messages(find_record(user).id))
+    assert {:ok, result} = GenServer.call(pid, {:run_stage, :research, run, request})
+    assert result == payload.market_research
+    assert length(Conversations.list_messages(find_record(user).id)) == count
+
+    assert {:error, :stale_binding} =
+             GenServer.call(pid, {:run_stage, :research, run, Ecto.UUID.generate()})
+
+    refute_receive :paid_research, 30
+    refute_receive {:research_complete, _}, 30
+    record = find_record(user)
+    data = update_in(record.validated_data, ["_pipeline", "boundary_version"], &(&1 + 1))
+    {:ok, _} = Conversations.update_state(record, %{validated_data: data})
+
+    assert {:error, :boundary_conflict} =
+             GenServer.call(pid, {:run_stage, :research, run, request})
+
+    refute_receive :paid_research, 30
+  end
+
+  test "changed fingerprint commits a replacement and clears descendants instead of replaying" do
+    user = user_fixture()
+    run = Ecto.UUID.generate()
+    request = Ecto.UUID.generate()
+
+    control = %{
+      "run_ref" => run,
+      "request_ref" => request,
+      "input_fingerprint" => "old",
+      "boundary_version" => 0
+    }
+
+    {:ok, record} = Conversations.create(user.id, %{validated_data: %{"_pipeline" => control}})
+
+    transition = %{
+      stage: :analysis,
+      run_ref: run,
+      request_ref: request,
+      input_fingerprint: "old",
+      contract_version: "business-analysis/1",
+      result_digest: "result",
+      completed_at: "2026-10-14T12:00:00Z",
+      result: %{viable_offer: nil, evidence: [], blocker: "Unknown", experiment: "Interview"},
+      status: :active,
+      mode: :manual,
+      pending_stage: :systems
+    }
+
+    {:ok, :committed, snapshot} =
+      Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+    data = put_in(snapshot.record.validated_data, ["_pipeline", "input_fingerprint"], "new")
+
+    {:ok, record} =
+      Conversations.update_state(snapshot.record, %{
+        validated_data: data,
+        systems_strategy: %{old: true},
+        tech_strategy: %{old: true}
+      })
+
+    assert {:ok, :committed, snapshot} =
+             Conversations.persist_stage_transition(user.id, record.id, 1, %{
+               transition
+               | input_fingerprint: "new"
+             })
+
+    assert length(snapshot.messages) == 2
+    assert snapshot.record.systems_strategy == nil and snapshot.record.tech_strategy == nil
+    assert snapshot.record.business_analysis["_meta"]["input_fingerprint"] == "new"
+  end
 end

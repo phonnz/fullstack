@@ -397,7 +397,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
       not same_input? ->
         {:error, :boundary_conflict}
 
-      version == expected + 1 and replayed_result?(repo, record, expected, transition) ->
+      version in [expected, expected + 1] and replayed_result?(repo, record, expected, transition) ->
         {:ok, %{record: record, outcome: :replayed}}
 
       version == expected ->
@@ -427,17 +427,75 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
     Map.put(transition["result"], "_meta", transition_meta(version, transition))
   end
 
-  defp replayed_result?(repo, record, version, transition) do
+  defp replayed_result?(repo, record, _version, transition) do
     {field, type} = Map.fetch!(@result_stages, transition["stage"])
-    result = transition_result(version, transition)
 
-    (is_nil(field) or Map.get(record, field) == result) and
-      Enum.any?(ordered_messages(repo, record.id), fn message ->
-        metadata = message.metadata || %{}
+    Enum.any?(ordered_messages(repo, record.id), fn message ->
+      metadata = message.metadata || %{}
+      result = metadata["result"]
+      meta = if is_map(result), do: result["_meta"] || %{}, else: %{}
 
-        metadata["type"] == type and metadata["result"] == result and
-          metadata["_meta"] == result["_meta"]
-      end)
+      metadata["type"] == type and is_map(result) and
+        (is_nil(field) or Map.get(record, field) == result) and
+        Enum.all?(
+          ~w(stage run_ref request_ref input_fingerprint contract_version result_digest),
+          &(meta[&1] == transition[&1])
+        ) and
+        Map.delete(result, "_meta") == transition["result"]
+    end)
+  end
+
+  @doc """
+  Reads an eligible cached stage under the owned row lock and live boundary.
+  This is the manual-call replay boundary, not an in-memory preflight shortcut.
+  It returns the original durable result without inserting messages or events.
+  """
+  def cached_stage_result(
+        user_id,
+        record_id,
+        expected_version,
+        binding,
+        stage,
+        fingerprint,
+        contract_version
+      ) do
+    Repo.transaction(fn ->
+      record =
+        Repo.one(
+          from r in Record,
+            where: r.id == ^record_id and r.user_id == ^user_id,
+            lock: "FOR UPDATE"
+        )
+
+      if is_nil(record), do: Repo.rollback(:not_found)
+      control = pipeline_metadata(record)
+
+      if control["boundary_version"] != expected_version or
+           control["run_ref"] != binding.run_ref or control["request_ref"] != binding.request_ref,
+         do: Repo.rollback(:boundary_conflict)
+
+      case Map.fetch(@result_stages, to_string(stage)) do
+        :error ->
+          Repo.rollback(:invalid_stage)
+
+        {:ok, {field, type}} ->
+          messages = ordered_messages(Repo, record.id)
+
+          result =
+            Enum.find_value(Enum.reverse(messages), fn message ->
+              metadata = message.metadata || %{}
+              result = metadata["result"]
+              meta = if is_map(result), do: result["_meta"] || %{}, else: %{}
+
+              if metadata["type"] == type and meta["input_fingerprint"] == fingerprint and
+                   meta["contract_version"] == contract_version and
+                   (is_nil(field) or Map.get(record, field) == result),
+                 do: result
+            end)
+
+          %{record: record, messages: messages, result: result}
+      end
+    end)
   end
 
   defp persist_transition_message(_repo, %{outcome: :replayed}, _version, _transition),
@@ -483,7 +541,15 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
         do: "active",
         else: transition["status"]
 
-    attrs = %{status: status, validated_data: data}
+    descendants =
+      case transition["stage"] do
+        "research" -> [:business_analysis, :systems_strategy, :tech_strategy]
+        "analysis" -> [:systems_strategy, :tech_strategy]
+        "systems" -> [:tech_strategy]
+        "tech_strategy" -> []
+      end
+
+    attrs = Map.merge(Map.new(descendants, &{&1, nil}), %{status: status, validated_data: data})
 
     attrs =
       if field, do: Map.put(attrs, field, transition_result(version, transition)), else: attrs
