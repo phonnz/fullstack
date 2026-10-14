@@ -927,27 +927,38 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
               results: Map.put(state.results, stage, result)
           })
 
-        state =
-          if outcome == :committed,
-            do:
-              broadcast(
-                state,
-                stage_event(stage),
-                Map.put(
-                  %{status: status, stage: stage},
-                  result_key(stage),
-                  durable_result(state, stage)
-                )
-              ),
-            else: state
-
-        if next && state.mode == :automatic, do: send(self(), {:run_stage, next})
-        send(self(), :drain_queue)
-        {:noreply, state}
+        commit_gated_advance(state, stage, next, outcome)
 
       {:error, _} ->
         stage_failure(state, stage, :persistence_failed)
     end
+  end
+
+  # Shared commit gate (P57): a success event is broadcast only behind a
+  # fresh durable commit, and a successor stage is scheduled only behind a
+  # durable commit (:committed now, or :replayed from an earlier commit of
+  # the same transition). Nothing here may run before the boundary is
+  # durable.
+  defp commit_gated_advance(state, stage, next, outcome) do
+    state =
+      if outcome == :committed,
+        do:
+          broadcast(
+            state,
+            stage_event(stage),
+            Map.put(
+              %{status: state.status, stage: stage},
+              result_key(stage),
+              durable_result(state, stage)
+            )
+          ),
+        else: state
+
+    if not is_nil(next) and state.mode == :automatic and outcome in [:committed, :replayed],
+      do: send(self(), {:run_stage, next})
+
+    send(self(), :drain_queue)
+    {:noreply, state}
   end
 
   defp commit_stage(%{user_id: nil} = state, transition) do

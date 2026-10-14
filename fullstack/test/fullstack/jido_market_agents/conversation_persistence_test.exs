@@ -351,6 +351,74 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
     assert {:ok, _, _} = DateTime.from_iso8601(meta["completed_at"])
   end
 
+  # ── P57: durable commit gate ───────────────────────────────────────────────
+
+  defmodule ControllableResearchBackend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(messages, opts) do
+      send(opts[:owner], {:provider, self(), opts[:model], messages})
+
+      receive do
+        {:reply, result} -> result
+      end
+    end
+  end
+
+  describe "P57: durable commit gate" do
+    test "failed stage persistence emits error and neither broadcasts success nor advances" do
+      config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+      Application.put_env(
+        :fullstack,
+        Fullstack.JidoMarketAgents,
+        Keyword.put(
+          config,
+          :researcher_backend,
+          {ControllableResearchBackend, owner: self(), model: "researcher"}
+        )
+      )
+
+      on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+
+      user = user_fixture()
+      id = start_conversation_for(user)
+      assert {:ok, :accepted, ^id} = Conversation.send_message(id, complete_input())
+      assert_receive {:provider, worker, "researcher", _}, 2_000
+
+      # The stage result can no longer be committed: the owned row is gone.
+      Fullstack.Repo.delete!(find_record(user))
+
+      send(worker, {:reply, {:ok, Jason.encode!(research_payload())}})
+
+      assert_receive {:error,
+                      %{
+                        status: :error,
+                        stage: :research,
+                        reason: {:stage_failed, :persistence_failed}
+                      }},
+                     2_000
+
+      # No success may leak without a durable commit, and no successor
+      # stage or retry may be scheduled.
+      refute_receive {:research_complete, _}, 100
+      refute_receive {:analysis_complete, _}, 100
+      refute_receive {:provider, _, _, _}, 100
+    end
+  end
+
+  defp research_payload do
+    %{
+      "market_evidence" => [],
+      "market_gaps" => [],
+      "demand_signals" => [],
+      "sources" => [],
+      "limitations" => ["No retrieval"]
+    }
+  end
+
   defp complete_input do
     %{
       country: "Spain",
