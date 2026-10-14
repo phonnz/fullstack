@@ -136,6 +136,36 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     end
   end
 
+  describe "state preservation across turns" do
+    test "omitted and top-level nil values do not erase prior state" do
+      {:ok, agent} =
+        MarketValidator.extract_fields(MarketValidator.new(), %{
+          "country" => "Spain",
+          "city" => "Madrid",
+          "team_size" => %{"status" => "known", "count" => 5, "notes" => "two founders"},
+          "digital_maturity" => %{"level" => "manual", "evidence" => "spreadsheets"}
+        })
+
+      # next turn: only a new commercial answer; diagnosis omitted entirely,
+      # city explicitly nil at top level
+      {:ok, agent} =
+        MarketValidator.extract_fields(agent, %{
+          "business_market" => "SaaS",
+          "city" => nil,
+          "team_size" => nil
+        })
+
+      # new value applied
+      assert agent.state.business_market == "SaaS"
+      # omitted diagnosis survives untouched
+      assert agent.state.team_size == %{status: "known", count: 5, notes: "two founders"}
+      assert agent.state.digital_maturity == %{level: "manual", evidence: "spreadsheets"}
+      # top-level nil does not erase
+      assert agent.state.country == "Spain"
+      assert agent.state.city == "Madrid"
+    end
+  end
+
   describe "extract_fields/2 map fast path" do
     test "stores normalized diagnosis values explicitly before set/2" do
       agent = MarketValidator.new()

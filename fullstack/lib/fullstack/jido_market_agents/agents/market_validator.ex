@@ -212,15 +212,21 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     is_nil(value) or value == ""
   end
 
+  # Pure merge selection: which extracted values may update state. Omitted
+  # values (normalized to nil) and empty strings never erase prior state.
+  @spec select_updates(map()) :: %{atom() => term()}
+  def select_updates(extracted_map) do
+    extracted_map
+    |> Enum.filter(fn {_k, v} -> not is_nil(v) and v != "" end)
+    |> Map.new(fn {k, v} ->
+      key = if is_binary(k), do: String.to_existing_atom(k), else: k
+      {key, v}
+    end)
+  end
+
   defp merge_extracted(agent, extracted_map, source_message) do
-    # Build update map with only non-nil extracted values, using ATOM keys
-    updates =
-      extracted_map
-      |> Enum.filter(fn {_k, v} -> not is_nil(v) and v != "" end)
-      |> Map.new(fn {k, v} ->
-        key = if is_binary(k), do: String.to_existing_atom(k), else: k
-        {key, v}
-      end)
+    # Only non-nil extracted values update state, using ATOM keys
+    updates = select_updates(extracted_map)
 
     history_entry = %{
       source: source_message,
