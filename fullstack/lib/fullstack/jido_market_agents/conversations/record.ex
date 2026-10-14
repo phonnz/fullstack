@@ -19,13 +19,19 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Record do
           id: Ecto.UUID.t() | nil,
           user_id: Ecto.UUID.t() | nil,
           status: String.t(),
-          validated_data: map() | nil
+          validated_data: map() | nil,
+          business_analysis: map() | nil,
+          systems_strategy: map() | nil,
+          tech_strategy: map() | nil
         }
 
   schema "jido_conversations" do
     field :title, :string
     field :status, :string, default: "active"
     field :validated_data, :map
+    field :business_analysis, :map
+    field :systems_strategy, :map
+    field :tech_strategy, :map
 
     # Populated only by `Conversations.list_all/1`, which aggregates the
     # count in the same query instead of preloading messages per row.
@@ -47,7 +53,15 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Record do
   """
   def changeset(record, attrs) do
     record
-    |> cast(attrs, [:user_id, :title, :status, :validated_data])
+    |> cast(attrs, [
+      :user_id,
+      :title,
+      :status,
+      :validated_data,
+      :business_analysis,
+      :systems_strategy,
+      :tech_strategy
+    ])
     |> validate_required([:user_id])
     |> validate_inclusion(:status, @statuses)
     |> foreign_key_constraint(:user_id)

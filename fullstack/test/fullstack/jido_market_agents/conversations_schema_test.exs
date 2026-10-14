@@ -7,6 +7,24 @@ defmodule Fullstack.JidoMarketAgents.ConversationsSchemaTest do
   alias Fullstack.JidoMarketAgents.Conversations.Record
 
   describe "Record persistence" do
+    test "record persists business systems and tech result maps" do
+      user = user_fixture()
+
+      results = %{
+        business_analysis: %{"recommended_offer" => "Service"},
+        systems_strategy: %{"quarterly_focus" => "delivery"},
+        tech_strategy: %{"diagnosis" => ["automation"]}
+      }
+
+      assert {:ok, record} =
+               Repo.insert(Record.changeset(%Record{}, Map.put(results, :user_id, user.id)))
+
+      reloaded = Repo.get!(Record, record.id)
+      for {field, expected} <- results, do: assert(Map.get(reloaded, field) == expected)
+      assert {:ok, empty} = Repo.insert(Record.changeset(%Record{}, %{user_id: user.id}))
+      for field <- Map.keys(results), do: assert(is_nil(Map.get(empty, field)))
+    end
+
     test "changeset accepts analyzing and building_strategy" do
       user = user_fixture()
 
