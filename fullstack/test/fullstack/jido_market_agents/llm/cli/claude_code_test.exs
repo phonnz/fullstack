@@ -294,6 +294,131 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCodeTest do
       assert {:error, :schema_type_mismatch} = ClaudeCode.chat_completion(messages, opts)
     end
 
+    test "structured mode uses supplied required and additionalProperties rules" do
+      messages = [user_message("extract")]
+
+      supplied = %{
+        "type" => "object",
+        "properties" => %{
+          "alpha" => %{"type" => ["string", "null"]},
+          "beta" => %{"type" => ["string", "null"]}
+        },
+        "required" => ["alpha"],
+        "additionalProperties" => false
+      }
+
+      run = fn payload ->
+        opts =
+          base_opts("claude_success_structured.sh") ++
+            [
+              response_format: {:json_object, supplied},
+              env: %{"CLAUDE_FAKE_STRUCTURED_OUTPUT" => payload}
+            ]
+
+        ClaudeCode.chat_completion(messages, opts)
+      end
+
+      # payload honoring the supplied required/closed rules is accepted
+      assert {:ok, json_text} = run.(~s({"alpha":"a","beta":null}))
+      assert Jason.decode!(json_text) == %{"alpha" => "a", "beta" => nil}
+
+      # required key missing → rejected
+      assert {:error, :schema_key_mismatch} = run.(~s({"beta":null}))
+
+      # additionalProperties: false rejects keys outside the supplied set
+      assert {:error, :schema_key_mismatch} = run.(~s({"alpha":"a","gamma":"x"}))
+    end
+
+    test "structured mode accepts valid nested objects and rejects wrong nested types" do
+      messages = [user_message("extract")]
+
+      supplied = %{
+        "type" => "object",
+        "properties" => %{
+          "team" => %{
+            "type" => ["object", "null"],
+            "properties" => %{
+              "status" => %{"type" => "string", "enum" => ["known", "unknown"]},
+              "count" => %{"type" => ["integer", "null"], "minimum" => 0}
+            },
+            "required" => ["status", "count"],
+            "additionalProperties" => false
+          },
+          "tools" => %{
+            "type" => "array",
+            "items" => %{
+              "type" => "object",
+              "properties" => %{"name" => %{"type" => "string"}},
+              "required" => ["name"],
+              "additionalProperties" => false
+            },
+            "minItems" => 1,
+            "maxItems" => 3
+          }
+        },
+        "required" => ["team", "tools"],
+        "additionalProperties" => false
+      }
+
+      run = fn payload ->
+        opts =
+          base_opts("claude_success_structured.sh") ++
+            [
+              response_format: {:json_object, supplied},
+              env: %{"CLAUDE_FAKE_STRUCTURED_OUTPUT" => payload}
+            ]
+
+        ClaudeCode.chat_completion(messages, opts)
+      end
+
+      # valid nested payload
+      assert {:ok, _json} =
+               run.(
+                 ~s({"team":{"status":"known","count":2},"tools":[{"name":"Slack"},{"name":"Notion"}]})
+               )
+
+      # wrong nested type
+      assert {:error, :schema_type_mismatch} =
+               run.(~s({"team":{"status":"known","count":"two"},"tools":[{"name":"Slack"}]}))
+
+      # enum violation
+      assert {:error, :schema_type_mismatch} =
+               run.(~s({"team":{"status":"banana","count":1},"tools":[{"name":"Slack"}]}))
+
+      # nested key rules
+      assert {:error, :schema_key_mismatch} =
+               run.(~s({"team":{"status":"known"},"tools":[{"name":"Slack"}]}))
+
+      # minItems / maxItems
+      assert {:error, :schema_type_mismatch} = run.(~s({"team":null,"tools":[]}))
+
+      assert {:error, :schema_type_mismatch} =
+               run.(
+                 ~s({"team":null,"tools":[{"name":"a"},{"name":"b"},{"name":"c"},{"name":"d"}]})
+               )
+
+      # numeric bounds
+      assert {:error, :schema_type_mismatch} =
+               run.(~s({"team":{"status":"unknown","count":-1},"tools":[{"name":"a"}]}))
+
+      # unsupported schema keyword is rejected before the CLI runs
+      unsupported = %{
+        "type" => "object",
+        "properties" => %{"a" => %{"type" => "string", "pattern" => "^x"}},
+        "required" => ["a"]
+      }
+
+      opts =
+        base_opts("claude_success_structured.sh") ++
+          [
+            response_format: {:json_object, unsupported},
+            env: %{"CLAUDE_FAKE_STRUCTURED_OUTPUT" => ~s({"a":"x"})}
+          ]
+
+      assert {:error, {:unsupported_schema_keyword, "pattern"}} =
+               ClaudeCode.chat_completion(messages, opts)
+    end
+
     test "refusal/error envelope is an error in structured mode too" do
       opts =
         base_opts("claude_billing_error.sh") ++
