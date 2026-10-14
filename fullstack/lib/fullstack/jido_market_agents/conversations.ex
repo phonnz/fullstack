@@ -276,10 +276,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
 
   """
   def list_messages(conversation_id) do
-    Message
-    |> where([m], m.conversation_id == ^conversation_id)
-    |> order_by([m], asc: m.inserted_at)
-    |> Repo.all()
+    ordered_messages(Repo, conversation_id)
   end
 
   @doc """
@@ -296,6 +293,210 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
     record
     |> Record.changeset(normalize(attrs))
     |> Repo.update()
+  end
+
+  @result_stages %{
+    "research" => {nil, "market_research"},
+    "analysis" => {:business_analysis, "business_analysis"},
+    "systems" => {:systems_strategy, "systems_strategy"},
+    "tech_strategy" => {:tech_strategy, "tech_strategy"}
+  }
+
+  @doc """
+  Atomically persists an owned, normalized stage result and its readable message.
+
+  `transition` carries stage, run/request UUID strings, input fingerprint,
+  contract version, result digest, completion timestamp, result map, status,
+  mode, pending stage and optional readable content. The caller must have
+  durably admitted the same run/request/input before calling this function.
+  No provider call, broadcast or stage scheduling occurs inside this boundary.
+
+  Returns `{:ok, :committed | :replayed, %{record: record, messages: messages}}`
+  or `{:error, reason}`. Replays are checked under the same owned row lock and
+  never insert a second message. Control metadata is JSON-safe and system-owned.
+  """
+  @spec persist_stage_transition(Ecto.UUID.t(), Ecto.UUID.t(), non_neg_integer(), map()) ::
+          {:ok, :committed | :replayed, %{record: Record.t(), messages: [%Message{}]}}
+          | {:error, term()}
+  def persist_stage_transition(user_id, record_id, expected_version, transition) do
+    with {:ok, transition} <- normalize_transition(transition),
+         true <- is_integer(expected_version) and expected_version >= 0 do
+      Ecto.Multi.new()
+      |> Ecto.Multi.run(:boundary, fn repo, _ ->
+        query =
+          from r in Record,
+            where: r.id == ^record_id and r.user_id == ^user_id,
+            lock: "FOR UPDATE"
+
+        case repo.one(query) do
+          nil -> {:error, :not_found}
+          record -> check_boundary(repo, record, expected_version, transition)
+        end
+      end)
+      |> Ecto.Multi.run(:message, fn repo, %{boundary: boundary} ->
+        persist_transition_message(repo, boundary, expected_version, transition)
+      end)
+      |> Ecto.Multi.run(:record, fn repo, %{boundary: boundary} ->
+        persist_transition_record(repo, boundary, expected_version, transition)
+      end)
+      |> Ecto.Multi.run(:snapshot, fn repo, %{record: record, boundary: boundary} ->
+        {:ok, {boundary.outcome, %{record: record, messages: ordered_messages(repo, record.id)}}}
+      end)
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{snapshot: {outcome, snapshot}}} -> {:ok, outcome, snapshot}
+        {:error, :boundary, reason, _changes} -> {:error, reason}
+        {:error, operation, reason, _changes} -> {:error, {operation, reason}}
+      end
+    else
+      _ -> {:error, :invalid_transition}
+    end
+  end
+
+  defp normalize_transition(transition) when is_map(transition) do
+    with {:ok, encoded} <- Jason.encode(transition),
+         {:ok, data} <- Jason.decode(encoded),
+         true <- Map.has_key?(@result_stages, data["stage"]),
+         true <- data["mode"] in ["automatic", "manual"],
+         true <-
+           is_nil(data["pending_stage"]) or
+             data["pending_stage"] in ~w(validator research analysis systems tech_strategy),
+         {:ok, _} <- Ecto.UUID.cast(data["run_ref"]),
+         {:ok, _} <- Ecto.UUID.cast(data["request_ref"]),
+         true <- is_map(data["result"]),
+         true <-
+           Enum.all?(~w(input_fingerprint contract_version result_digest completed_at), fn key ->
+             is_binary(data[key]) and String.trim(data[key]) != ""
+           end) do
+      {:ok, data}
+    else
+      _ -> {:error, :invalid_transition}
+    end
+  end
+
+  defp normalize_transition(_transition), do: {:error, :invalid_transition}
+
+  defp check_boundary(repo, record, expected, transition) do
+    control = pipeline_metadata(record)
+    version = Map.get(control, "boundary_version", 0)
+
+    same_input? =
+      Enum.all?(~w(run_ref request_ref input_fingerprint), fn key ->
+        control[key] == transition[key]
+      end)
+
+    cond do
+      not same_input? ->
+        {:error, :boundary_conflict}
+
+      version == expected + 1 and replayed_result?(repo, record, expected, transition) ->
+        {:ok, %{record: record, outcome: :replayed}}
+
+      version == expected ->
+        {:ok, %{record: record, outcome: :committed}}
+
+      true ->
+        {:error, :boundary_conflict}
+    end
+  end
+
+  defp pipeline_metadata(record) do
+    case record.validated_data do
+      %{"_pipeline" => control} when is_map(control) -> control
+      _ -> %{}
+    end
+  end
+
+  defp transition_meta(version, transition) do
+    transition
+    |> Map.take(
+      ~w(stage contract_version input_fingerprint result_digest completed_at run_ref request_ref guide_digest)
+    )
+    |> Map.put("boundary_version", version + 1)
+  end
+
+  defp transition_result(version, transition) do
+    Map.put(transition["result"], "_meta", transition_meta(version, transition))
+  end
+
+  defp replayed_result?(repo, record, version, transition) do
+    {field, type} = Map.fetch!(@result_stages, transition["stage"])
+    result = transition_result(version, transition)
+
+    (is_nil(field) or Map.get(record, field) == result) and
+      Enum.any?(ordered_messages(repo, record.id), fn message ->
+        metadata = message.metadata || %{}
+
+        metadata["type"] == type and metadata["result"] == result and
+          metadata["_meta"] == result["_meta"]
+      end)
+  end
+
+  defp persist_transition_message(_repo, %{outcome: :replayed}, _version, _transition),
+    do: {:ok, nil}
+
+  defp persist_transition_message(repo, %{record: record}, version, transition) do
+    {_field, type} = Map.fetch!(@result_stages, transition["stage"])
+    result = transition_result(version, transition)
+
+    attrs = %{
+      conversation_id: record.id,
+      role: "assistant",
+      content: Map.get(transition, "content", Jason.encode!(result)),
+      metadata: %{"type" => type, "result" => result, "_meta" => result["_meta"]}
+    }
+
+    repo.insert(Message.changeset(%Message{}, attrs))
+  end
+
+  defp persist_transition_record(
+         _repo,
+         %{outcome: :replayed, record: record},
+         _version,
+         _transition
+       ),
+       do: {:ok, record}
+
+  defp persist_transition_record(repo, %{record: record}, version, transition) do
+    {field, _type} = Map.fetch!(@result_stages, transition["stage"])
+
+    control =
+      record
+      |> pipeline_metadata()
+      |> Map.merge(
+        Map.take(transition, ~w(run_ref request_ref input_fingerprint mode pending_stage))
+      )
+      |> Map.put("boundary_version", version + 1)
+
+    data = Map.put(record.validated_data || %{}, "_pipeline", control)
+
+    status =
+      if transition["mode"] == "manual" and transition["status"] not in ["completed", "error"],
+        do: "active",
+        else: transition["status"]
+
+    attrs = %{status: status, validated_data: data}
+
+    attrs =
+      if field, do: Map.put(attrs, field, transition_result(version, transition)), else: attrs
+
+    repo.update(Record.changeset(record, attrs))
+  end
+
+  defp ordered_messages(repo, record_id) do
+    repo.all(
+      from m in Message,
+        where: m.conversation_id == ^record_id,
+        order_by: [
+          asc:
+            fragment(
+              "CASE WHEN jsonb_typeof(?->'_meta'->'boundary_version') = 'number' THEN (?->'_meta'->>'boundary_version')::numeric END NULLS FIRST",
+              m.metadata,
+              m.metadata
+            ),
+          asc: m.inserted_at
+        ]
+    )
   end
 
   defp normalize(attrs) when is_map(attrs), do: attrs

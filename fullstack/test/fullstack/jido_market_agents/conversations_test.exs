@@ -305,6 +305,218 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
     end
   end
 
+  describe "persist_stage_transition/4" do
+    defp stage_transition(stage \\ :analysis) do
+      %{
+        stage: stage,
+        run_ref: Ecto.UUID.generate(),
+        request_ref: Ecto.UUID.generate(),
+        input_fingerprint: "input-sha256",
+        contract_version: "1",
+        result_digest: "result-sha256",
+        completed_at: "2026-10-14T17:00:00Z",
+        result: %{"summary" => "Normalized result"},
+        status: "building_strategy",
+        mode: :automatic,
+        pending_stage: :systems,
+        content: "Business analysis complete"
+      }
+    end
+
+    defp stage_record(user, transition) do
+      Conversations.create(user.id, %{
+        status: "analyzing",
+        validated_data: %{
+          "country" => "Spain",
+          "_pipeline" => %{
+            "boundary_version" => 0,
+            "run_ref" => transition.run_ref,
+            "request_ref" => transition.request_ref,
+            "input_fingerprint" => transition.input_fingerprint,
+            "output_language" => "en",
+            "mode" => "automatic",
+            "pending_stage" => "analysis"
+          }
+        }
+      })
+    end
+
+    test "persist_stage_transition/4 commits message result and status together" do
+      user = user_fixture()
+      transition = stage_transition()
+      {:ok, record} = stage_record(user, transition)
+
+      assert {:ok, :committed, snapshot} =
+               Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+      assert snapshot.record.status == "building_strategy"
+      assert snapshot.record.business_analysis["summary"] == "Normalized result"
+      assert snapshot.record.business_analysis["_meta"]["stage"] == "analysis"
+      assert snapshot.record.validated_data["country"] == "Spain"
+      assert snapshot.record.validated_data["_pipeline"]["output_language"] == "en"
+      assert snapshot.record.validated_data["_pipeline"]["boundary_version"] == 1
+      assert snapshot.record.validated_data["_pipeline"]["pending_stage"] == "systems"
+      assert [message] = snapshot.messages
+      assert message.role == "assistant"
+      assert message.content == "Business analysis complete"
+      assert message.metadata["type"] == "business_analysis"
+      assert message.metadata["result"] == snapshot.record.business_analysis
+      assert message.metadata["_meta"]["boundary_version"] == 1
+      assert message.metadata["_meta"]["run_ref"] == transition.run_ref
+      assert Conversations.get_for_user(record.id, user.id) == snapshot.record
+      assert Conversations.list_messages(record.id) == snapshot.messages
+
+      assert {:ok, :replayed, replayed} =
+               Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+      assert replayed == snapshot
+      assert length(Conversations.list_messages(record.id)) == 1
+    end
+
+    test "transition ownership and expected version run request and input reject stale writes" do
+      user = user_fixture()
+      stranger = user_fixture()
+      transition = stage_transition()
+      {:ok, record} = stage_record(user, transition)
+
+      assert {:error, :not_found} =
+               Conversations.persist_stage_transition(stranger.id, record.id, 0, transition)
+
+      assert {:error, :boundary_conflict} =
+               Conversations.persist_stage_transition(user.id, record.id, 1, transition)
+
+      for changed <- [
+            %{transition | run_ref: Ecto.UUID.generate()},
+            %{transition | request_ref: Ecto.UUID.generate()},
+            %{transition | input_fingerprint: "new-input"}
+          ] do
+        assert {:error, :boundary_conflict} =
+                 Conversations.persist_stage_transition(user.id, record.id, 0, changed)
+      end
+
+      assert Conversations.get_for_user(record.id, user.id) == record
+      assert Conversations.list_messages(record.id) == []
+    end
+
+    test "all result stages use closed columns types and JSON safe control values" do
+      user = user_fixture()
+
+      for {stage, field, type} <- [
+            {:research, nil, "market_research"},
+            {:analysis, :business_analysis, "business_analysis"},
+            {:systems, :systems_strategy, "systems_strategy"},
+            {:tech_strategy, :tech_strategy, "tech_strategy"}
+          ] do
+        transition = stage_transition(stage)
+        {:ok, record} = stage_record(user, transition)
+
+        assert {:ok, :committed, snapshot} =
+                 Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+        assert [message] = snapshot.messages
+        assert message.metadata["type"] == type
+        assert Jason.encode!(snapshot.record.validated_data["_pipeline"])
+        if field, do: assert(Map.get(snapshot.record, field) == message.metadata["result"])
+      end
+
+      transition = stage_transition()
+      {:ok, record} = stage_record(user, transition)
+
+      for changed <- [
+            Map.put(transition, :stage, :unknown_stage),
+            Map.put(transition, :mode, :unknown_mode),
+            Map.put(transition, :run_ref, make_ref()),
+            Map.put(transition, :result, %{secret: self()})
+          ] do
+        assert {:error, :invalid_transition} =
+                 Conversations.persist_stage_transition(user.id, record.id, 0, changed)
+      end
+
+      assert Conversations.list_messages(record.id) == []
+    end
+
+    test "manual nonfinal boundaries stay active and typed messages use durable sequence" do
+      user = user_fixture()
+      transition = %{stage_transition() | mode: :manual}
+      {:ok, record} = stage_record(user, transition)
+
+      {:ok, legacy} =
+        Conversations.append_message(record.id, %{role: "user", content: "original input"})
+
+      assert {:ok, :committed, first} =
+               Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+      assert first.record.status == "active"
+      second_transition = %{transition | stage: :systems, pending_stage: :tech_strategy}
+
+      assert {:ok, :committed, second} =
+               Conversations.persist_stage_transition(user.id, record.id, 1, second_transition)
+
+      [_, first_message, second_message] = second.messages
+      force_message_inserted_at(first_message, ~N[2026-10-14 18:00:00])
+      force_message_inserted_at(second_message, ~N[2026-10-14 17:00:00])
+      assert [^legacy, restored_first, restored_second] = Conversations.list_messages(record.id)
+      assert restored_first.id == first_message.id
+      assert restored_second.id == second_message.id
+    end
+
+    test "concurrent identical transitions commit once and replay without duplicates" do
+      # Separate non-sandbox transactions exercise the actual Postgres row lock,
+      # rather than serializing both tasks on one shared sandbox connection.
+      {user, record, transition} =
+        Task.async(fn ->
+          Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+            user = user_fixture()
+            transition = stage_transition()
+            {:ok, record} = stage_record(user, transition)
+            {user, record, transition}
+          end)
+        end)
+        |> Task.await()
+
+      on_exit(fn ->
+        Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+          Repo.delete!(Repo.get!(Fullstack.Accounts.User, user.id))
+        end)
+      end)
+
+      parent = self()
+
+      tasks =
+        for _ <- 1..2 do
+          Task.async(fn ->
+            Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+              send(parent, {:ready, self()})
+
+              receive do
+                :go -> :ok
+              end
+
+              Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+            end)
+          end)
+        end
+
+      pids =
+        for _ <- tasks do
+          assert_receive {:ready, pid}
+          pid
+        end
+
+      Enum.each(pids, &send(&1, :go))
+      outcomes = Enum.map(tasks, &Task.await/1)
+      assert Enum.sort(Enum.map(outcomes, &elem(&1, 1))) == [:committed, :replayed]
+
+      Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+        assert length(Conversations.list_messages(record.id)) == 1
+
+        assert Conversations.get_for_user(record.id, user.id).validated_data["_pipeline"][
+                 "boundary_version"
+               ] == 1
+      end)
+    end
+  end
+
   describe "update_state/2" do
     test "persists status and validated_data" do
       user = user_fixture()
