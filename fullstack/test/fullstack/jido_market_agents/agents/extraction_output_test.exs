@@ -361,6 +361,80 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
                  }
                })
     end
+
+    test "normalize_map/1 requires empty items for none and unknown baselines" do
+      normalized =
+        ExtractionOutput.normalize_map(%{
+          "metrics_baselines" => %{
+            "status" => "measured",
+            "items" => [
+              %{
+                "metric" => "monthly revenue",
+                "value" => 1200.5,
+                "unit" => "EUR",
+                "period" => "2024-Q1",
+                "source" => "bank statements"
+              }
+            ]
+          }
+        })
+
+      assert normalized.metrics_baselines == %{
+               status: "measured",
+               items: [
+                 %{
+                   metric: "monthly revenue",
+                   value: 1200.5,
+                   unit: "EUR",
+                   period: "2024-Q1",
+                   source: "bank statements"
+                 }
+               ]
+             }
+
+      cleared = ExtractionOutput.normalize_map(%{"metrics_baselines" => %{"status" => "unknown"}})
+      assert cleared.metrics_baselines == %{status: "unknown", items: []}
+
+      # none/unknown baselines reject invented items entirely.
+      assert {:error, {:invalid_diagnosis, :metrics_baselines, :items_not_allowed}} =
+               ExtractionOutput.normalize_map(%{
+                 "metrics_baselines" => %{
+                   "status" => "none",
+                   "items" => [
+                     %{
+                       "metric" => "revenue",
+                       "value" => 1.0,
+                       "unit" => "EUR",
+                       "period" => "month",
+                       "source" => "guess"
+                     }
+                   ]
+                 }
+               })
+
+      # measured/estimated require at least one complete item.
+      assert {:error, {:invalid_diagnosis, :metrics_baselines, :items_required}} =
+               ExtractionOutput.normalize_map(%{
+                 "metrics_baselines" => %{"status" => "estimated", "items" => []}
+               })
+
+      # A non-numeric value is malformed: tagged error, never repaired.
+      assert {:error, {:invalid_diagnosis, :metrics_baselines, :invalid_item}} =
+               ExtractionOutput.normalize_map(%{
+                 "metrics_baselines" => %{
+                   "status" => "estimated",
+                   "items" => [
+                     %{
+                       "metric" => "revenue",
+                       "value" => "1200",
+                       "unit" => "EUR",
+                       "period" => "month",
+                       "source" => "assumption"
+                     }
+                   ]
+                 }
+               })
+    end
   end
 
   describe "normalize_map/1" do

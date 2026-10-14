@@ -277,6 +277,9 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
         &normalize_pain_item/1
       )
 
+  defp normalize_diagnosis_field(:metrics_baselines, raw),
+    do: normalize_item_collection(:metrics_baselines, raw, &normalize_baseline_item/1)
+
   defp normalize_diagnosis_field(_field, raw), do: {:ok, normalize_value(raw)}
 
   defp normalize_item_collection(_field, nil, _item_fun), do: {:ok, nil}
@@ -292,8 +295,10 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
           {:error, {:invalid_diagnosis, field, :items_not_allowed}}
         end
 
-      "known" ->
-        normalize_known_items(field, items, item_fun)
+      status when status in ["known", "measured", "estimated"] ->
+        with {:ok, normalized_items} <- normalize_items(field, items, item_fun) do
+          {:ok, %{status: status, items: normalized_items}}
+        end
 
       _other ->
         {:error, {:invalid_diagnosis, field, :invalid_status}}
@@ -303,28 +308,26 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   defp normalize_item_collection(field, _raw, _item_fun),
     do: {:error, {:invalid_diagnosis, field, :invalid_shape}}
 
-  defp normalize_known_items(field, [], _item_fun),
+  defp normalize_items(field, [], _item_fun),
     do: {:error, {:invalid_diagnosis, field, :items_required}}
 
-  defp normalize_known_items(field, items, item_fun) when is_list(items) do
-    result =
-      Enum.reduce_while(items, {:ok, []}, fn item, {:ok, acc} ->
-        case item_fun.(item) do
-          {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
-          {:error, _reason} = error -> {:halt, error}
-        end
-      end)
-
-    case result do
-      {:ok, normalized} -> {:ok, %{status: "known", items: Enum.reverse(normalized)}}
+  defp normalize_items(field, items, item_fun) when is_list(items) do
+    Enum.reduce_while(items, {:ok, []}, fn item, {:ok, acc} ->
+      case item_fun.(item) do
+        {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, normalized} -> {:ok, Enum.reverse(normalized)}
       error -> error
     end
   end
 
-  defp normalize_known_items(field, nil, _item_fun),
+  defp normalize_items(field, nil, _item_fun),
     do: {:error, {:invalid_diagnosis, field, :items_required}}
 
-  defp normalize_known_items(field, _items, _item_fun),
+  defp normalize_items(field, _items, _item_fun),
     do: {:error, {:invalid_diagnosis, field, :invalid_items}}
 
   defp normalize_team_size(nil), do: {:ok, nil}
@@ -412,6 +415,27 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
 
   defp normalize_pain_item(_item),
     do: {:error, {:invalid_diagnosis, :repetitive_processes_pain_points, :invalid_item}}
+
+  defp normalize_baseline_item(item) when is_map(item) do
+    with {:ok, metric} <- required_text(fetch_field(item, :metric)),
+         {:ok, value} <- finite_number(fetch_field(item, :value)),
+         {:ok, unit} <- required_text(fetch_field(item, :unit)),
+         {:ok, period} <- required_text(fetch_field(item, :period)),
+         {:ok, source} <- required_text(fetch_field(item, :source)) do
+      {:ok, %{metric: metric, value: value, unit: unit, period: period, source: source}}
+    else
+      {:error, _reason} -> {:error, {:invalid_diagnosis, :metrics_baselines, :invalid_item}}
+    end
+  end
+
+  defp normalize_baseline_item(_item),
+    do: {:error, {:invalid_diagnosis, :metrics_baselines, :invalid_item}}
+
+  defp finite_number(value) when is_number(value) do
+    if value * 0 == 0, do: {:ok, value}, else: {:error, :not_finite}
+  end
+
+  defp finite_number(_value), do: {:error, :not_number}
 
   defp required_text(value) when is_binary(value) do
     case String.trim(value) do
