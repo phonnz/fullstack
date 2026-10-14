@@ -83,7 +83,6 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCode do
 
   @behaviour Fullstack.JidoMarketAgents.LLM.Backend
 
-  alias Fullstack.JidoMarketAgents.Agents.ExtractionOutput
   alias Fullstack.JidoMarketAgents.LLM.Cli.Runner
 
   @configured_keys [:command, :model, :effort, :timeout_ms, :env]
@@ -223,9 +222,9 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCode do
 
   defp extract_payload(_envelope, :text), do: {:error, :empty_result}
 
-  defp extract_payload(envelope, {:json_object, _schema}) do
+  defp extract_payload(envelope, {:json_object, schema}) do
     with {:ok, structured} <- fetch_structured_output(envelope),
-         :ok <- validate_extraction_schema(structured) do
+         :ok <- validate_structured_schema(structured, schema) do
       {:ok, Jason.encode!(structured)}
     end
   end
@@ -235,29 +234,50 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCode do
 
   defp fetch_structured_output(_envelope), do: {:error, :missing_structured_output}
 
-  # Validates the fixed six-key closed nullable-string schema locally: an
-  # object root, exactly the six `ExtractionOutput.fields/0` keys (as
-  # strings), each value either a string or `nil`. An all-null object is
-  # valid. No general-purpose schema engine is needed for this fixed shape.
-  defp validate_extraction_schema(structured) do
-    expected_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> MapSet.new()
-    actual_keys = structured |> Map.keys() |> MapSet.new()
+  # Validates the structured payload against the SUPPLIED schema's root
+  # rules: `required` keys must be present, `additionalProperties: false`
+  # forbids any other key, and each property's `type` constrains the
+  # value's JSON type. Payload keys come from the supplied schema — never
+  # from any extraction field registry.
+  defp validate_structured_schema(structured, schema) when is_map(schema) do
+    properties = Map.get(schema, "properties", %{})
+    required = Map.get(schema, "required", [])
+    closed? = Map.get(schema, "additionalProperties", true) == false
+
+    keys_ok? =
+      Enum.all?(required, &Map.has_key?(structured, &1)) and
+        (not closed? or Enum.all?(Map.keys(structured), &Map.has_key?(properties, &1)))
+
+    types_ok? =
+      Enum.all?(structured, fn {key, value} ->
+        case Map.get(properties, key) do
+          nil -> true
+          property -> value_matches_type?(value, Map.get(property, "type"))
+        end
+      end)
 
     cond do
-      actual_keys != expected_keys ->
-        {:error, :schema_key_mismatch}
-
-      not Enum.all?(Map.values(structured), &valid_field_value?/1) ->
-        {:error, :schema_type_mismatch}
-
-      true ->
-        :ok
+      not keys_ok? -> {:error, :schema_key_mismatch}
+      not types_ok? -> {:error, :schema_type_mismatch}
+      true -> :ok
     end
   end
 
-  defp valid_field_value?(nil), do: true
-  defp valid_field_value?(value) when is_binary(value), do: true
-  defp valid_field_value?(_value), do: false
+  defp validate_structured_schema(_structured, _schema), do: {:error, :invalid_supplied_schema}
+
+  defp value_matches_type?(_value, nil), do: true
+
+  defp value_matches_type?(value, types) when is_list(types),
+    do: Enum.any?(types, &value_matches_type?(value, &1))
+
+  defp value_matches_type?(nil, "null"), do: true
+  defp value_matches_type?(value, "string") when is_binary(value), do: true
+  defp value_matches_type?(value, "number") when is_number(value), do: true
+  defp value_matches_type?(value, "integer") when is_integer(value), do: true
+  defp value_matches_type?(value, "boolean") when is_boolean(value), do: true
+  defp value_matches_type?(value, "object") when is_map(value), do: true
+  defp value_matches_type?(value, "array") when is_list(value), do: true
+  defp value_matches_type?(_value, _type), do: false
 
   # -- Backend.capabilities/1 -------------------------------------------
 
