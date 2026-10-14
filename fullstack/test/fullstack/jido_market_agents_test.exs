@@ -46,7 +46,8 @@ defmodule Fullstack.JidoMarketAgentsTest do
     def validate_config(_), do: :ok
 
     def chat_completion(_, opts) do
-      send(opts[:owner], {:analyzer_blocked, self()})
+      [conversation_owner | _] = Process.get(:"$ancestors")
+      send(opts[:owner], {:analyzer_blocked, conversation_owner, self()})
 
       receive do
         :finish -> {:error, :fixture_finished}
@@ -91,6 +92,35 @@ defmodule Fullstack.JidoMarketAgentsTest do
     end)
 
     {:ok, mimo_responses: responses}
+  end
+
+  setup do
+    supervisor = Fullstack.JidoMarketAgents.ConversationSupervisor
+
+    existing =
+      supervisor |> DynamicSupervisor.which_children() |> Enum.map(&elem(&1, 1)) |> MapSet.new()
+
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    on_exit(fn ->
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(supervisor),
+          is_pid(pid),
+          not MapSet.member?(existing, pid) do
+        monitor = Process.monitor(pid)
+        DynamicSupervisor.terminate_child(supervisor, pid)
+
+        receive do
+          {:DOWN, ^monitor, :process, ^pid, _} -> :ok
+        after
+          1_000 -> flunk("Conversation fixture did not terminate")
+        end
+      end
+
+      # Linked provider work has stopped before the global backend is restored.
+      Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config)
+    end)
+
+    :ok
   end
 
   defp stub_mimo(responses, message, content) do
@@ -921,7 +951,6 @@ defmodule Fullstack.JidoMarketAgentsTest do
         Keyword.put(config, :analyzer_backend, {BlockingAnalyzerBackend, owner: self()})
       )
 
-      on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
       id = "test-poll-completed-#{System.unique_integer([:positive])}"
       JidoMarketAgents.subscribe(id)
 
@@ -952,7 +981,10 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       case msg do
         {:research_complete, _} ->
-          assert_receive {:analyzer_blocked, worker}, 2_000
+          [{conversation_owner, _}] =
+            Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, id)
+
+          assert_receive {:analyzer_blocked, ^conversation_owner, worker}, 2_000
           assert {:ok, :analyzing, _} = JidoMarketAgents.resume(id)
           send(worker, :finish)
           assert_receive {:error, %{stage: :analysis}}, 2_000
