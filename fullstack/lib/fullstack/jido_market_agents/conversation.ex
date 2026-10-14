@@ -264,9 +264,9 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   # ("persisted result maps"); only research is durable in a typed message.
   # A cleared column means the boundary was invalidated, so columns win
   # unconditionally over any surviving history message.
-  defp restored_results(messages, result_maps) do
+  defp restored_results(research, result_maps) do
     %{
-      research: restored_research(messages),
+      research: research,
       analysis: result_maps.analysis,
       systems: result_maps.systems,
       tech_strategy: result_maps.tech_strategy
@@ -275,14 +275,45 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     |> Map.new()
   end
 
-  defp restored_research(messages) do
-    Enum.find_value(Enum.reverse(messages), fn message ->
-      metadata = Map.get(message, :metadata, %{})
-      type = metadata["type"] || metadata[:type]
+  @doc false
+  # Pure, isolated selection of the durable research boundary from typed
+  # `market_research` messages (metadata read string-keyed after the JSON
+  # roundtrip). Superseded (stale input fingerprint), foreign (wrong type
+  # or stage) and unsupported-version messages are never eligible; among
+  # eligible messages the latest timestamp wins, with tied timestamps
+  # resolved by the durable boundary sequence rather than list insertion
+  # order.
+  def select_research_message(messages, expected_fingerprint) do
+    messages
+    |> Enum.filter(&eligible_research?(&1, expected_fingerprint))
+    |> Enum.max_by(&research_order/1, fn -> nil end)
+    |> case do
+      nil -> nil
+      message -> (message.metadata || %{})["result"] || message.metadata[:result]
+    end
+  end
 
-      if type == "market_research",
-        do: metadata["result"] || metadata[:result]
-    end)
+  defp eligible_research?(message, expected_fingerprint) do
+    with true <- is_binary(expected_fingerprint),
+         metadata when is_map(metadata) <- Map.get(message, :metadata, %{}),
+         true <- (metadata["type"] || metadata[:type]) == "market_research",
+         result when is_map(result) <- metadata["result"] || metadata[:result],
+         meta when is_map(meta) <- result["_meta"] || result[:_meta] do
+      (meta["stage"] || meta[:stage]) in [nil, "research"] and
+        (meta["contract_version"] || meta[:contract_version]) == contract_version(:research) and
+        (meta["input_fingerprint"] || meta[:input_fingerprint]) == expected_fingerprint
+    else
+      _ -> false
+    end
+  end
+
+  defp research_order(message) do
+    metadata = Map.get(message, :metadata, %{})
+    result = metadata["result"] || metadata[:result]
+    meta = (is_map(result) && (result["_meta"] || result[:_meta])) || %{}
+
+    {to_string(Map.get(message, :timestamp)),
+     meta["boundary_version"] || meta[:boundary_version] || 0}
   end
 
   defp restored_message(%Conversations.Message{} = message) do
@@ -373,14 +404,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       boundary_version:
         pipeline_control_from_data(restored.validated_data)["boundary_version"] || 0,
       input_fingerprint: pipeline_control_from_data(restored.validated_data)["input_fingerprint"],
-      results: restored_results(restored.messages, restored.result_maps),
+      results: %{},
       validated_data: restored.validated_data,
       user_id: user_id,
       record_id: restored.record_id,
       persisted_count: length(restored.messages)
     }
 
-    rebuild_analysis_agents(state)
+    research = select_research_message(state.messages, stage_input_fingerprint(state, :research))
+    rebuild_analysis_agents(%{state | results: restored_results(research, restored.result_maps)})
   end
 
   defp rebuild_validator(id, nil) do

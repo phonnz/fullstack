@@ -488,13 +488,21 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
         "metrics_baselines" => %{"status" => "unknown", "items" => []}
       }
 
+      research_fp =
+        Conversation.fingerprint(:research, %{validated_data: facts, output_language: nil})
+
       research = %{
         "market_evidence" => [],
         "market_gaps" => [],
         "demand_signals" => [],
         "sources" => [],
         "limitations" => ["No retrieval"],
-        "_meta" => %{"stage" => "research", "boundary_version" => 2}
+        "_meta" => %{
+          "stage" => "research",
+          "contract_version" => "market-research/1",
+          "input_fingerprint" => research_fp,
+          "boundary_version" => 2
+        }
       }
 
       {:ok, record} =
@@ -575,6 +583,108 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
                kpis: ["Leads"],
                pitfall: "Skip nothing"
              }
+    end
+  end
+
+  # ── P55: durable research selection from typed messages ────────────────────
+
+  describe "durable research selection" do
+    test "rehydration selects latest successful matching research message" do
+      user = user_fixture()
+      {:ok, created} = Conversations.create(user.id)
+      id = created.id
+      facts = %{"country" => "Spain", "business_market" => "fintech"}
+
+      expected =
+        Conversation.fingerprint(:research, %{validated_data: facts, output_language: nil})
+
+      stale = String.duplicate("0", 64)
+
+      research_result = fn tag, boundary ->
+        %{
+          "market_evidence" => [],
+          "market_gaps" => [],
+          "demand_signals" => [],
+          "sources" => [],
+          "limitations" => [tag],
+          "_meta" => %{
+            "stage" => "research",
+            "contract_version" => "market-research/1",
+            "input_fingerprint" => expected,
+            "boundary_version" => boundary
+          }
+        }
+      end
+
+      winner = research_result.("winner", 1)
+      tie_lo = research_result.("tie_lo", 2)
+      tie_hi = research_result.("tie_hi", 3)
+      foreign = put_in(research_result.("foreign", 6), ["_meta", "stage"], "analysis")
+
+      unsupported =
+        put_in(
+          research_result.("unsupported", 7),
+          ["_meta", "contract_version"],
+          "market-research/9"
+        )
+
+      superseded =
+        put_in(research_result.("superseded", 9), ["_meta", "input_fingerprint"], stale)
+
+      {:ok, record} = Conversations.update_state(created, %{validated_data: facts})
+
+      seeded =
+        for {tag, result} <- [
+              {"foreign", foreign},
+              {"unsupported", unsupported},
+              {"superseded", superseded},
+              {"tie_lo", tie_lo},
+              {"tie_hi", tie_hi},
+              {"winner", winner}
+            ] do
+          {:ok, message} =
+            Conversations.append_message(id, %{
+              role: "assistant",
+              content: tag,
+              metadata: %{"type" => "market_research", "result" => result}
+            })
+
+          message
+        end
+
+      [foreign_m, unsupported_m, superseded_m, tie_lo_m, tie_hi_m, winner_m] = seeded
+      base = ~N[2026-01-01 10:00:00]
+
+      for {message, offset} <- [
+            {tie_lo_m, 0},
+            {tie_hi_m, 0},
+            {winner_m, 1},
+            {foreign_m, 2},
+            {unsupported_m, 2},
+            {superseded_m, 3}
+          ] do
+        Repo.update_all(from(m in Conversations.Message, where: m.id == ^message.id),
+          set: [inserted_at: NaiveDateTime.add(base, offset, :second)]
+        )
+      end
+
+      {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+      state = :sys.get_state(pid)
+      assert state.results[:research] == winner
+
+      # Tied timestamps resolve by durable boundary sequence, never by list
+      # insertion order: the boundary winner is FIRST in this list.
+      as_message = fn result, timestamp ->
+        %{metadata: %{"type" => "market_research", "result" => result}, timestamp: timestamp}
+      end
+
+      assert Conversation.select_research_message(
+               [as_message.(tie_hi, base), as_message.(tie_lo, base)],
+               expected
+             ) == tie_hi
+
+      assert Conversation.select_research_message([as_message.(superseded, base)], expected) ==
+               nil
     end
   end
 
