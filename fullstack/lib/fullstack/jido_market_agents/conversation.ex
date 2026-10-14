@@ -15,6 +15,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher}
   alias Fullstack.JidoMarketAgents.Conversations
+  alias Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer
   alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
 
   @pubsub Fullstack.PubSub
@@ -400,7 +401,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     do: {:reply, {:ok, state.messages}, state}
 
   @impl true
-  def handle_info(:drain_queue, %{task: nil, pending_stage: nil, queue: [request | rest]} = state) do
+  def handle_info(:drain_queue, %{task: nil, queue: [request | rest]} = state)
+      when state.pending_stage == nil or state.mode == :manual do
     user_msg = %{
       role: :user,
       content: request.message,
@@ -414,7 +416,9 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         queue: rest,
         run_ref: request.run_ref,
         request_ref: request.request_ref,
-        status: :active
+        status: :active,
+        mode: :automatic,
+        pending_stage: nil
     }
 
     # Only the owner writes. Accepted input and identity precede provider launch.
@@ -512,9 +516,33 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
      end)}
   end
 
+  defp run_stage(state, :analysis) do
+    agent =
+      BusinessAnalyzer.new(
+        state: %{
+          validated_data: business_data(state),
+          research_output: clean_result(state.results[:research]),
+          refinements: %{},
+          output_language: state.validator_agent.state.output_language
+        }
+      )
+
+    {:noreply,
+     launch(state, :analysis, fn ->
+       AgentTelemetry.span(:analysis, %{conversation_id: state.id}, fn ->
+         BusinessAnalyzer.analyze(agent)
+       end)
+     end)}
+  end
+
+  defp business_data(state),
+    do: Map.drop(state.validated_data || %{}, ["_pipeline", :_pipeline, "_meta", :_meta])
+
+  defp clean_result(result), do: Map.drop(result || %{}, ["_meta", :_meta])
+
   defp stage_success(state, stage, result) do
-    next = nil
-    status = :completed
+    next = if stage == :research, do: :analysis, else: nil
+    status = if stage == :research, do: :analyzing, else: :completed
     fingerprint = stage_input_fingerprint(state, stage)
     state = %{state | input_fingerprint: fingerprint}
     state = persist_status(state, state.status)
@@ -547,6 +575,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             do: broadcast(state, stage_event(stage), %{status: status}),
             else: state
 
+        if next && state.mode == :automatic, do: send(self(), {:run_stage, next})
         send(self(), :drain_queue)
         {:noreply, state}
 
@@ -595,6 +624,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
+  defp stage_event(:analysis), do: :analysis_complete
   defp stage_event(:research), do: :research_complete
 
   defp stage_input_fingerprint(state, stage),

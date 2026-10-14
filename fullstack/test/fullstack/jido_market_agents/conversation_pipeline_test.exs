@@ -184,4 +184,29 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert_receive {:extraction_complete, %{run_ref: ^run, request_ref: ^request}}, 1_000
     refute MessageBuffer == nil
   end
+
+  def analysis,
+    do: %{
+      viable_offer: nil,
+      evidence: [],
+      blocker: "Demand unknown",
+      experiment: "Interview buyers"
+    }
+
+  test "research success persists then schedules analysis", %{id: id, user: user} do
+    Conversation.send_message(id, data())
+    assert_receive {:provider, research_worker, "researcher", _}, 1_000
+    reply(research_worker, research())
+    assert_receive {:research_complete, %{status: :analyzing}}, 1_000
+    record = Conversations.get_for_user(id, user.id)
+    assert record.status == "analyzing"
+    assert Enum.any?(Conversations.list_messages(id), &(&1.metadata["type"] == "market_research"))
+    assert_receive {:provider, analysis_worker, "analyzer", messages}, 1_000
+    assert List.last(messages)["content"] =~ "No retrieval"
+    reply(analysis_worker, analysis())
+    assert_receive {:analysis_complete, _}, 1_000
+
+    assert Conversations.get_for_user(id, user.id).business_analysis["blocker"] ==
+             "Demand unknown"
+  end
 end
