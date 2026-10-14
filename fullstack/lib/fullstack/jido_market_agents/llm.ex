@@ -76,14 +76,14 @@ defmodule Fullstack.JidoMarketAgents.LLM do
   alias Fullstack.JidoMarketAgents.LLM.Backend
 
   @typedoc "Supported agent roles."
-  @type role :: :validator | :researcher
+  @type role :: :validator | :researcher | :analyzer | :systems | :strategy
 
   @typedoc "Caller-supplied response format request."
   @type response_format :: :text | {:json_object, term()}
 
   @app :fullstack
   @scope Fullstack.JidoMarketAgents
-  @roles [:validator, :researcher]
+  @roles [:validator, :researcher, :analyzer, :systems, :strategy]
   @required_callbacks [chat_completion: 2, capabilities: 1, validate_config: 1]
 
   @doc """
@@ -140,7 +140,7 @@ defmodule Fullstack.JidoMarketAgents.LLM do
   """
   @spec validate_config() :: :ok | {:error, {role(), term()}}
   def validate_config do
-    Enum.reduce_while(@roles, :ok, fn role, :ok ->
+    Enum.reduce_while([:validator, :researcher], :ok, fn role, :ok ->
       case resolve_and_validate(role) do
         {:ok, _} -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, {role, reason}}}
@@ -193,6 +193,9 @@ defmodule Fullstack.JidoMarketAgents.LLM do
 
   defp config_key(:validator), do: :validator_backend
   defp config_key(:researcher), do: :researcher_backend
+  defp config_key(:analyzer), do: :analyzer_backend
+  defp config_key(:systems), do: :systems_backend
+  defp config_key(:strategy), do: :strategy_backend
 
   defp validate_config_shape(role, {module, opts} = entry)
        when is_atom(module) and is_list(opts) do

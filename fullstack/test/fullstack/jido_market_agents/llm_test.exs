@@ -293,4 +293,25 @@ defmodule Fullstack.JidoMarketAgents.LLMTest do
     assert {:error, {:researcher, {:invalid_backend_config, :researcher, :not_a_tuple}}} =
              LLM.validate_config()
   end
+
+  test "backend/1 recognizes analyzer systems and strategy roles" do
+    config = Application.get_env(@app, @scope, [])
+
+    overrides =
+      for {role, key} <- [
+            analyzer: :analyzer_backend,
+            systems: :systems_backend,
+            strategy: :strategy_backend
+          ],
+          do: {key, {FakeBackendJsonObject, model: Atom.to_string(role)}}
+
+    Application.put_env(@app, @scope, Keyword.merge(config, overrides))
+
+    for role <- [:analyzer, :systems, :strategy] do
+      assert {:ok, {FakeBackendJsonObject, opts}} = LLM.backend(role)
+      assert opts[:model] == Atom.to_string(role)
+    end
+
+    assert {:error, {:unknown_role, :other}} = LLM.backend(:other)
+  end
 end
