@@ -13,7 +13,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   use GenServer
   require Logger
 
-  alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher}
+  alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher, ExtractionOutput}
   alias Fullstack.JidoMarketAgents.Conversations
   alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, SystemsAgent, StrategyAgent}
 
