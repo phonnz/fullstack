@@ -52,6 +52,41 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     end
   end
 
+  describe "check_completeness/1" do
+    test "check_completeness/1 accepts explicit unknown and rejects top-level nil" do
+      answered = %{
+        country: "Spain",
+        business_market: "SaaS",
+        initial_budget: "10000 EUR",
+        final_product_proposal: "Inventory app",
+        product_price: "20 EUR",
+        team_size: %{status: "unknown", count: nil, notes: nil},
+        current_tools_systems: %{status: "unknown", items: []},
+        repetitive_processes_pain_points: %{status: "unknown", items: []},
+        digital_maturity: %{level: "unknown", evidence: nil},
+        metrics_baselines: %{status: "unknown", items: []}
+      }
+
+      {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), answered)
+
+      assert {:complete, data} = MarketValidator.check_completeness(agent)
+      assert data.team_size == %{status: "unknown", count: nil, notes: nil}
+      # city stays optional: an absent city does not block completeness
+      assert data.city == nil
+
+      # top-level nil is not an explicit answer: it stays missing
+      {:ok, agent} =
+        MarketValidator.extract_fields(
+          MarketValidator.new(),
+          Map.put(answered, :team_size, nil)
+        )
+
+      assert {:incomplete, missing} = MarketValidator.check_completeness(agent)
+      assert missing == [:team_size]
+      refute :city in missing
+    end
+  end
+
   describe "extract_fields/2 map fast path" do
     test "stores normalized diagnosis values explicitly before set/2" do
       agent = MarketValidator.new()

@@ -127,16 +127,21 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   @doc """
   Checks which required fields are still nil/empty.
 
+  Required: the five commercial scalars (city stays optional) plus an
+  explicit answer for every diagnosis field. A normalized diagnosis map
+  with an explicit `"unknown"` state counts as answered; a top-level
+  `nil` diagnosis value stays missing.
+
   Returns:
   - {:complete, data_map} if all required fields present
   - {:incomplete, missing_fields_list} if some are missing
   """
   def check_completeness(agent) do
+    required = @required_fields ++ ExtractionOutput.diagnosis_fields()
+
     missing =
-      @required_fields
-      |> Enum.filter(fn field ->
-        value = Map.get(agent.state, field)
-        is_nil(value) or value == ""
+      Enum.filter(required, fn field ->
+        missing?(agent.state, field)
       end)
 
     case missing do
@@ -202,6 +207,11 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
 
   # Private helpers
 
+  defp missing?(state, field) do
+    value = Map.get(state, field)
+    is_nil(value) or value == ""
+  end
+
   defp merge_extracted(agent, extracted_map, source_message) do
     # Build update map with only non-nil extracted values, using ATOM keys
     updates =
@@ -263,7 +273,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   defp normalize_map(map), do: ExtractionOutput.normalize_map(map)
 
   defp extract_data(agent) do
-    %{
+    base = %{
       country: agent.state.country,
       city: Map.get(agent.state, :city),
       business_market: agent.state.business_market,
@@ -271,6 +281,10 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       final_product_proposal: agent.state.final_product_proposal,
       product_price: agent.state.product_price
     }
+
+    Enum.reduce(ExtractionOutput.diagnosis_fields(), base, fn field, acc ->
+      Map.put(acc, field, Map.get(agent.state, field))
+    end)
   end
 
   defp humanize(:business_market), do: "business market"
