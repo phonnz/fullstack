@@ -74,8 +74,20 @@ defmodule Fullstack.JidoMarketAgents do
   """
   @spec send_message(term(), term(), map() | String.t(), keyword()) ::
           {:ok, :buffered, term()}
-  def send_message(user_id, conversation_id, message, _opts) do
-    MessageBuffer.append(user_id, conversation_id, message)
+  def send_message(user_id, conversation_id, message, opts) do
+    payload =
+      if Keyword.has_key?(opts, :run_ref) or Keyword.has_key?(opts, :request_ref) do
+        %{
+          __pipeline_request__: true,
+          message: message,
+          run_ref: Keyword.get(opts, :run_ref, Ecto.UUID.generate()),
+          request_ref: Keyword.get(opts, :request_ref, Ecto.UUID.generate())
+        }
+      else
+        message
+      end
+
+    MessageBuffer.append(user_id, conversation_id, payload)
   end
 
   @doc "Whether `user_id` is currently rate-limited (`:cooldown`) or not (`:active`)."

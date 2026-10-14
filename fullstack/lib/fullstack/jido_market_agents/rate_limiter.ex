@@ -45,6 +45,15 @@ defmodule Fullstack.JidoMarketAgents.RateLimiter do
       batches.
   """
   @spec check_and_process(term(), term(), map() | String.t()) :: :allow | :deny | :queued
+  def check_and_process(
+        user_id,
+        conversation_id,
+        %{__pipeline_request__: true, message: message} = envelope
+      ) do
+    operation = if is_map(message), do: :process_map, else: :check_and_process
+    GenServer.call(__MODULE__, {operation, user_id, conversation_id, envelope})
+  end
+
   def check_and_process(user_id, conversation_id, message) when is_map(message) do
     GenServer.call(__MODULE__, {:process_map, user_id, conversation_id, message})
   end

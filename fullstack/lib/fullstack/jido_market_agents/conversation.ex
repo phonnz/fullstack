@@ -15,9 +15,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher}
   alias Fullstack.JidoMarketAgents.Conversations
+  alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
 
   @pubsub Fullstack.PubSub
   @default_timeout 15_000
+  @stages [:research, :analysis, :systems, :tech_strategy]
 
   # The six flat fields extracted by `MarketValidator` (its schema, minus
   # `extraction_history` — excluded per design D3). Shared by the T4
@@ -43,6 +45,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :record_id,
     :mode,
     :pending_stage,
+    task: nil,
+    task_stage: nil,
+    task_timer: nil,
+    run_ref: nil,
+    request_ref: nil,
+    boundary_version: 0,
+    input_fingerprint: nil,
+    results: %{},
+    queue: [],
     persisted_count: 0
   ]
 
@@ -135,10 +146,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       :not_found ->
         opts = if user_id, do: [id: id, user_id: user_id], else: [id: id]
 
-        DynamicSupervisor.start_child(
-          Fullstack.JidoMarketAgents.ConversationSupervisor,
-          {__MODULE__, opts}
-        )
+        case DynamicSupervisor.start_child(
+               Fullstack.JidoMarketAgents.ConversationSupervisor,
+               {__MODULE__, opts}
+             ) do
+          {:ok, pid} -> {:ok, pid}
+          {:error, {:already_started, pid}} -> {:ok, pid}
+          error -> error
+        end
     end
   end
 
@@ -248,6 +263,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   @impl true
   def init(opts) do
+    Process.flag(:trap_exit, true)
     id = Keyword.fetch!(opts, :id)
     user_id = Keyword.get(opts, :user_id)
 
@@ -366,91 +382,252 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   @impl true
   def handle_call({:send_message, message}, _from, state) do
-    # Record user message
-    user_msg = %{role: :user, content: message, timestamp: DateTime.utc_now()}
-    state = %{state | messages: state.messages ++ [user_msg]}
-
-    # Enqueue async processing — no I/O in this call
-    send(self(), {:process_message, message})
+    request = request_envelope(message)
+    state = %{state | queue: state.queue ++ [request]}
+    send(self(), :drain_queue)
     {:reply, {:ok, :accepted, state.id}, state}
   end
 
-  def handle_call(:resume, _from, state) do
-    {:reply, {:ok, state.status, state.messages}, state}
+  def handle_call(:close, _from, state) do
+    # Closing an observer never cancels an already accepted stage.
+    {:reply, :ok, %{state | mode: :manual}}
   end
 
-  def handle_call(:list_messages, _from, state) do
-    {:reply, {:ok, state.messages}, state}
-  end
+  def handle_call(:resume, _from, state),
+    do: {:reply, {:ok, state.status, state.messages}, state}
 
-  # Async message processing (moved out of handle_call)
+  def handle_call(:list_messages, _from, state),
+    do: {:reply, {:ok, state.messages}, state}
 
   @impl true
-  def handle_info({:process_message, message}, state) do
+  def handle_info(:drain_queue, %{task: nil, pending_stage: nil, queue: [request | rest]} = state) do
+    user_msg = %{
+      role: :user,
+      content: request.message,
+      timestamp: DateTime.utc_now(),
+      metadata: %{run_ref: request.run_ref, request_ref: request.request_ref}
+    }
+
+    state = %{
+      state
+      | messages: state.messages ++ [user_msg],
+        queue: rest,
+        run_ref: request.run_ref,
+        request_ref: request.request_ref,
+        status: :active
+    }
+
+    # Only the owner writes. Accepted input and identity precede provider launch.
     state = persist_new_messages(state)
+    state = persist_status(state, :active)
 
-    case MarketValidator.extract_fields(state.validator_agent, message) do
-      {:ok, updated_validator} ->
-        state = %{state | validator_agent: updated_validator}
-        process_extraction(state)
+    {:noreply,
+     launch(state, :validator, fn ->
+       AgentTelemetry.span(:validation, %{conversation_id: state.id}, fn ->
+         MarketValidator.extract_fields(state.validator_agent, request.message)
+       end)
+     end)}
+  end
 
-      {:error, reason} ->
-        error_msg = %{
-          role: :assistant,
-          content: "Sorry, I had trouble processing your message. Please try again.",
-          timestamp: DateTime.utc_now(),
-          metadata: %{type: :error, reason: inspect(reason)}
-        }
+  def handle_info(:drain_queue, state), do: {:noreply, state}
 
-        state = %{state | messages: state.messages ++ [error_msg], status: :error}
+  def handle_info({:run_stage, stage}, %{task: nil} = state) when stage in @stages do
+    if state.pending_stage == stage, do: run_stage(state, stage), else: {:noreply, state}
+  end
 
-        state =
-          broadcast(state, :error, %{status: :error, stage: :extraction, reason: reason})
+  def handle_info({:run_stage, _stage}, state), do: {:noreply, state}
 
-        {:noreply, state}
+  def handle_info({ref, result}, %{task: %Task{ref: ref}} = state) do
+    Process.demonitor(ref, [:flush])
+    Process.cancel_timer(state.task_timer)
+    stage = state.task_stage
+    state = %{state | task: nil, task_stage: nil, task_timer: nil}
+
+    case {stage, result} do
+      {:validator, {:ok, validator}} -> process_extraction(%{state | validator_agent: validator})
+      {stage, {:ok, result}} -> stage_success(state, stage, result)
+      {stage, {:error, _reason}} -> stage_failure(state, stage, :provider_failed)
+      {stage, _} -> stage_failure(state, stage, :invalid_result)
     end
   end
 
-  def handle_info(:run_research, state) do
-    case MarketResearcher.research(state.researcher_agent) do
-      {:ok, result} ->
-        research_msg = %{
-          role: :assistant,
-          content: Jason.encode!(result, pretty: true),
-          timestamp: DateTime.utc_now(),
-          metadata: %{type: :research_result, result: result}
-        }
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{task: %Task{ref: ref}} = state) do
+    Process.cancel_timer(state.task_timer)
+    stage_failure(%{state | task: nil, task_timer: nil}, state.task_stage, :worker_failed)
+  end
 
+  def handle_info({:stage_timeout, ref}, %{task: %Task{ref: ref} = task} = state) do
+    Task.shutdown(task, :brutal_kill)
+    stage_failure(%{state | task: nil, task_timer: nil}, state.task_stage, :timeout)
+  end
+
+  # Results and DOWNs from completed/obsolete tasks never cross the boundary.
+  def handle_info({_ref, _result}, state), do: {:noreply, state}
+  def handle_info({:DOWN, _, :process, _, _}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _, _}, state), do: {:noreply, state}
+
+  @impl true
+  def terminate(_reason, %{task: %Task{} = task}), do: Task.shutdown(task, :brutal_kill)
+  def terminate(_reason, _state), do: :ok
+
+  defp request_envelope(%{
+         __pipeline_request__: true,
+         message: message,
+         run_ref: run,
+         request_ref: request
+       }) do
+    %{message: message, run_ref: run, request_ref: request}
+  end
+
+  defp request_envelope(message),
+    do: %{message: message, run_ref: Ecto.UUID.generate(), request_ref: Ecto.UUID.generate()}
+
+  defp launch(state, stage, fun) do
+    task = Task.async(fun)
+
+    configured =
+      Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])[:stage_timeout_ms]
+
+    timeout = if is_integer(configured) and configured > 0, do: configured, else: 120_000
+    timer = Process.send_after(self(), {:stage_timeout, task.ref}, timeout)
+    %{state | task: task, task_stage: stage, task_timer: timer}
+  end
+
+  defp run_stage(state, :research) do
+    data = state.validated_data
+
+    {:ok, agent} =
+      MarketResearcher.set(MarketResearcher.new(id: "#{state.id}_researcher"), %{
+        country: data[:country] || data["country"],
+        city: data[:city] || data["city"],
+        business_market: data[:business_market] || data["business_market"],
+        final_product_proposal: data[:final_product_proposal] || data["final_product_proposal"]
+      })
+
+    {:noreply,
+     launch(state, :research, fn ->
+       AgentTelemetry.span(:research, %{conversation_id: state.id}, fn ->
+         MarketResearcher.research(agent)
+       end)
+     end)}
+  end
+
+  defp stage_success(state, stage, result) do
+    next = nil
+    status = :completed
+    fingerprint = stage_input_fingerprint(state, stage)
+    state = %{state | input_fingerprint: fingerprint}
+    state = persist_status(state, state.status)
+
+    transition = %{
+      stage: stage,
+      run_ref: state.run_ref,
+      request_ref: state.request_ref,
+      input_fingerprint: fingerprint,
+      contract_version: "1",
+      result_digest: digest(result),
+      completed_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+      result: result,
+      status: status,
+      mode: state.mode,
+      pending_stage: next
+    }
+
+    case commit_stage(state, transition) do
+      {:ok, outcome, state} ->
         state = %{
           state
-          | messages: state.messages ++ [research_msg],
-            status: :completed
-        }
-
-        state = broadcast(state, :research_complete, %{status: :completed})
-        Logger.info("Research completed for conversation #{state.id}")
-        {:noreply, state}
-
-      {:error, reason} ->
-        error_msg = %{
-          role: :assistant,
-          content: "Market research failed: #{inspect(reason)}. Please try again.",
-          timestamp: DateTime.utc_now(),
-          metadata: %{type: :error}
-        }
-
-        state = %{
-          state
-          | messages: state.messages ++ [error_msg],
-            status: :error
+          | status: status,
+            pending_stage: next,
+            results: Map.put(state.results, stage, result)
         }
 
         state =
-          broadcast(state, :error, %{status: :error, stage: :research, reason: reason})
+          if outcome == :committed,
+            do: broadcast(state, stage_event(stage), %{status: status}),
+            else: state
 
-        Logger.error("Research failed for conversation #{state.id}: #{inspect(reason)}")
+        send(self(), :drain_queue)
         {:noreply, state}
+
+      {:error, _} ->
+        stage_failure(state, stage, :persistence_failed)
     end
+  end
+
+  defp commit_stage(%{user_id: nil} = state, transition) do
+    message = %{
+      role: :assistant,
+      content: Jason.encode!(transition.result),
+      timestamp: DateTime.utc_now(),
+      metadata: %{type: :market_research, result: transition.result}
+    }
+
+    {:ok, :committed,
+     %{
+       state
+       | messages: state.messages ++ [message],
+         boundary_version: state.boundary_version + 1
+     }}
+  end
+
+  defp commit_stage(state, transition) do
+    case Conversations.persist_stage_transition(
+           state.user_id,
+           state.record_id,
+           state.boundary_version,
+           transition
+         ) do
+      {:ok, outcome, snapshot} ->
+        messages = Enum.map(snapshot.messages, &restored_message/1)
+
+        {:ok, outcome,
+         %{
+           state
+           | messages: messages,
+             persisted_count: length(messages),
+             validated_data: snapshot.record.validated_data,
+             boundary_version: pipeline_control(snapshot.record)["boundary_version"]
+         }}
+
+      error ->
+        error
+    end
+  end
+
+  defp stage_event(:research), do: :research_complete
+
+  defp stage_input_fingerprint(state, stage),
+    do: digest(%{stage: stage, data: state.validated_data})
+
+  defp digest(value),
+    do: :crypto.hash(:sha256, :erlang.term_to_binary(value)) |> Base.encode16(case: :lower)
+
+  defp stage_failure(state, stage, reason) do
+    message = %{
+      role: :assistant,
+      content: "Stage failed. Please try again.",
+      timestamp: DateTime.utc_now(),
+      metadata: %{type: :error}
+    }
+
+    state = %{
+      state
+      | messages: state.messages ++ [message],
+        status: :error,
+        pending_stage: nil,
+        task_stage: nil
+    }
+
+    state =
+      broadcast(state, :error, %{
+        status: :error,
+        stage: if(stage == :validator, do: :extraction, else: stage),
+        reason: reason
+      })
+
+    send(self(), :drain_queue)
+    {:noreply, state}
   end
 
   # Private helpers
@@ -466,26 +643,16 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           timestamp: DateTime.utc_now()
         }
 
-        {:ok, updated_researcher} =
-          MarketResearcher.set(state.researcher_agent, %{
-            country: data.country,
-            city: Map.get(data, :city),
-            business_market: data.business_market,
-            final_product_proposal: data.final_product_proposal
-          })
-
         state = %{
           state
           | messages: state.messages ++ [assistant_msg],
-            researcher_agent: updated_researcher,
             status: :researching,
-            validated_data: data
+            validated_data: data,
+            pending_stage: :research
         }
 
         state = broadcast(state, :extraction_complete, %{status: :researching})
-
-        # Run research asynchronously
-        send(self(), :run_research)
+        send(self(), {:run_stage, :research})
         {:noreply, state}
 
       {:incomplete, fields} ->
@@ -505,7 +672,9 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             validated_data: partial_validated_data(state.validator_agent)
         }
 
+        state = %{state | status: :active, pending_stage: nil}
         state = broadcast(state, :extraction_complete, %{status: :needs_data})
+        send(self(), :drain_queue)
         {:noreply, state}
     end
   end
@@ -542,6 +711,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
     payload =
       extra
+      |> Map.put(:run_ref, state.run_ref)
+      |> Map.put(:request_ref, state.request_ref)
       |> Map.put(:conversation_id, state.id)
       |> Map.put(:messages, state.messages)
 
@@ -652,7 +823,22 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   defp normalize_validated_data(%{validated_data: nil}), do: nil
-  defp normalize_validated_data(%{validated_data: data}) when is_map(data), do: data
+
+  defp normalize_validated_data(%{validated_data: data} = state) when is_map(data) do
+    control = %{
+      "run_ref" => state.run_ref,
+      "request_ref" => state.request_ref,
+      "input_fingerprint" => state.input_fingerprint,
+      "boundary_version" => state.boundary_version,
+      "mode" => to_string(state.mode),
+      "pending_stage" => state.pending_stage && to_string(state.pending_stage)
+    }
+
+    Map.update(data, "_pipeline", control, fn existing ->
+      Map.merge(if(is_map(existing), do: existing, else: %{}), control)
+    end)
+  end
+
   defp normalize_validated_data(_state), do: nil
 
   # Lazily creates the conversation row on first persist. Degrades
