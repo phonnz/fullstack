@@ -136,6 +136,56 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     end
   end
 
+  describe "atomic field replacement" do
+    test "explicit correction replaces one collection instead of concatenating items" do
+      agent = MarketValidator.new()
+
+      # legacy-shaped fragment (e.g. rehydrated from an old persisted row):
+      # string keys plus stale nested keys that no longer belong to the contract
+      {:ok, agent} =
+        MarketValidator.set(agent, %{
+          current_tools_systems: %{
+            "status" => "known",
+            "items" => [%{"name" => "LegacyCRM", "extra" => "stale"}],
+            "legacy_note" => "stale"
+          }
+        })
+
+      # explicit correction: exactly one clean item
+      {:ok, agent} =
+        MarketValidator.extract_fields(agent, %{
+          "current_tools_systems" => %{
+            "status" => "known",
+            "items" => [
+              %{
+                "name" => "Notion",
+                "category" => "notes",
+                "purpose" => "wiki",
+                "integration_notes" => nil
+              }
+            ]
+          }
+        })
+
+      expected = %{
+        status: "known",
+        items: [%{name: "Notion", category: "notes", purpose: "wiki", integration_notes: nil}]
+      }
+
+      # the corrected field is replaced wholesale, not merged/concatenated
+      assert agent.state.current_tools_systems == expected
+      assert length(agent.state.current_tools_systems.items) == 1
+
+      # removed nested keys do not survive a correction
+      refute Map.has_key?(agent.state.current_tools_systems, :legacy_note)
+      refute Map.has_key?(agent.state.current_tools_systems, "items")
+
+      # history is preserved across the rebuild
+      assert [%{status: :ok, extracted: %{current_tools_systems: ^expected}}] =
+               agent.state.extraction_history
+    end
+  end
+
   describe "state preservation across turns" do
     test "omitted and top-level nil values do not erase prior state" do
       {:ok, agent} =

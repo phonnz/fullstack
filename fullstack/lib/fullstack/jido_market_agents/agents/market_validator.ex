@@ -234,19 +234,24 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       status: :ok
     }
 
-    case append_history(agent, history_entry) do
-      {:ok, agent_with_history} ->
-        __MODULE__.set(agent_with_history, updates)
+    history = Map.get(agent.state, :extraction_history, []) ++ [history_entry]
 
-      error ->
-        error
-    end
+    # Normalize-and-replace (design (d)): updates carry COMPLETE normalized
+    # field maps, and the shallow top-level merge replaces each affected
+    # field wholesale. Rebuilding a fresh validator from that replacement
+    # map keeps Jido set/2 deep-merge from preserving stale nested keys.
+    replacement =
+      agent.state
+      |> Map.merge(updates)
+      |> Map.put(:extraction_history, history)
+
+    rebuild(agent, replacement)
   end
 
-  defp append_history(agent, entry) do
-    current_history = Map.get(agent.state, :extraction_history, [])
-    updated_history = current_history ++ [entry]
-    __MODULE__.set(agent, %{extraction_history: updated_history})
+  defp rebuild(agent, replacement) do
+    with {:ok, fresh} <- __MODULE__.set(__MODULE__.new(), replacement) do
+      {:ok, %{fresh | id: agent.id}}
+    end
   end
 
   defp parse_llm_json(content) when is_binary(content) do
