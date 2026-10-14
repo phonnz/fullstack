@@ -688,6 +688,175 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
     end
   end
 
+  # ── P56: resume decision over durable boundaries ───────────────────────────
+
+  defp complete_facts do
+    %{
+      "country" => "Spain",
+      "city" => "Madrid",
+      "business_market" => "fintech",
+      "initial_budget" => "50000 EUR",
+      "final_product_proposal" => "Payment app",
+      "product_price" => "10 EUR",
+      "team_size" => %{"status" => "unknown", "count" => nil, "notes" => nil},
+      "current_tools_systems" => %{"status" => "unknown", "items" => []},
+      "repetitive_processes_pain_points" => %{"status" => "unknown", "items" => []},
+      "digital_maturity" => %{"level" => "unknown", "evidence" => nil},
+      "metrics_baselines" => %{"status" => "unknown", "items" => []}
+    }
+  end
+
+  defp research_boundary(facts, tag) do
+    %{
+      "market_evidence" => [],
+      "market_gaps" => [],
+      "demand_signals" => [],
+      "sources" => [],
+      "limitations" => [tag],
+      "_meta" => %{
+        "stage" => "research",
+        "contract_version" => "market-research/1",
+        "input_fingerprint" =>
+          Conversation.fingerprint(:research, %{validated_data: facts, output_language: nil}),
+        "boundary_version" => 1
+      }
+    }
+  end
+
+  defp resume_state(user, attrs, research) do
+    {:ok, created} = Conversations.create(user.id)
+
+    {:ok, record} = Conversations.update_state(created, attrs)
+
+    if research do
+      {:ok, _} =
+        Conversations.append_message(record.id, %{
+          role: "assistant",
+          content: "research",
+          metadata: %{"type" => "market_research", "result" => research}
+        })
+    end
+
+    {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+    :sys.get_state(pid)
+  end
+
+  describe "resume decision table" do
+    test "resume decision follows partial validation through completed strategy" do
+      user = user_fixture()
+      facts = complete_facts()
+      research = research_boundary(facts, "durable")
+
+      analysis_column =
+        Map.put(persisted_analysis(), "_meta", %{
+          "input_fingerprint" =>
+            Conversation.fingerprint(:analysis, %{
+              validated_data: facts,
+              research_output: research,
+              output_language: nil
+            })
+        })
+
+      systems_column =
+        Map.put(persisted_systems(), "_meta", %{
+          "input_fingerprint" =>
+            Conversation.fingerprint(:systems, %{
+              validated_data: facts,
+              research_output: research,
+              analysis_output: analysis_column,
+              output_language: nil
+            })
+        })
+
+      tech_column = %{
+        "_meta" => %{
+          "input_fingerprint" =>
+            Conversation.fingerprint(:tech_strategy, %{
+              validated_data: facts,
+              research_output: research,
+              analysis_output: analysis_column,
+              systems_output: systems_column,
+              output_language: nil
+            })
+        }
+      }
+
+      # The six durable boundaries: partial validation through completed
+      # strategy, each resuming at the highest contiguous valid boundary.
+      boundaries = [
+        {%{validated_data: %{"country" => "Spain"}}, nil, %{}, :wait},
+        {%{validated_data: facts}, nil, %{}, {:run, :research}},
+        {%{validated_data: facts}, research, %{}, {:run, :analysis}},
+        {%{validated_data: facts}, research, %{business_analysis: analysis_column},
+         {:run, :systems}},
+        {%{validated_data: facts}, research,
+         %{business_analysis: analysis_column, systems_strategy: systems_column},
+         {:run, :tech_strategy}},
+        {%{validated_data: facts}, research,
+         %{
+           business_analysis: analysis_column,
+           systems_strategy: systems_column,
+           tech_strategy: tech_column
+         }, :complete}
+      ]
+
+      for {attrs, staged_research, columns, expected} <- boundaries do
+        state = resume_state(user, Map.merge(attrs, columns), staged_research)
+        assert Conversation.resume_point(state) == expected
+      end
+
+      # Error rows never auto-retry.
+      assert Conversation.resume_point(
+               resume_state(user, %{validated_data: facts, status: "error"}, research)
+             ) ==
+               :halt
+
+      # Manual mode never auto-advances.
+      manual_facts = Map.put(facts, "_pipeline", %{"mode" => "manual"})
+
+      assert Conversation.resume_point(
+               resume_state(user, %{validated_data: manual_facts, status: "active"}, research)
+             ) == :idle
+
+      # Read-only attachment of legacy completed rows schedules no LLM work.
+      legacy =
+        Map.take(facts, [
+          "country",
+          "city",
+          "business_market",
+          "initial_budget",
+          "final_product_proposal",
+          "product_price"
+        ])
+
+      assert Conversation.resume_point(
+               resume_state(user, %{validated_data: legacy, status: "completed"}, nil)
+             ) ==
+               :idle
+
+      # Fingerprint gaps are stale: a systems map with no compatible
+      # analysis chain resumes at the earliest invalid boundary.
+      assert Conversation.resume_point(
+               resume_state(
+                 user,
+                 %{validated_data: facts, systems_strategy: systems_column},
+                 research
+               )
+             ) == {:run, :analysis}
+
+      stale_analysis =
+        Map.put(persisted_analysis(), "_meta", %{"input_fingerprint" => String.duplicate("0", 64)})
+
+      assert Conversation.resume_point(
+               resume_state(
+                 user,
+                 %{validated_data: facts, business_analysis: stale_analysis},
+                 research
+               )
+             ) == {:run, :analysis}
+    end
+  end
+
   # ── No-duplicate-on-resume ──────────────────────────────────────────────────
   describe "No duplicate persistence after rehydration" do
     test "restored messages are not re-persisted; only the new turn adds rows" do

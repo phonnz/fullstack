@@ -505,6 +505,48 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     ArgumentError -> module.new(state: %{refinements: %{}})
   end
 
+  @doc false
+  # Pure ordered decision over the restored durable boundaries (P56):
+  # resume at the highest contiguous VALID boundary. Fingerprint gaps are
+  # stale — a result map whose `_meta` input fingerprint is missing or no
+  # longer compatible is treated as absent, and the pipeline resumes at the
+  # earliest invalid boundary. Error rows never auto-retry; manual and
+  # legacy rows never auto-advance; incomplete validation waits for the
+  # user. Complete means a matching research boundary plus all three
+  # compatible result maps.
+  def resume_point(state) do
+    cond do
+      state.status == :error -> :halt
+      state.mode != :automatic -> :idle
+      true -> resume_stage(state)
+    end
+  end
+
+  defp resume_stage(state) do
+    case MarketValidator.check_completeness(state.validator_agent) do
+      {:incomplete, _fields} -> :wait
+      {:complete, _data} -> earliest_missing_boundary(state)
+    end
+  end
+
+  defp earliest_missing_boundary(state) do
+    Enum.find_value(@stages, :complete, fn stage ->
+      if boundary_compatible?(state, stage), do: nil, else: {:run, stage}
+    end)
+  end
+
+  defp boundary_compatible?(state, stage) do
+    case state.results[stage] do
+      result when is_map(result) ->
+        meta = result["_meta"] || result[:_meta] || %{}
+        stored = meta["input_fingerprint"] || meta[:input_fingerprint]
+        is_binary(stored) and stored == stage_input_fingerprint(state, stage)
+
+      _ ->
+        false
+    end
+  end
+
   # The language is system-owned control metadata (`validated_data["_pipeline"]`),
   # restored through `set/2` like any other validated state. Missing or
   # invalid values leave it unset so the next turn re-derives it.
