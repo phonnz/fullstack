@@ -17,6 +17,12 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       initial_budget: [type: :string, required: false],
       final_product_proposal: [type: :string, required: false],
       product_price: [type: :string, required: false],
+      team_size: [type: :map, required: false, default: nil],
+      current_tools_systems: [type: :map, required: false, default: nil],
+      repetitive_processes_pain_points: [type: :map, required: false, default: nil],
+      digital_maturity: [type: :map, required: false, default: nil],
+      metrics_baselines: [type: :map, required: false, default: nil],
+      output_language: [type: :string, required: false, default: nil],
       extraction_history: [type: :list, required: false, default: []]
     ]
 
@@ -31,14 +37,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
     :product_price
   ]
 
-  @extractable_fields [
-    :country,
-    :city,
-    :business_market,
-    :initial_budget,
-    :final_product_proposal,
-    :product_price
-  ]
+  @extractable_fields ExtractionOutput.fields()
 
   @doc """
   Extracts field values from a user message.
@@ -78,6 +77,9 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
           {:ok, extracted} ->
             merge_extracted(agent, extracted, message)
 
+          {:error, {:invalid_diagnosis, _field, _code}} = error ->
+            error
+
           {:error, reason} ->
             {:error, {:parse_failed, reason}}
         end
@@ -88,9 +90,14 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   end
 
   def extract_fields(agent, message) when is_map(message) do
-    # Fast path: map input — extract directly without LLM
-    extracted = normalize_map(message)
-    merge_extracted(agent, extracted, "map_input")
+    # Fast path: map input — extract directly without LLM. Normalization
+    # validates the domain data explicitly (generated `set/2` deep-merges
+    # without validation), so a malformed diagnosis is rejected before any
+    # merge and prior data stays unchanged.
+    case normalize_map(message) do
+      {:error, {:invalid_diagnosis, _field, _code}} = error -> error
+      extracted -> merge_extracted(agent, extracted, "map_input")
+    end
   end
 
   @doc """
@@ -135,6 +142,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
         case value do
           nil -> "  - #{label}: (not provided)"
           "" -> "  - #{label}: (not provided)"
+          v when is_map(v) -> "  - #{label}: #{inspect(v)}"
           v -> "  - #{label}: #{v}"
         end
       end)
@@ -212,9 +220,17 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       end
 
     case Jason.decode(json_str) do
-      {:ok, map} when is_map(map) -> {:ok, normalize_map(map)}
-      {:ok, _other} -> {:error, :not_a_map}
-      {:error, reason} -> {:error, {:json_parse, reason}}
+      {:ok, map} when is_map(map) ->
+        case normalize_map(map) do
+          {:error, {:invalid_diagnosis, _field, _code}} = error -> error
+          normalized -> {:ok, normalized}
+        end
+
+      {:ok, _other} ->
+        {:error, :not_a_map}
+
+      {:error, reason} ->
+        {:error, {:json_parse, reason}}
     end
   end
 
