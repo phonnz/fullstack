@@ -1,16 +1,41 @@
 defmodule Fullstack.JidoMarketAgents.Agents.SystemsAgentTest do
   use ExUnit.Case, async: false
-  alias Fullstack.JidoMarketAgents.Agents.SystemsAgent
+  alias Fullstack.JidoMarketAgents.Agents.{SystemsAgent, SystemsStrategyOutput}
 
   defmodule Guide do
     def fetch(:six_systems), do: {:ok, "SIX_SYSTEMS_GUIDE_MARKER: sequence before optimization"}
     def fetch(:tech_adoption), do: {:ok, "TECH_GUIDE_MUST_NOT_APPEAR"}
   end
 
+  defmodule MissingGuide do
+    def fetch(_), do: {:error, :not_configured}
+  end
+
+  defmodule BlankGuide do
+    def fetch(_), do: {:ok, "   "}
+  end
+
+  defmodule Backend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(messages, opts) do
+      send(self(), {:systems_dispatch, messages, opts})
+      Process.get(:systems_reply, {:ok, "{}"})
+    end
+  end
+
   setup do
     previous = Application.get_env(:fullstack, :knowledge_module)
     config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
     Application.put_env(:fullstack, :knowledge_module, Guide)
+
+    Application.put_env(
+      :fullstack,
+      Fullstack.JidoMarketAgents,
+      Keyword.put(config, :systems_backend, {Backend, model: "systems-test"})
+    )
 
     on_exit(fn ->
       if previous,
@@ -83,5 +108,104 @@ defmodule Fullstack.JidoMarketAgents.Agents.SystemsAgentTest do
     assert truncated =~ "SIX_SYSTEM"
     assert truncated =~ "[GROUNDING TRUNCATED]"
     refute truncated =~ "sequence before optimization"
+  end
+
+  test "build/1 normalizes strategy and fails before dispatch when grounding is missing" do
+    agent = SystemsAgent.new(state: %{output_language: "fr"})
+    raw = valid_strategy()
+    Process.put(:systems_reply, {:ok, Jason.encode!(raw)})
+    assert {:ok, result} = SystemsAgent.build(agent)
+    assert result == SystemsStrategyOutput.normalize_map(raw)
+    assert_received {:systems_dispatch, messages, opts}
+    assert List.last(messages)["content"] =~ "USER's input language: fr"
+    assert opts[:model] == "systems-test"
+    assert opts[:response_format] == {:json_object, SystemsStrategyOutput.schema()}
+    Process.put(:systems_reply, {:error, :offline})
+    assert {:error, {:systems_failed, :offline}} = SystemsAgent.build(agent)
+    Process.put(:systems_reply, {:ok, "not JSON"})
+
+    assert {:error, {:parse_failed, {:json_parse, %Jason.DecodeError{}}}} =
+             SystemsAgent.build(agent)
+
+    Process.put(:systems_reply, {:ok, "[]"})
+    assert {:error, {:parse_failed, :not_a_map}} = SystemsAgent.build(agent)
+    Process.put(:systems_reply, {:ok, nil})
+    assert {:error, {:parse_failed, :invalid_content}} = SystemsAgent.build(agent)
+    Process.put(:systems_reply, {:ok, "{}"})
+
+    assert {:error, {:invalid_systems_strategy, :systems, :invalid_shape}} =
+             SystemsAgent.build(agent)
+
+    drain_dispatch()
+
+    for module <- [MissingGuide, BlankGuide] do
+      Application.put_env(:fullstack, :knowledge_module, module)
+      assert {:error, {:grounding_failed, :not_configured}} = SystemsAgent.build(agent)
+      refute_receive {:systems_dispatch, _, _}, 10
+    end
+  end
+
+  defp drain_dispatch do
+    receive do
+      {:systems_dispatch, _, _} -> drain_dispatch()
+    after
+      0 -> :ok
+    end
+  end
+
+  defp valid_strategy do
+    systems =
+      Map.new(SystemsStrategyOutput.system_order(), fn key ->
+        base = %{
+          current_state: "Manual",
+          priority: "high",
+          actions: ["Improve"],
+          kpis: ["Revenue"],
+          pitfall: "Do not skip sequencing"
+        }
+
+        details =
+          case key do
+            :authority ->
+              %{
+                layers: %{
+                  personal_discourse: "Clear message",
+                  third_party_endorsement: "Partners",
+                  success_cases: "Case study"
+                }
+              }
+
+            :conversion ->
+              %{
+                phases: %{
+                  qualification: "Fit",
+                  education_nurturing: "Teach",
+                  proposal: "Offer",
+                  close: "Agree"
+                }
+              }
+
+            :information ->
+              %{
+                kpis: ["Revenue", "Margin", "Retention"],
+                upward_information_flow: %{
+                  channel: "Weekly report",
+                  incentive: "Learning",
+                  review_cadence: "Weekly"
+                }
+              }
+
+            _ ->
+              %{}
+          end
+
+        {key, Map.merge(base, details)}
+      end)
+
+    %{
+      systems: systems,
+      sequencing: Enum.map(SystemsStrategyOutput.system_order(), &to_string/1),
+      quarterly_focus: "Acquisition"
+    }
   end
 end

@@ -17,7 +17,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.SystemsAgent do
     BusinessAnalysisOutput
   }
 
-  alias Fullstack.JidoMarketAgents.Knowledge
+  alias Fullstack.JidoMarketAgents.{Knowledge, LLM}
+  alias Fullstack.JidoMarketAgents.Agents.SystemsStrategyOutput
 
   defoverridable new: 1, set: 2
 
@@ -126,4 +127,46 @@ defmodule Fullstack.JidoMarketAgents.Agents.SystemsAgent do
         {:ok, guide}
     end
   end
+
+  def build(agent) do
+    with {:ok, prompt} <- prompt(agent) do
+      messages = [
+        %{"role" => "system", "content" => "Apply only the grounded six-systems methodology."},
+        %{"role" => "user", "content" => prompt}
+      ]
+
+      case LLM.chat_completion(:systems, messages,
+             response_format: {:json_object, SystemsStrategyOutput.schema()}
+           ) do
+        {:ok, content} -> parse_result(content)
+        {:error, reason} -> {:error, {:systems_failed, reason}}
+      end
+    end
+  end
+
+  defp parse_result(content) when is_binary(content) do
+    content = String.trim(content)
+
+    json =
+      case Regex.run(~r/\A```(?:json)?\s*(.*?)\s*```\z/s, content, capture: :all_but_first) do
+        [json] -> json
+        nil -> content
+      end
+
+    case Jason.decode(json) do
+      {:ok, raw} when is_map(raw) ->
+        case SystemsStrategyOutput.normalize_map(raw) do
+          {:error, _} = error -> error
+          result -> {:ok, result}
+        end
+
+      {:ok, _} ->
+        {:error, {:parse_failed, :not_a_map}}
+
+      {:error, reason} ->
+        {:error, {:parse_failed, {:json_parse, reason}}}
+    end
+  end
+
+  defp parse_result(_content), do: {:error, {:parse_failed, :invalid_content}}
 end
