@@ -70,6 +70,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
         "repetitive_processes_pain_points",
         repetitive_processes_pain_points_schema()
       )
+      |> Map.put("digital_maturity", digital_maturity_schema())
+      |> Map.put("metrics_baselines", metrics_baselines_schema())
 
     %{
       "type" => "object",
@@ -80,6 +82,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   end
 
   defp nullable_string, do: %{"type" => ["string", "null"]}
+
+  defp enum_string(values), do: %{"type" => "string", "enum" => values}
 
   defp closed_object(type, properties, required) do
     %{
@@ -94,7 +98,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     closed_object(
       ["object", "null"],
       %{
-        "status" => %{"type" => "string", "enum" => ["known", "unknown"]},
+        "status" => enum_string(["known", "unknown"]),
         "count" => %{"type" => ["integer", "null"], "minimum" => 0},
         "notes" => nullable_string()
       },
@@ -120,7 +124,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     closed_object(
       ["object", "null"],
       %{
-        "status" => %{"type" => "string", "enum" => ["known", "none", "unknown"]},
+        "status" => enum_string(["known", "none", "unknown"]),
         "items" => item_array(item)
       },
       ["status", "items"]
@@ -144,7 +148,42 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     closed_object(
       ["object", "null"],
       %{
-        "status" => %{"type" => "string", "enum" => ["known", "none", "unknown"]},
+        "status" => enum_string(["known", "none", "unknown"]),
+        "items" => item_array(item)
+      },
+      ["status", "items"]
+    )
+  end
+
+  defp digital_maturity_schema do
+    closed_object(
+      ["object", "null"],
+      %{
+        "level" => enum_string(["unknown", "manual", "digitized", "integrated", "optimized"]),
+        "evidence" => nullable_string()
+      },
+      ["level", "evidence"]
+    )
+  end
+
+  defp metrics_baselines_schema do
+    item =
+      closed_object(
+        "object",
+        %{
+          "metric" => %{"type" => "string"},
+          "value" => %{"type" => ["number", "null"]},
+          "unit" => nullable_string(),
+          "period" => nullable_string(),
+          "source" => nullable_string()
+        },
+        ["metric", "value", "unit", "period", "source"]
+      )
+
+    closed_object(
+      ["object", "null"],
+      %{
+        "status" => enum_string(["measured", "estimated", "none", "unknown"]),
         "items" => item_array(item)
       },
       ["status", "items"]

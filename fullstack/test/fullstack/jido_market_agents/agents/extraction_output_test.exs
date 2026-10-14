@@ -111,6 +111,45 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       assert item["additionalProperties"] == false
     end
 
+    test "schema/0 defines digital maturity and metric baseline states" do
+      schema = ExtractionOutput.schema()
+      maturity = schema["properties"]["digital_maturity"]
+
+      assert maturity["type"] == ["object", "null"]
+
+      assert maturity["properties"]["level"] == %{
+               "type" => "string",
+               "enum" => ["unknown", "manual", "digitized", "integrated", "optimized"]
+             }
+
+      assert maturity["properties"]["evidence"] == %{"type" => ["string", "null"]}
+      assert maturity["required"] == ["level", "evidence"]
+      assert maturity["additionalProperties"] == false
+
+      baselines = schema["properties"]["metrics_baselines"]
+
+      assert baselines["properties"]["status"] == %{
+               "type" => "string",
+               "enum" => ["measured", "estimated", "none", "unknown"]
+             }
+
+      assert baselines["required"] == ["status", "items"]
+      assert baselines["additionalProperties"] == false
+
+      items = baselines["properties"]["items"]
+      assert items["type"] == "array"
+
+      item = items["items"]
+      assert item["type"] == "object"
+      assert item["properties"]["metric"] == %{"type" => "string"}
+      assert item["properties"]["value"] == %{"type" => ["number", "null"]}
+      assert item["properties"]["unit"] == %{"type" => ["string", "null"]}
+      assert item["properties"]["period"] == %{"type" => ["string", "null"]}
+      assert item["properties"]["source"] == %{"type" => ["string", "null"]}
+      assert item["required"] == ["metric", "value", "unit", "period", "source"]
+      assert item["additionalProperties"] == false
+    end
+
     test "declares exactly the canonical field keys, no more, no fewer" do
       schema = ExtractionOutput.schema()
       expected_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> Enum.sort()
