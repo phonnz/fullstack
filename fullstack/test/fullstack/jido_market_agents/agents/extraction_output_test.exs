@@ -244,6 +244,50 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
     end
   end
 
+  describe "normalize_map/1 diagnosis values" do
+    test "normalize_map/1 validates team_size and digital_maturity" do
+      normalized =
+        ExtractionOutput.normalize_map(%{
+          "team_size" => %{"status" => "known", "count" => 5, "notes" => "small team"},
+          "digital_maturity" => %{"level" => "manual", "evidence" => "paper records"}
+        })
+
+      assert normalized.team_size == %{status: "known", count: 5, notes: "small team"}
+      assert normalized.digital_maturity == %{level: "manual", evidence: "paper records"}
+
+      # Explicit known-to-unknown correction: the normalized field is a
+      # complete replacement map — stale count/evidence are cleared to nil,
+      # never deep-merged.
+      corrected =
+        ExtractionOutput.normalize_map(%{
+          "team_size" => %{"status" => "unknown", "notes" => "owner unsure"},
+          "digital_maturity" => %{"level" => "unknown"}
+        })
+
+      assert corrected.team_size == %{status: "unknown", count: nil, notes: "owner unsure"}
+      assert corrected.digital_maturity == %{level: "unknown", evidence: nil}
+
+      assert {:error, {:invalid_diagnosis, :team_size, :invalid_shape}} =
+               ExtractionOutput.normalize_map(%{"team_size" => "big"})
+
+      assert {:error, {:invalid_diagnosis, :team_size, :invalid_status}} =
+               ExtractionOutput.normalize_map(%{"team_size" => %{"status" => "banana"}})
+
+      assert {:error, {:invalid_diagnosis, :team_size, :invalid_count}} =
+               ExtractionOutput.normalize_map(%{
+                 "team_size" => %{"status" => "known", "count" => "many"}
+               })
+
+      assert {:error, {:invalid_diagnosis, :team_size, :invalid_count}} =
+               ExtractionOutput.normalize_map(%{
+                 "team_size" => %{"status" => "unknown", "count" => 3}
+               })
+
+      assert {:error, {:invalid_diagnosis, :digital_maturity, :invalid_level}} =
+               ExtractionOutput.normalize_map(%{"digital_maturity" => %{"level" => "excel"}})
+    end
+  end
+
   describe "normalize_map/1" do
     test "normalizes known keys from either string or atom map, ignores unknown keys" do
       normalized =

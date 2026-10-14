@@ -51,6 +51,10 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
 
   @fields @commercial_fields ++ @diagnosis_fields
 
+  @team_size_statuses ["known", "unknown"]
+
+  @maturity_levels ["unknown", "manual", "digitized", "integrated", "optimized"]
+
   @doc "Returns the eleven extractable field atoms, in canonical order."
   @spec fields() :: [atom()]
   def fields, do: @fields
@@ -111,7 +115,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     closed_object(
       ["object", "null"],
       %{
-        "status" => enum_string(["known", "unknown"]),
+        "status" => enum_string(@team_size_statuses),
         "count" => %{"type" => ["integer", "null"], "minimum" => 0},
         "notes" => nullable_string()
       },
@@ -172,7 +176,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     closed_object(
       ["object", "null"],
       %{
-        "level" => enum_string(["unknown", "manual", "digitized", "integrated", "optimized"]),
+        "level" => enum_string(@maturity_levels),
         "evidence" => nullable_string()
       },
       ["level", "evidence"]
@@ -205,11 +209,10 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
 
   @doc """
   Normalizes a raw map (string or atom keys, from LLM-parsed JSON or a
-  caller-supplied map) into a map with exactly the six field atoms as
+  caller-supplied map) into a map with exactly the eleven field atoms as
   keys.
 
-  Behavior, preserved verbatim from `MarketValidator`'s prior private
-  implementation:
+  Commercial scalars keep the lenient legacy coercion:
 
     * a missing key normalizes to `nil`;
     * `nil` stays `nil`;
@@ -217,14 +220,108 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
       `to_string/1`;
     * any other value (list, map, tuple, ...) normalizes to `nil`;
     * keys outside `fields/0` are ignored.
+
+  Structured diagnosis values are validated (see `validate_diagnosis/1`):
+  a malformed non-null diagnosis value returns
+  `{:error, {:invalid_diagnosis, field, code}}` instead of being coerced
+  into a plausible answer. Valid diagnosis values normalize to complete
+  nested maps with atom keys and every declared sub-key present, so a
+  full-field replacement can never preserve stale nested values.
   """
-  @spec normalize_map(map()) :: %{atom() => String.t() | nil}
+  @spec normalize_map(map()) ::
+          %{atom() => term()} | {:error, {:invalid_diagnosis, atom(), atom()}}
   def normalize_map(map) do
-    Map.new(@fields, fn field ->
-      value = Map.get(map, field, Map.get(map, to_string(field)))
-      {field, normalize_value(value)}
+    with {:ok, diagnosis} <- validate_diagnosis(map) do
+      Map.merge(commercial_values(map), diagnosis)
+    end
+  end
+
+  @doc """
+  Validates and normalizes the five structured diagnosis values of a raw
+  map. Missing or top-level `nil` values normalize to `nil`; malformed
+  non-null values return a tagged field error and leave prior data
+  unchanged (the caller never merges an errored result).
+  """
+  @spec validate_diagnosis(map()) ::
+          {:ok, %{atom() => term() | nil}} | {:error, {:invalid_diagnosis, atom(), atom()}}
+  def validate_diagnosis(map) do
+    Enum.reduce_while(@diagnosis_fields, {:ok, %{}}, fn field, {:ok, acc} ->
+      case normalize_diagnosis_field(field, fetch_field(map, field)) do
+        {:ok, normalized} -> {:cont, {:ok, Map.put(acc, field, normalized)}}
+        {:error, _reason} = error -> {:halt, error}
+      end
     end)
   end
+
+  defp commercial_values(map) do
+    Map.new(@commercial_fields, fn field ->
+      {field, normalize_value(fetch_field(map, field))}
+    end)
+  end
+
+  defp fetch_field(map, field), do: Map.get(map, field, Map.get(map, to_string(field)))
+
+  defp normalize_diagnosis_field(:team_size, raw), do: normalize_team_size(raw)
+  defp normalize_diagnosis_field(:digital_maturity, raw), do: normalize_digital_maturity(raw)
+  defp normalize_diagnosis_field(_field, raw), do: {:ok, normalize_value(raw)}
+
+  defp normalize_team_size(nil), do: {:ok, nil}
+
+  defp normalize_team_size(raw) when is_map(raw) do
+    notes = fetch_field(raw, :notes)
+
+    case enum_value(fetch_field(raw, :status)) do
+      "known" ->
+        with {:ok, count} <- known_count(fetch_field(raw, :count)),
+             {:ok, notes} <- nullable_text(:team_size, notes, :invalid_notes) do
+          {:ok, %{status: "known", count: count, notes: notes}}
+        end
+
+      "unknown" ->
+        with :ok <- cleared_count(fetch_field(raw, :count)),
+             {:ok, notes} <- nullable_text(:team_size, notes, :invalid_notes) do
+          {:ok, %{status: "unknown", count: nil, notes: notes}}
+        end
+
+      _other ->
+        {:error, {:invalid_diagnosis, :team_size, :invalid_status}}
+    end
+  end
+
+  defp normalize_team_size(_raw), do: {:error, {:invalid_diagnosis, :team_size, :invalid_shape}}
+
+  defp normalize_digital_maturity(nil), do: {:ok, nil}
+
+  defp normalize_digital_maturity(raw) when is_map(raw) do
+    case enum_value(fetch_field(raw, :level)) do
+      level when level in @maturity_levels ->
+        with {:ok, evidence} <-
+               nullable_text(:digital_maturity, fetch_field(raw, :evidence), :invalid_evidence) do
+          {:ok, %{level: level, evidence: evidence}}
+        end
+
+      _other ->
+        {:error, {:invalid_diagnosis, :digital_maturity, :invalid_level}}
+    end
+  end
+
+  defp normalize_digital_maturity(_raw),
+    do: {:error, {:invalid_diagnosis, :digital_maturity, :invalid_shape}}
+
+  defp known_count(count) when is_integer(count) and count >= 0, do: {:ok, count}
+  defp known_count(_count), do: {:error, {:invalid_diagnosis, :team_size, :invalid_count}}
+
+  defp cleared_count(nil), do: :ok
+  defp cleared_count(_count), do: {:error, {:invalid_diagnosis, :team_size, :invalid_count}}
+
+  defp enum_value(value) when is_binary(value) or is_atom(value), do: to_string(value)
+  defp enum_value(_value), do: nil
+
+  defp nullable_text(_field, nil, _code), do: {:ok, nil}
+  defp nullable_text(_field, value, _code) when is_binary(value), do: {:ok, value}
+
+  defp nullable_text(field, _value, code),
+    do: {:error, {:invalid_diagnosis, field, code}}
 
   defp normalize_value(nil), do: nil
 
