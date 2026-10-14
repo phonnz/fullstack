@@ -40,6 +40,43 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   @extractable_fields ExtractionOutput.fields()
 
   @doc """
+  Pure extraction prompt shared by the text extraction path.
+
+  Explains all eleven fields, requests explicit `"unknown"` states for
+  structured diagnosis answers, and forbids inventing data.
+  """
+  @spec extraction_prompt() :: String.t()
+  def extraction_prompt do
+    """
+    You are a data extraction assistant. Extract the following fields from the user's message.
+    Return ONLY a JSON object with the extracted fields. If a field is not found in the message, omit it entirely.
+
+    Commercial fields:
+    - country: The target country for market entry
+    - city: The target city (optional)
+    - business_market: The industry or market sector
+    - initial_budget: The starting budget amount (include currency if mentioned)
+    - final_product_proposal: Description of the product or service to launch
+    - product_price: The planned price for the product
+
+    Diagnosis fields (structured objects):
+    - team_size: {"status": "known"|"unknown", "count": integer|null, "notes": string|null}
+    - current_tools_systems: {"status": "known"|"none"|"unknown", "items": [{"name", "category", "purpose", "integration_notes"}]}
+    - repetitive_processes_pain_points: {"status": "known"|"none"|"unknown", "items": [{"process", "pain_point", "frequency", "time_cost", "error_cost"}]}
+    - digital_maturity: {"level": "unknown"|"manual"|"digitized"|"integrated"|"optimized", "evidence": string|null}
+    - metrics_baselines: {"status": "measured"|"estimated"|"none"|"unknown", "items": [{"metric", "value", "unit", "period", "source"}]}
+
+    Explicit unknown states:
+    - When the user does not provide a diagnosis answer, set its "status" to "unknown" (or "level": "unknown" for digital_maturity) instead of guessing.
+    - Use "none" only when the user explicitly says there is nothing to report.
+
+    Do not invent values. Never fabricate data that is not stated by the user.
+
+    Return ONLY valid JSON, no other text.
+    """
+  end
+
+  @doc """
   Extracts field values from a user message.
 
   If the message is a map, uses it directly (fast path, no LLM call).
@@ -49,20 +86,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   Returns {:error, reason} if the LLM call or JSON parsing fails for string messages.
   """
   def extract_fields(agent, message) when is_binary(message) do
-    system_prompt = """
-    You are a data extraction assistant. Extract the following fields from the user's message.
-    Return ONLY a JSON object with the extracted fields. If a field is not found in the message, omit it entirely.
-
-    Fields to extract:
-    - country: The target country for market entry
-    - city: The target city (optional)
-    - business_market: The industry or market sector
-    - initial_budget: The starting budget amount (include currency if mentioned)
-    - final_product_proposal: Description of the product or service to launch
-    - product_price: The planned price for the product
-
-    Return ONLY valid JSON, no other text.
-    """
+    system_prompt = extraction_prompt()
 
     messages = [
       %{"role" => "system", "content" => system_prompt},

@@ -30,6 +30,28 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     end
   end
 
+  describe "extraction prompt" do
+    test "text extraction prompt explains diagnosis and explicit unknown states" do
+      prompt = MarketValidator.extraction_prompt()
+
+      # diagnosis field definitions
+      assert prompt =~ "team_size"
+      assert prompt =~ "current_tools_systems"
+      assert prompt =~ "repetitive_processes_pain_points"
+      assert prompt =~ "digital_maturity"
+      assert prompt =~ "metrics_baselines"
+
+      # explicit unknown states must be requested, never guessed
+      assert prompt =~ "unknown"
+      assert prompt =~ "\"status\""
+      assert prompt =~ "Do not invent"
+
+      # commercial fields stay in the prompt
+      assert prompt =~ "country"
+      assert prompt =~ "product_price"
+    end
+  end
+
   describe "extract_fields/2 map fast path" do
     test "stores normalized diagnosis values explicitly before set/2" do
       agent = MarketValidator.new()
