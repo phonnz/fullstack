@@ -261,8 +261,8 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   end
 
   @doc """
-  Lists the messages of a conversation, ordered by `inserted_at` ascending
-  (oldest first).
+  Lists the messages of a conversation with durable pipeline boundaries in
+  sequence order. Legacy messages retain their chronological display positions.
 
   This function is **not** user-scoped: it trusts the caller to have
   already authorized access to `conversation_id` via `get_for_user/2`. It
@@ -492,20 +492,39 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   end
 
   defp ordered_messages(repo, record_id) do
-    repo.all(
-      from m in Message,
-        where: m.conversation_id == ^record_id,
-        order_by: [
-          asc:
-            fragment(
-              "CASE WHEN jsonb_typeof(?->'_meta'->'boundary_version') = 'number' THEN (?->'_meta'->>'boundary_version')::numeric END NULLS FIRST",
-              m.metadata,
-              m.metadata
-            ),
-          asc: m.inserted_at
-        ]
-    )
+    messages =
+      repo.all(
+        from m in Message,
+          where: m.conversation_id == ^record_id,
+          order_by: [asc: m.inserted_at]
+      )
+
+    # Legacy messages have no durable sequence. Preserve their chronological
+    # positions, sorting only sequenced messages into the sequenced slots.
+    # NULLS FIRST would incorrectly move later legacy user turns ahead of all
+    # previous pipeline results; timestamp alone loses same-second boundaries.
+    sequenced =
+      messages
+      |> Enum.filter(&(not is_nil(message_boundary(&1))))
+      |> Enum.sort_by(&message_boundary/1)
+
+    {ordered, []} =
+      Enum.map_reduce(messages, sequenced, fn message, remaining ->
+        if is_nil(message_boundary(message)) do
+          {message, remaining}
+        else
+          [next | rest] = remaining
+          {next, rest}
+        end
+      end)
+
+    ordered
   end
+
+  defp message_boundary(%{metadata: %{"_meta" => %{"boundary_version" => version}}})
+       when is_integer(version) and version >= 0, do: version
+
+  defp message_boundary(_message), do: nil
 
   defp normalize(attrs) when is_map(attrs), do: attrs
   defp normalize(attrs), do: Map.new(attrs)

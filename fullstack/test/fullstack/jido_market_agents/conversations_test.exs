@@ -517,6 +517,8 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
       {:ok, legacy} =
         Conversations.append_message(record.id, %{role: "user", content: "original input"})
 
+      legacy = force_message_inserted_at(legacy, ~N[2026-10-14 16:00:00])
+
       assert {:ok, :committed, first} =
                Conversations.persist_stage_transition(user.id, record.id, 0, transition)
 
@@ -534,7 +536,38 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
       assert restored_second.id == second_message.id
     end
 
+    test "mixed legacy and pipeline history retains later user messages after stage results" do
+      user = user_fixture()
+      transition = stage_transition()
+      {:ok, record} = stage_record(user, transition)
+
+      {:ok, original} =
+        Conversations.append_message(record.id, %{role: "user", content: "original"})
+
+      {:ok, :committed, snapshot} =
+        Conversations.persist_stage_transition(user.id, record.id, 0, transition)
+
+      [_, result] = snapshot.messages
+
+      {:ok, later} =
+        Conversations.append_message(record.id, %{role: "user", content: "later correction"})
+
+      force_message_inserted_at(original, ~N[2026-10-14 16:00:00])
+      force_message_inserted_at(result, ~N[2026-10-14 17:00:00])
+      force_message_inserted_at(later, ~N[2026-10-14 18:00:00])
+
+      assert Enum.map(Conversations.list_messages(record.id), & &1.id) == [
+               original.id,
+               result.id,
+               later.id
+             ]
+    end
+
     test "concurrent identical transitions commit once and replay without duplicates" do
+      # DataCase shares synchronous tests by default. Disable automatic sharing
+      # here so each fresh task really checks out its own database connection.
+      Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)
+
       # Separate non-sandbox transactions exercise the actual Postgres row lock,
       # rather than serializing both tasks on one shared sandbox connection.
       {user, record, transition} =
