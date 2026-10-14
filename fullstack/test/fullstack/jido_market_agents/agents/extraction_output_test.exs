@@ -58,6 +58,32 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       assert team_size["additionalProperties"] == false
     end
 
+    test "schema/0 defines tools status and closed item objects" do
+      tools = ExtractionOutput.schema()["properties"]["current_tools_systems"]
+
+      assert tools["type"] == ["object", "null"]
+
+      assert tools["properties"]["status"] == %{
+               "type" => "string",
+               "enum" => ["known", "none", "unknown"]
+             }
+
+      assert tools["required"] == ["status", "items"]
+      assert tools["additionalProperties"] == false
+
+      items = tools["properties"]["items"]
+      assert items["type"] == "array"
+
+      item = items["items"]
+      assert item["type"] == "object"
+      assert item["properties"]["name"] == %{"type" => "string"}
+      assert item["properties"]["category"] == %{"type" => ["string", "null"]}
+      assert item["properties"]["purpose"] == %{"type" => ["string", "null"]}
+      assert item["properties"]["integration_notes"] == %{"type" => ["string", "null"]}
+      assert item["required"] == ["name", "category", "purpose", "integration_notes"]
+      assert item["additionalProperties"] == false
+    end
+
     test "declares exactly the canonical field keys, no more, no fewer" do
       schema = ExtractionOutput.schema()
       expected_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> Enum.sort()

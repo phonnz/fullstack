@@ -65,6 +65,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
       @fields
       |> Map.new(fn field -> {to_string(field), nullable_string()} end)
       |> Map.put("team_size", team_size_schema())
+      |> Map.put("current_tools_systems", current_tools_systems_schema())
 
     %{
       "type" => "object",
@@ -76,17 +77,48 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
 
   defp nullable_string, do: %{"type" => ["string", "null"]}
 
-  defp team_size_schema do
+  defp closed_object(type, properties, required) do
     %{
-      "type" => ["object", "null"],
-      "properties" => %{
+      "type" => type,
+      "properties" => properties,
+      "required" => required,
+      "additionalProperties" => false
+    }
+  end
+
+  defp team_size_schema do
+    closed_object(
+      ["object", "null"],
+      %{
         "status" => %{"type" => "string", "enum" => ["known", "unknown"]},
         "count" => %{"type" => ["integer", "null"], "minimum" => 0},
         "notes" => nullable_string()
       },
-      "required" => ["status", "count", "notes"],
-      "additionalProperties" => false
-    }
+      ["status", "count", "notes"]
+    )
+  end
+
+  defp current_tools_systems_schema do
+    item =
+      closed_object(
+        "object",
+        %{
+          "name" => %{"type" => "string"},
+          "category" => nullable_string(),
+          "purpose" => nullable_string(),
+          "integration_notes" => nullable_string()
+        },
+        ["name", "category", "purpose", "integration_notes"]
+      )
+
+    closed_object(
+      ["object", "null"],
+      %{
+        "status" => %{"type" => "string", "enum" => ["known", "none", "unknown"]},
+        "items" => %{"type" => "array", "items" => item}
+      },
+      ["status", "items"]
+    )
   end
 
   @doc """
