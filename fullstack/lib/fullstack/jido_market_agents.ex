@@ -23,7 +23,9 @@ defmodule Fullstack.JidoMarketAgents do
           # Ask for more data
         {:extraction_complete, %{status: :researching}} ->
           # Research is in progress
-        {:research_complete, %{status: :completed, messages: msgs}} ->
+        {:research_complete, %{status: :analyzing}} ->
+          # Analysis and strategy stages are in progress
+        {:tech_strategy_complete, %{status: :completed, messages: msgs}} ->
           # Done!
         {:error, %{status: :error, reason: reason}} ->
           # Handle error

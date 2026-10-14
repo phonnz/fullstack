@@ -88,6 +88,10 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     Conversation.send_message(id, data())
     assert_receive {:provider, worker, "researcher", _}, 1_000
     assert length(Conversations.list_messages(id)) >= 1
+    control = Conversations.get_for_user(id, user.id).validated_data["_pipeline"]
+    assert is_binary(control["input_fingerprint"])
+    assert control["run_ref"] == :sys.get_state(pid).run_ref
+    assert control["request_ref"] == :sys.get_state(pid).request_ref
     assert {:ok, _, _} = Conversation.resume(id)
     assert {:ok, _} = Conversation.list_messages(id)
     assert :ok = GenServer.call(pid, :close)
@@ -549,5 +553,13 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert {:ok, snapshot} = GenServer.call(pid, :snapshot)
     assert Enum.any?(snapshot.messages, &(&1.metadata["type"] == "market_research"))
     refute_receive {:research_complete, _}, 30
+  end
+
+  test "failed durable text admission never launches provider work", %{id: id, user: user} do
+    record = Conversations.get_for_user(id, user.id)
+    Fullstack.Repo.delete!(record)
+    Conversation.send_message(id, "This input cannot be durably admitted")
+    assert_receive {:error, %{durability: :failed}}, 1_000
+    refute_receive {:provider, _, _, _}, 50
   end
 end

@@ -480,8 +480,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     do: {:reply, {:ok, state.messages}, state}
 
   @impl true
-  def handle_info(:drain_queue, %{task: nil, queue: [request | rest]} = state)
-      when state.pending_stage == nil or state.mode == :manual do
+  def handle_info(:drain_queue, %{task: nil, queue: [request | rest]} = state) do
     user_msg = %{
       role: :user,
       content: request.message,
@@ -500,16 +499,27 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         pending_stage: nil
     }
 
-    # Only the owner writes. Accepted input and identity precede provider launch.
-    state = persist_new_messages(state)
-    state = persist_status(state, :active)
+    # Only the owner writes. The transaction admits input plus correlation
+    # before any paid provider task exists.
+    admitted = with {:ok, state} <- ensure_record(state), do: persist_owned_boundary(state, %{})
 
-    {:noreply,
-     launch(state, :validator, fn ->
-       AgentTelemetry.span(:validation, %{conversation_id: state.id}, fn ->
-         MarketValidator.extract_fields(state.validator_agent, request.message)
-       end)
-     end)}
+    case admitted do
+      {:ok, state} ->
+        start_validation(state, request.message)
+
+      {:error, _} when is_nil(state.user_id) ->
+        start_validation(state, request.message)
+
+      {:error, _} when is_map(request.message) ->
+        # Legacy provider-free maps retain the display-only degraded path.
+        case MarketValidator.extract_fields(state.validator_agent, request.message) do
+          {:ok, validator} -> process_extraction(%{state | validator_agent: validator})
+          {:error, _} -> stage_failure(state, :validator, :invalid_input)
+        end
+
+      {:error, _} ->
+        stage_failure(state, :validator, :persistence_failed)
+    end
   end
 
   def handle_info(:drain_queue, state), do: {:noreply, state}
@@ -553,6 +563,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   def terminate(_reason, %{task: %Task{} = task}), do: Task.shutdown(task, :brutal_kill)
   def terminate(_reason, _state), do: :ok
 
+  defp start_validation(state, message) do
+    {:noreply,
+     launch(state, :validator, fn ->
+       AgentTelemetry.span(:validation, %{conversation_id: state.id}, fn ->
+         MarketValidator.extract_fields(state.validator_agent, message)
+       end)
+     end)}
+  end
+
   defp request_envelope(
          %{__pipeline_request__: true, message: message, run_ref: run, request_ref: request} =
            envelope
@@ -578,6 +597,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     timeout = if is_integer(configured) and configured > 0, do: configured, else: 120_000
     timer = Process.send_after(self(), {:stage_timeout, task.ref}, timeout)
     %{state | task: task, task_stage: stage, task_timer: timer}
+  end
+
+  defp start_stage(state, stage, fun) do
+    state = %{state | input_fingerprint: stage_input_fingerprint(state, stage)}
+
+    case persist_owned_boundary(state, %{}) do
+      {:ok, admitted} -> {:noreply, launch(admitted, stage, fun)}
+      {:error, _} -> stage_failure(state, stage, :persistence_failed)
+    end
   end
 
   defp cached_stage(%{user_id: nil}, _stage), do: :miss
@@ -617,12 +645,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         final_product_proposal: data[:final_product_proposal] || data["final_product_proposal"]
       })
 
-    {:noreply,
-     launch(state, :research, fn ->
-       AgentTelemetry.span(:research, %{conversation_id: state.id}, fn ->
-         MarketResearcher.research(agent)
-       end)
-     end)}
+    start_stage(state, :research, fn ->
+      AgentTelemetry.span(:research, %{conversation_id: state.id}, fn ->
+        MarketResearcher.research(agent)
+      end)
+    end)
   end
 
   defp run_stage(state, :analysis) do
@@ -636,12 +663,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         }
       )
 
-    {:noreply,
-     launch(state, :analysis, fn ->
-       AgentTelemetry.span(:analysis, %{conversation_id: state.id}, fn ->
-         BusinessAnalyzer.analyze(agent)
-       end)
-     end)}
+    start_stage(state, :analysis, fn ->
+      AgentTelemetry.span(:analysis, %{conversation_id: state.id}, fn ->
+        BusinessAnalyzer.analyze(agent)
+      end)
+    end)
   end
 
   defp run_stage(state, :systems) do
@@ -656,12 +682,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         }
       )
 
-    {:noreply,
-     launch(state, :systems, fn ->
-       AgentTelemetry.span(:systems, %{conversation_id: state.id}, fn ->
-         SystemsAgent.build(agent)
-       end)
-     end)}
+    start_stage(state, :systems, fn ->
+      AgentTelemetry.span(:systems, %{conversation_id: state.id}, fn ->
+        SystemsAgent.build(agent)
+      end)
+    end)
   end
 
   defp run_stage(state, :tech_strategy) do
@@ -677,12 +702,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         }
       )
 
-    {:noreply,
-     launch(state, :tech_strategy, fn ->
-       AgentTelemetry.span(:tech_strategy, %{conversation_id: state.id}, fn ->
-         StrategyAgent.build(agent)
-       end)
-     end)}
+    start_stage(state, :tech_strategy, fn ->
+      AgentTelemetry.span(:tech_strategy, %{conversation_id: state.id}, fn ->
+        StrategyAgent.build(agent)
+      end)
+    end)
   end
 
   defp business_data(state),
@@ -702,9 +726,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       end
 
     status = if state.mode == :manual and next, do: :active, else: status
-    fingerprint = stage_input_fingerprint(state, stage)
-    state = %{state | input_fingerprint: fingerprint}
-    state = persist_status(state, state.status)
+    fingerprint = state.input_fingerprint
 
     transition = %{
       stage: stage,
@@ -1170,109 +1192,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     state
   end
 
-  # ── Persistence (design D2: never crash, never block the broadcast) ────────
-
-  # Persists every message accumulated since the last persist, appending only
-  # the new slice (`state.messages` from `persisted_count` onward) so that
-  # `broadcast/3`, which fires on every transition, does not re-insert
-  # already-persisted history on every call.
-  defp persist_new_messages(state) do
-    new_messages = Enum.drop(state.messages, state.persisted_count)
-
-    case new_messages do
-      [] ->
-        state
-
-      _ ->
-        case ensure_record(state) do
-          {:ok, state} ->
-            Enum.reduce(new_messages, state, &persist_message(&2, &1))
-
-          {:error, state} ->
-            state
-        end
-    end
-  end
-
-  defp persist_message(state, message) do
-    attrs = %{
-      role: to_string(message.role),
-      content: to_content_string(message.content),
-      metadata: Map.get(message, :metadata) || %{}
-    }
-
-    case safe_call(fn -> Conversations.append_message(state.record_id, attrs) end) do
-      {:ok, {:ok, _record}} ->
-        %{state | persisted_count: state.persisted_count + 1}
-
-      {:ok, {:error, reason}} ->
-        Logger.error("Conversation #{state.id}: failed to persist message (#{inspect(reason)})")
-
-        %{state | persisted_count: state.persisted_count + 1}
-
-      {:error, reason} ->
-        Logger.error(
-          "Conversation #{state.id}: raised while persisting message (#{inspect(reason)})"
-        )
-
-        %{state | persisted_count: state.persisted_count + 1}
-    end
-  end
-
   defp to_content_string(content) when is_binary(content), do: content
   defp to_content_string(content), do: inspect(content)
 
-  defp persist_status(state, status) do
-    case ensure_record(state) do
-      {:ok, state} ->
-        do_persist_status(state, status)
-
-      {:error, state} ->
-        state
-    end
-  end
-
-  # `:needs_data` is an internal substate of an otherwise still-active
-  # conversation, not one of `Record`'s persisted statuses
-  # (`active/researching/completed/error`) — map it down to `"active"`.
+  # Waiting is a UI event; the durable conversation remains active.
   defp persisted_status(:needs_data), do: "active"
   defp persisted_status(status), do: to_string(status)
 
-  defp do_persist_status(state, status) do
-    attrs = %{status: persisted_status(status), validated_data: normalize_validated_data(state)}
-
-    case safe_call(fn ->
-           Conversations.get_for_user(state.record_id, state.user_id)
-         end) do
-      {:ok, %Fullstack.JidoMarketAgents.Conversations.Record{} = record} ->
-        case safe_call(fn -> Conversations.update_state(record, attrs) end) do
-          {:ok, {:ok, _updated}} ->
-            :ok
-
-          {:ok, {:error, reason}} ->
-            Logger.error(
-              "Conversation #{state.id}: failed to persist status (#{inspect(reason)})"
-            )
-
-          {:error, reason} ->
-            Logger.error(
-              "Conversation #{state.id}: raised while persisting status (#{inspect(reason)})"
-            )
-        end
-
-      {:ok, nil} ->
-        Logger.error("Conversation #{state.id}: could not reload record to persist status")
-
-      {:error, reason} ->
-        Logger.error(
-          "Conversation #{state.id}: raised while reloading record (#{inspect(reason)})"
-        )
-    end
-
-    state
-  end
-
-  defp normalize_validated_data(%{validated_data: nil}), do: nil
+  defp normalize_validated_data(%{validated_data: nil} = state),
+    do: normalize_validated_data(%{state | validated_data: %{}})
 
   defp normalize_validated_data(%{validated_data: data} = state) when is_map(data) do
     control = %{

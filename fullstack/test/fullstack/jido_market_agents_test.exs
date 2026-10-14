@@ -40,6 +40,20 @@ defmodule Fullstack.JidoMarketAgentsTest do
     Map.new(diagnosis_unknowns(), fn {key, value} -> {Atom.to_string(key), value} end)
   end
 
+  defmodule BlockingAnalyzerBackend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(_, opts) do
+      send(opts[:owner], {:analyzer_blocked, self()})
+
+      receive do
+        :finish -> {:error, :fixture_finished}
+      end
+    end
+  end
+
   setup_all do
     responses = start_supervised!({Agent, fn -> %{} end})
 
@@ -611,7 +625,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
       assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
 
       # Research may succeed or fail depending on MIMO availability
-      assert_receive {:research_complete, %{status: :completed}}, 60_000
+      assert_receive {:research_complete, %{status: :analyzing}}, 2_000
     end
 
     test "multi-turn: accumulate fields then trigger research" do
@@ -848,7 +862,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
         end
 
       case msg do
-        {:research_complete, %{status: :completed}} ->
+        {:research_complete, %{status: :analyzing}} ->
           # MIMO worked — test passes
           :ok
 
@@ -898,7 +912,16 @@ defmodule Fullstack.JidoMarketAgentsTest do
       assert p.messages == polled
     end
 
-    test "resume after research_complete returns :completed" do
+    test "resume after research_complete returns the analyzing boundary" do
+      config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+      Application.put_env(
+        :fullstack,
+        Fullstack.JidoMarketAgents,
+        Keyword.put(config, :analyzer_backend, {BlockingAnalyzerBackend, owner: self()})
+      )
+
+      on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
       id = "test-poll-completed-#{System.unique_integer([:positive])}"
       JidoMarketAgents.subscribe(id)
 
@@ -921,14 +944,18 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       msg =
         receive do
-          m -> m
+          {:research_complete, _} = event -> event
+          {:error, %{stage: :research}} = event -> event
         after
           60_000 -> flunk("Timed out waiting for research outcome")
         end
 
       case msg do
         {:research_complete, _} ->
-          assert {:ok, :completed, _} = JidoMarketAgents.resume(id)
+          assert_receive {:analyzer_blocked, worker}, 2_000
+          assert {:ok, :analyzing, _} = JidoMarketAgents.resume(id)
+          send(worker, :finish)
+          assert_receive {:error, %{stage: :analysis}}, 2_000
 
         {event, %{stage: :research}} ->
           assert event == :error
