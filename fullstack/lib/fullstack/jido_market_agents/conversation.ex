@@ -46,6 +46,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :record_id,
     :mode,
     :pending_stage,
+    last_commit_failed: false,
     task: nil,
     task_stage: nil,
     task_timer: nil,
@@ -246,6 +247,22 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp restored_stage("tech_strategy"), do: :tech_strategy
   defp restored_stage(_unknown), do: nil
 
+  defp pipeline_control_from_data(data), do: (data || %{})["_pipeline"] || %{}
+
+  defp restored_results(messages) do
+    Enum.reduce(messages, %{}, fn message, results ->
+      type = message.metadata["type"] || message.metadata[:type]
+
+      case type do
+        "market_research" -> Map.put(results, :research, message.metadata["result"])
+        "business_analysis" -> Map.put(results, :analysis, message.metadata["result"])
+        "systems_strategy" -> Map.put(results, :systems, message.metadata["result"])
+        "tech_strategy" -> Map.put(results, :tech_strategy, message.metadata["result"])
+        _ -> results
+      end
+    end)
+  end
+
   defp restored_message(%Conversations.Message{} = message) do
     %{
       role: restored_role(message.role),
@@ -327,6 +344,12 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       status: restored.status,
       mode: restored.mode,
       pending_stage: restored.pending_stage,
+      run_ref: pipeline_control_from_data(restored.validated_data)["run_ref"],
+      request_ref: pipeline_control_from_data(restored.validated_data)["request_ref"],
+      boundary_version:
+        pipeline_control_from_data(restored.validated_data)["boundary_version"] || 0,
+      input_fingerprint: pipeline_control_from_data(restored.validated_data)["input_fingerprint"],
+      results: restored_results(restored.messages),
       validated_data: restored.validated_data,
       user_id: user_id,
       record_id: restored.record_id,
@@ -389,6 +412,43 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     {:reply, {:ok, :accepted, state.id}, state}
   end
 
+  def handle_call(:snapshot, _from, state) do
+    snapshot =
+      if state.record_id && state.user_id do
+        %{
+          record: Conversations.get_for_user(state.record_id, state.user_id),
+          messages: Conversations.list_messages(state.record_id)
+        }
+      else
+        %{record: nil, messages: state.messages}
+      end
+
+    {:reply, {:ok, snapshot}, state}
+  end
+
+  def handle_call({:run_stage, stage, run, request}, _from, state) do
+    cond do
+      run != state.run_ref or request != state.request_ref ->
+        {:reply, {:error, :stale_binding}, state}
+
+      state.task != nil and state.task_stage == stage ->
+        {:reply, :accepted, state}
+
+      state.task != nil ->
+        {:reply, {:error, :busy}, state}
+
+      stage != state.pending_stage ->
+        {:reply, {:error, :missing_prerequisite}, state}
+
+      stage not in @stages ->
+        {:reply, {:error, :invalid_stage}, state}
+
+      true ->
+        {:noreply, state} = run_stage(%{state | mode: :manual}, stage)
+        {:reply, :accepted, state}
+    end
+  end
+
   def handle_call(:close, _from, state) do
     # Closing an observer never cancels an already accepted stage.
     {:reply, :ok, %{state | mode: :manual}}
@@ -417,7 +477,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         run_ref: request.run_ref,
         request_ref: request.request_ref,
         status: :active,
-        mode: :automatic,
+        mode: request.mode,
         pending_stage: nil
     }
 
@@ -474,17 +534,21 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   def terminate(_reason, %{task: %Task{} = task}), do: Task.shutdown(task, :brutal_kill)
   def terminate(_reason, _state), do: :ok
 
-  defp request_envelope(%{
-         __pipeline_request__: true,
-         message: message,
-         run_ref: run,
-         request_ref: request
-       }) do
-    %{message: message, run_ref: run, request_ref: request}
+  defp request_envelope(
+         %{__pipeline_request__: true, message: message, run_ref: run, request_ref: request} =
+           envelope
+       ) do
+    mode = if envelope[:mode] == :manual, do: :manual, else: :automatic
+    %{message: message, run_ref: run, request_ref: request, mode: mode}
   end
 
   defp request_envelope(message),
-    do: %{message: message, run_ref: Ecto.UUID.generate(), request_ref: Ecto.UUID.generate()}
+    do: %{
+      message: message,
+      run_ref: Ecto.UUID.generate(),
+      request_ref: Ecto.UUID.generate(),
+      mode: :automatic
+    }
 
   defp launch(state, stage, fun) do
     task = Task.async(fun)
@@ -592,6 +656,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         :tech_strategy -> :completed
       end
 
+    status = if state.mode == :manual and next, do: :active, else: status
     fingerprint = stage_input_fingerprint(state, stage)
     state = %{state | input_fingerprint: fingerprint}
     state = persist_status(state, state.status)
@@ -621,7 +686,16 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
         state =
           if outcome == :committed,
-            do: broadcast(state, stage_event(stage), %{status: status}),
+            do:
+              broadcast(
+                state,
+                stage_event(stage),
+                Map.put(
+                  %{status: status, stage: stage},
+                  result_key(stage),
+                  durable_result(state, stage)
+                )
+              ),
             else: state
 
         if next && state.mode == :automatic, do: send(self(), {:run_stage, next})
@@ -638,7 +712,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       role: :assistant,
       content: Jason.encode!(transition.result),
       timestamp: DateTime.utc_now(),
-      metadata: %{type: :market_research, result: transition.result}
+      metadata: %{type: result_key(transition.stage), result: transition.result}
     }
 
     {:ok, :committed,
@@ -673,6 +747,24 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
+  defp result_key(:research), do: :market_research
+  defp result_key(:analysis), do: :business_analysis
+  defp result_key(:systems), do: :systems_strategy
+  defp result_key(:tech_strategy), do: :tech_strategy
+
+  defp durable_result(state, stage) do
+    type = to_string(result_key(stage))
+
+    state.messages
+    |> Enum.reverse()
+    |> Enum.find_value(fn message ->
+      metadata = Map.get(message, :metadata, %{})
+
+      if to_string(metadata["type"] || metadata[:type]) == type,
+        do: metadata["result"] || metadata[:result]
+    end)
+  end
+
   defp stage_event(:tech_strategy), do: :tech_strategy_complete
   defp stage_event(:systems), do: :systems_complete
   defp stage_event(:analysis), do: :analysis_complete
@@ -689,22 +781,30 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       role: :assistant,
       content: "Stage failed. Please try again.",
       timestamp: DateTime.utc_now(),
-      metadata: %{type: :error}
+      metadata: %{type: :error, stage: stage, reason: reason}
     }
 
-    state = %{
+    candidate = %{
       state
       | messages: state.messages ++ [message],
         status: :error,
         pending_stage: nil,
-        task_stage: nil
+        task_stage: nil,
+        boundary_version: state.boundary_version + 1
     }
+
+    {state, durability} =
+      case persist_owned_boundary(candidate, %{}) do
+        {:ok, committed} -> {committed, :committed}
+        {:error, _} -> {%{state | pending_stage: nil, task_stage: nil}, :failed}
+      end
 
     state =
       broadcast(state, :error, %{
         status: :error,
         stage: if(stage == :validator, do: :extraction, else: stage),
-        reason: reason
+        reason: {:stage_failed, reason},
+        durability: durability
       })
 
     send(self(), :drain_queue)
@@ -724,16 +824,30 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           timestamp: DateTime.utc_now()
         }
 
+        changed = facts_changed?(state, data)
+        status = if state.mode == :manual, do: :active, else: :researching
+
         state = %{
           state
           | messages: state.messages ++ [assistant_msg],
-            status: :researching,
+            status: status,
             validated_data: data,
+            boundary_version: state.boundary_version + 1,
             pending_stage: :research
         }
 
-        state = broadcast(state, :extraction_complete, %{status: :researching})
-        send(self(), {:run_stage, :research})
+        state = commit_validation(state, changed)
+
+        state =
+          broadcast(state, :extraction_complete, %{
+            status: status,
+            stage: :validator,
+            validated_data: state.validated_data
+          })
+
+        if state.mode == :automatic and not state.last_commit_failed,
+          do: send(self(), {:run_stage, :research})
+
         {:noreply, state}
 
       {:incomplete, fields} ->
@@ -747,16 +861,116 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
         assistant_msg = %{role: :assistant, content: content, timestamp: DateTime.utc_now()}
 
+        data = partial_validated_data(state.validator_agent)
+        changed = facts_changed?(state, data)
+
         state = %{
           state
           | messages: state.messages ++ [assistant_msg],
-            validated_data: partial_validated_data(state.validator_agent)
+            validated_data: data,
+            boundary_version: state.boundary_version + 1,
+            status: :active,
+            pending_stage: nil
         }
 
-        state = %{state | status: :active, pending_stage: nil}
-        state = broadcast(state, :extraction_complete, %{status: :needs_data})
+        state = commit_validation(state, changed)
+
+        state =
+          broadcast(state, :extraction_complete, %{
+            status: :needs_data,
+            stage: :validator,
+            validated_data: state.validated_data,
+            missing_fields: fields
+          })
+
         send(self(), :drain_queue)
         {:noreply, state}
+    end
+  end
+
+  defp facts_changed?(state, data) do
+    map_size(state.results) > 0 and
+      Jason.encode!(business_data(state)) != Jason.encode!(data)
+  end
+
+  defp commit_validation(state, changed) do
+    attrs =
+      if changed,
+        do: %{business_analysis: nil, systems_strategy: nil, tech_strategy: nil},
+        else: %{}
+
+    case persist_owned_boundary(state, attrs) do
+      {:ok, state} ->
+        state = if changed, do: %{state | results: %{}}, else: state
+
+        if changed and state.record_id do
+          broadcast(state, :stage_invalidated, %{
+            invalidated: @stages,
+            stage: :validator,
+            record: Conversations.get_for_user(state.record_id, state.user_id)
+          })
+        else
+          state
+        end
+
+      {:error, _} ->
+        %{state | last_commit_failed: true, boundary_version: max(state.boundary_version - 1, 0)}
+    end
+  end
+
+  defp persist_owned_boundary(%{user_id: nil} = state, _attrs), do: {:ok, state}
+
+  defp persist_owned_boundary(state, extra_attrs) do
+    result =
+      safe_call(fn ->
+        Fullstack.Repo.transaction(fn ->
+          record = Conversations.get_for_user(state.record_id, state.user_id)
+          if is_nil(record), do: Fullstack.Repo.rollback(:not_found)
+
+          for message <- Enum.drop(state.messages, state.persisted_count) do
+            attrs = %{
+              role: to_string(message.role),
+              content: to_content_string(message.content),
+              metadata: Map.get(message, :metadata, %{})
+            }
+
+            case Conversations.append_message(record.id, attrs) do
+              {:ok, _} -> :ok
+              {:error, _} -> Fullstack.Repo.rollback(:message_failed)
+            end
+          end
+
+          attrs =
+            Map.merge(
+              %{
+                status: persisted_status(state.status),
+                validated_data: normalize_validated_data(state)
+              },
+              extra_attrs
+            )
+
+          case Conversations.update_state(record, attrs) do
+            {:ok, record} -> %{record: record, messages: Conversations.list_messages(record.id)}
+            {:error, _} -> Fullstack.Repo.rollback(:state_failed)
+          end
+        end)
+      end)
+
+    case result do
+      {:ok, {:ok, snapshot}} ->
+        messages = Enum.map(snapshot.messages, &restored_message/1)
+
+        {:ok,
+         %{
+           state
+           | messages: messages,
+             persisted_count: length(messages),
+             validated_data: snapshot.record.validated_data,
+             last_commit_failed: false
+         }}
+
+      _ ->
+        {:error, :persistence_failed}
     end
   end
 
@@ -785,13 +999,10 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp broadcast(state, event, extra) do
     status = Map.get(extra, :status, state.status)
 
-    state =
-      state
-      |> persist_new_messages()
-      |> persist_status(status)
-
     payload =
       extra
+      |> Map.put(:boundary_version, state.boundary_version)
+      |> Map.put(:mode, state.mode)
       |> Map.put(:run_ref, state.run_ref)
       |> Map.put(:request_ref, state.request_ref)
       |> Map.put(:conversation_id, state.id)

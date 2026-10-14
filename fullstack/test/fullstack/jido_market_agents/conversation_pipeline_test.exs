@@ -102,7 +102,11 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     Conversation.send_message(id, data())
     assert_receive {:provider, worker, "researcher", _}, 1_000
     send(worker, :crash)
-    assert_receive {:error, %{stage: :research}}, 1_000
+
+    assert_receive {:error, %{stage: :research, durability: :committed, boundary_version: 2}},
+                   1_000
+
+    assert List.last(Conversations.list_messages(id)).metadata["type"] == "error"
     assert Process.alive?(pid)
   end
 
@@ -400,5 +404,150 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     record = Conversations.get_for_user(id, user.id)
     assert record.status == "completed"
     assert record.tech_strategy["budget_roi"]["roi"]["percentage"] != 9999
+  end
+
+  test "successful pipeline emits the five adopted events with durable payloads in order", %{
+    id: id,
+    user: user
+  } do
+    Conversation.send_message(id, data())
+
+    expected = [
+      {:extraction_complete, :validator, :validated_data, :researching},
+      {:research_complete, :research, :market_research, :analyzing},
+      {:analysis_complete, :analysis, :business_analysis, :building_strategy},
+      {:systems_complete, :systems, :systems_strategy, :building_strategy},
+      {:tech_strategy_complete, :tech_strategy, :tech_strategy, :completed}
+    ]
+
+    outputs = [
+      {"researcher", research()},
+      {"analyzer", analysis()},
+      {"systems", systems()},
+      {"strategy", tech()}
+    ]
+
+    {run, request} =
+      Enum.reduce(Enum.with_index(expected, 1), {nil, nil}, fn {{event, stage, field, status},
+                                                                version},
+                                                               {run, request} ->
+        assert_receive {^event, payload}, 1_000
+        assert payload.stage == stage
+        assert payload.status == status
+        assert payload.boundary_version == version
+        assert payload.mode == :automatic
+        assert is_binary(payload.run_ref) and is_binary(payload.request_ref)
+        if run, do: assert(payload.run_ref == run and payload.request_ref == request)
+        record = Conversations.get_for_user(id, user.id)
+        assert record.status == to_string(status)
+        assert length(payload.messages) == length(Conversations.list_messages(id))
+        assert record.validated_data["_pipeline"]["boundary_version"] == version
+        assert Map.has_key?(payload, field)
+
+        if stage != :validator do
+          message = List.last(Conversations.list_messages(id))
+          assert message.metadata["result"] == Jason.decode!(Jason.encode!(payload[field]))
+        end
+
+        if version <= 4 do
+          {role, output} = Enum.at(outputs, version - 1)
+          assert_receive {:provider, worker, ^role, _}, 1_000
+          reply(worker, output)
+        end
+
+        {payload.run_ref, payload.request_ref}
+      end)
+
+    assert is_binary(run) and is_binary(request)
+    refute_receive {_event, %{conversation_id: ^id}}, 30
+  end
+
+  test "manual validation and stage park durably without automatic descendants", %{
+    id: id,
+    pid: pid,
+    user: user
+  } do
+    run = Ecto.UUID.generate()
+    request = Ecto.UUID.generate()
+
+    Conversation.send_message(id, %{
+      __pipeline_request__: true,
+      message: data(),
+      run_ref: run,
+      request_ref: request,
+      mode: :manual
+    })
+
+    assert_receive {:extraction_complete, %{status: :active, mode: :manual}}, 1_000
+    refute_receive {:provider, _, _, _}, 30
+    assert :accepted = GenServer.call(pid, {:run_stage, :research, run, request})
+    assert :accepted = GenServer.call(pid, {:run_stage, :research, run, request})
+    assert_receive {:provider, worker, "researcher", _}, 1_000
+    reply(worker, research())
+    assert_receive {:research_complete, %{status: :active, mode: :manual}}, 1_000
+    record = Conversations.get_for_user(id, user.id)
+    assert record.status == "active"
+    assert record.validated_data["_pipeline"]["pending_stage"] == "analysis"
+    refute_receive {:provider, _, _, _}, 30
+    send(pid, {:run_stage, :research})
+    refute_receive {:research_complete, _}, 30
+  end
+
+  test "waiting validation is durably active with needs_data event only", %{id: id, user: user} do
+    Conversation.send_message(id, %{country: "Spain"})
+
+    assert_receive {:extraction_complete,
+                    %{status: :needs_data, stage: :validator, missing_fields: fields}},
+                   1_000
+
+    assert fields != []
+    assert Conversations.get_for_user(id, user.id).status == "active"
+  end
+
+  test "changed facts publish committed invalidation before replacement results", %{
+    id: id,
+    pid: pid,
+    user: user
+  } do
+    Conversation.send_message(id, data())
+
+    for {role, output} <- [
+          {"researcher", research()},
+          {"analyzer", analysis()},
+          {"systems", systems()},
+          {"strategy", tech()}
+        ] do
+      assert_receive {:provider, worker, ^role, _}, 1_000
+      reply(worker, output)
+    end
+
+    assert_receive {:tech_strategy_complete, _}, 1_000
+    Conversation.send_message(id, %{country: "France"})
+
+    assert_receive {:stage_invalidated,
+                    %{invalidated: [:research, :analysis, :systems, :tech_strategy]}},
+                   1_000
+
+    record = Conversations.get_for_user(id, user.id)
+
+    assert record.business_analysis == nil and record.systems_strategy == nil and
+             record.tech_strategy == nil
+
+    assert {:ok, snapshot} = GenServer.call(pid, :snapshot)
+    assert snapshot.record.validated_data["country"] == "France"
+  end
+
+  test "an isolated observer reconciles a durable result without any broadcast", %{
+    id: id,
+    pid: pid
+  } do
+    Conversation.send_message(id, data())
+    assert_receive {:provider, worker, "researcher", _}, 1_000
+    Phoenix.PubSub.unsubscribe(Fullstack.PubSub, Conversation.topic(id))
+    reply(worker, research())
+    assert_receive {:provider, _, "analyzer", _}, 1_000
+    assert {:ok, snapshot} = GenServer.call(pid, :snapshot)
+    assert Enum.any?(snapshot.messages, &(&1.metadata["type"] == "market_research"))
+    refute_receive {:research_complete, _}, 30
   end
 end
