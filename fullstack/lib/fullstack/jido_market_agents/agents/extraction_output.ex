@@ -66,6 +66,10 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
       |> Map.new(fn field -> {to_string(field), nullable_string()} end)
       |> Map.put("team_size", team_size_schema())
       |> Map.put("current_tools_systems", current_tools_systems_schema())
+      |> Map.put(
+        "repetitive_processes_pain_points",
+        repetitive_processes_pain_points_schema()
+      )
 
     %{
       "type" => "object",
@@ -98,6 +102,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
     )
   end
 
+  defp item_array(item), do: %{"type" => "array", "items" => item}
+
   defp current_tools_systems_schema do
     item =
       closed_object(
@@ -115,7 +121,31 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
       ["object", "null"],
       %{
         "status" => %{"type" => "string", "enum" => ["known", "none", "unknown"]},
-        "items" => %{"type" => "array", "items" => item}
+        "items" => item_array(item)
+      },
+      ["status", "items"]
+    )
+  end
+
+  defp repetitive_processes_pain_points_schema do
+    item =
+      closed_object(
+        "object",
+        %{
+          "process" => %{"type" => "string"},
+          "pain_point" => %{"type" => "string"},
+          "frequency" => nullable_string(),
+          "time_cost" => nullable_string(),
+          "error_cost" => nullable_string()
+        },
+        ["process", "pain_point", "frequency", "time_cost", "error_cost"]
+      )
+
+    closed_object(
+      ["object", "null"],
+      %{
+        "status" => %{"type" => "string", "enum" => ["known", "none", "unknown"]},
+        "items" => item_array(item)
       },
       ["status", "items"]
     )

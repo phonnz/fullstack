@@ -84,6 +84,33 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       assert item["additionalProperties"] == false
     end
 
+    test "schema/0 defines repetitive process and pain point evidence" do
+      pain = ExtractionOutput.schema()["properties"]["repetitive_processes_pain_points"]
+
+      assert pain["type"] == ["object", "null"]
+
+      assert pain["properties"]["status"] == %{
+               "type" => "string",
+               "enum" => ["known", "none", "unknown"]
+             }
+
+      assert pain["required"] == ["status", "items"]
+      assert pain["additionalProperties"] == false
+
+      items = pain["properties"]["items"]
+      assert items["type"] == "array"
+
+      item = items["items"]
+      assert item["type"] == "object"
+      assert item["properties"]["process"] == %{"type" => "string"}
+      assert item["properties"]["pain_point"] == %{"type" => "string"}
+      assert item["properties"]["frequency"] == %{"type" => ["string", "null"]}
+      assert item["properties"]["time_cost"] == %{"type" => ["string", "null"]}
+      assert item["properties"]["error_cost"] == %{"type" => ["string", "null"]}
+      assert item["required"] == ["process", "pain_point", "frequency", "time_cost", "error_cost"]
+      assert item["additionalProperties"] == false
+    end
+
     test "declares exactly the canonical field keys, no more, no fewer" do
       schema = ExtractionOutput.schema()
       expected_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> Enum.sort()
