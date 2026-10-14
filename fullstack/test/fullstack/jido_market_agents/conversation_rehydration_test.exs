@@ -57,6 +57,66 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
     {:ok, mimo_responses: responses}
   end
 
+  test "restoration maps new statuses without dynamic atoms" do
+    user = user_fixture()
+
+    for {status, expected} <- [
+          {"analyzing", :analyzing},
+          {"building_strategy", :building_strategy}
+        ] do
+      {:ok, record} = Conversations.create(user.id)
+
+      Repo.update_all(from(r in Conversations.Record, where: r.id == ^record.id),
+        set: [status: status]
+      )
+
+      {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+      assert :sys.get_state(pid).status == expected
+    end
+
+    unknown = "unknown_" <> Ecto.UUID.generate()
+    {:ok, record} = Conversations.create(user.id)
+
+    Repo.update_all(from(r in Conversations.Record, where: r.id == ^record.id),
+      set: [status: unknown]
+    )
+
+    assert_raise ArgumentError, fn -> String.to_existing_atom(unknown) end
+    {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+    assert :sys.get_state(pid).status == :active
+    assert_raise ArgumentError, fn -> String.to_existing_atom(unknown) end
+  end
+
+  test "restoration keeps terminal error manual and legacy precedence with closed control mappings" do
+    user = user_fixture()
+
+    for {status, control, expected_status, mode, stage} <- [
+          {"error", %{"mode" => "manual", "pending_stage" => "analysis"}, :error, :manual,
+           :analysis},
+          {"analyzing", %{"mode" => "manual", "pending_stage" => "systems"}, :active, :manual,
+           :systems},
+          {"completed", nil, :completed, :legacy, nil},
+          {"completed", %{"mode" => "manual", "pending_stage" => nil}, :completed, :manual, nil},
+          {"building_strategy", %{"mode" => "automatic", "pending_stage" => "tech_strategy"},
+           :building_strategy, :automatic, :tech_strategy},
+          {"researching", %{"mode" => "unknown-mode", "pending_stage" => "unknown-stage"},
+           :active, :manual, nil}
+        ] do
+      {:ok, record} =
+        Conversations.create(user.id, %{
+          status: status,
+          validated_data: if(control, do: %{"_pipeline" => control}, else: nil)
+        })
+
+      {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+      state = :sys.get_state(pid)
+      assert state.status == expected_status
+      assert state.mode == mode
+      assert state.pending_stage == stage
+      refute_received {:mimo_request, _}
+    end
+  end
+
   # A fresh persisted `Record` whose own id is used as the GenServer id
   # (see moduledoc for the id-scheme rationale).
   defp new_persisted_id(user) do

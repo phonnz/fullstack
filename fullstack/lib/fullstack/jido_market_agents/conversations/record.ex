@@ -13,7 +13,14 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Record do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @statuses ~w(active researching completed error)
+  @statuses ~w(active researching analyzing building_strategy completed error)
+
+  @type t :: %__MODULE__{
+          id: Ecto.UUID.t() | nil,
+          user_id: Ecto.UUID.t() | nil,
+          status: String.t(),
+          validated_data: map() | nil
+        }
 
   schema "jido_conversations" do
     field :title, :string

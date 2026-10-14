@@ -41,6 +41,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :validated_data,
     :user_id,
     :record_id,
+    :mode,
+    :pending_stage,
     persisted_count: 0
   ]
 
@@ -157,7 +159,9 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           {:ok,
            %{
              record_id: record.id,
-             status: restored_status(record.status),
+             status: restored_record_status(record),
+             mode: restored_record_mode(record),
+             pending_stage: restored_stage(pipeline_control(record)["pending_stage"]),
              validated_data: record.validated_data,
              messages: Enum.map(Conversations.list_messages(record.id), &restored_message/1)
            }}
@@ -179,13 +183,52 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp uuid?(id) when is_binary(id), do: Regex.match?(@uuid_text_regex, id)
   defp uuid?(_), do: false
 
-  # Only these 4 known values are ever persisted (`Record`'s
+  # Only these 6 known values are ever persisted (`Record`'s
   # `@statuses`/changeset validation) — an explicit mapping, never
   # `String.to_atom/1` on a value that came out of the database.
   defp restored_status("active"), do: :active
   defp restored_status("researching"), do: :researching
+  defp restored_status("analyzing"), do: :analyzing
+  defp restored_status("building_strategy"), do: :building_strategy
   defp restored_status("completed"), do: :completed
   defp restored_status("error"), do: :error
+  defp restored_status(_unknown), do: :active
+
+  defp pipeline_control(record) do
+    case record.validated_data do
+      %{"_pipeline" => control} when is_map(control) -> control
+      _ -> %{}
+    end
+  end
+
+  # Terminal outcomes precede manual idling; legacy completed reports remain
+  # display-only. Unknown control values fail closed without creating atoms.
+  defp restored_record_status(%{status: "error"}), do: :error
+  defp restored_record_status(%{status: "completed"}), do: :completed
+
+  defp restored_record_status(record) do
+    if restored_record_mode(record) == :manual,
+      do: :active,
+      else: restored_status(record.status)
+  end
+
+  defp restored_record_mode(%{status: "completed"} = record) do
+    if map_size(pipeline_control(record)) == 0,
+      do: :legacy,
+      else: restored_mode(pipeline_control(record)["mode"])
+  end
+
+  defp restored_record_mode(record), do: restored_mode(pipeline_control(record)["mode"])
+  defp restored_mode("automatic"), do: :automatic
+  defp restored_mode(nil), do: :automatic
+  defp restored_mode(_manual_or_unknown), do: :manual
+
+  defp restored_stage("validator"), do: :validator
+  defp restored_stage("research"), do: :research
+  defp restored_stage("analysis"), do: :analysis
+  defp restored_stage("systems"), do: :systems
+  defp restored_stage("tech_strategy"), do: :tech_strategy
+  defp restored_stage(_unknown), do: nil
 
   defp restored_message(%Conversations.Message{} = message) do
     %{
@@ -243,6 +286,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       validator_agent: MarketValidator.new(id: "#{id}_validator"),
       researcher_agent: researcher,
       status: :active,
+      mode: :automatic,
+      pending_stage: nil,
       validated_data: nil,
       user_id: user_id,
       record_id: nil,
@@ -263,6 +308,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       validator_agent: validator,
       researcher_agent: researcher,
       status: restored.status,
+      mode: restored.mode,
+      pending_stage: restored.pending_stage,
       validated_data: restored.validated_data,
       user_id: user_id,
       record_id: restored.record_id,

@@ -7,6 +7,19 @@ defmodule Fullstack.JidoMarketAgents.ConversationsSchemaTest do
   alias Fullstack.JidoMarketAgents.Conversations.Record
 
   describe "Record persistence" do
+    test "changeset accepts analyzing and building_strategy" do
+      user = user_fixture()
+
+      for status <- ["analyzing", "building_strategy"] do
+        changeset = Record.changeset(%Record{}, %{user_id: user.id, status: status})
+        assert changeset.valid?
+        assert {:ok, record} = Repo.insert(changeset)
+        assert Repo.get!(Record, record.id).status == status
+      end
+
+      refute Record.changeset(%Record{}, %{user_id: user.id, status: "needs_data"}).valid?
+    end
+
     # S1.1
     test "a conversation created for a user has that user's user_id and inserted_at set" do
       user = user_fixture()
