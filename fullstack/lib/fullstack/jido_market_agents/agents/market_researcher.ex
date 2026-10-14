@@ -1,12 +1,11 @@
 defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
   @moduledoc """
-  Jido agent that researches market presence using MIMO LLM.
-  Given country, market, and product, asks the LLM if companies exist.
+  Jido agent requesting structured, explicitly unverified market investigation.
   """
 
   use Jido.Agent,
     name: "market_researcher",
-    description: "Researches market presence via MIMO LLM",
+    description: "Researches structured market evidence",
     schema: [
       country: [type: :string, required: false],
       city: [type: :string, required: false],
@@ -15,6 +14,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
     ]
 
   alias Fullstack.JidoMarketAgents.LLM
+  alias Fullstack.JidoMarketAgents.Agents.MarketResearchOutput
 
   def research(agent) do
     country = agent.state.country
@@ -24,23 +24,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
 
     location = if city && city != "", do: "#{city}, #{country}", else: country
 
-    prompt = """
-    You are a market research assistant. Based on your knowledge, analyze the following:
-
-    Location: #{location}
-    Business Market: #{market}
-    Product/Service: #{product}
-
-    Is there an established company in #{location} that operates in the #{market} sector and offers a similar product or service to "#{product}"?
-
-    Provide:
-    1. Whether such companies exist (yes/no)
-    2. If yes, name up to 3 examples with brief descriptions
-    3. Market opportunity assessment (gaps, competition level)
-    4. Brief recommendation
-
-    Be concise and factual. If you don't have specific data, say so clearly.
-    """
+    prompt = prompt(agent)
 
     messages = [
       %{
@@ -50,12 +34,33 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
       %{"role" => "user", "content" => prompt}
     ]
 
-    case LLM.chat_completion(:researcher, messages, response_format: :text) do
+    case LLM.chat_completion(:researcher, messages,
+           response_format: {:json_object, MarketResearchOutput.schema()}
+         ) do
       {:ok, content} ->
         {:ok, %{research_result: content, location: location, market: market, product: product}}
 
       {:error, reason} ->
         {:error, {:research_failed, reason}}
     end
+  end
+
+  @doc "Builds a no-retrieval investigation prompt without claiming verified evidence."
+  def prompt(agent) do
+    state = agent.state
+
+    location =
+      if state[:city] in [nil, ""], do: state.country, else: "#{state.city}, #{state.country}"
+
+    """
+    Investigate the market for #{state.final_product_proposal} in #{location}, sector #{state.business_market}.
+    Return ONLY JSON matching the supplied MarketResearchOutput schema.
+    Include competitor claims in market_evidence, opportunity hypotheses in market_gaps,
+    and demand_signals. Label every claim unverified and include confidence (low/medium/high).
+    No retrieval tool is available: sources must be empty and evidence_refs must be empty.
+    Do not fabricate URLs, citations, verification, demand measurements, or company facts.
+    Explain uncertainty, knowledge freshness, and missing validation in limitations.
+    Distinguish market hypotheses from user facts; do not decide a viable offer or a strategy.
+    """
   end
 end
