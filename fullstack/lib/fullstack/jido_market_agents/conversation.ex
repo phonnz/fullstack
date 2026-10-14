@@ -16,6 +16,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher}
   alias Fullstack.JidoMarketAgents.Conversations
   alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, SystemsAgent, StrategyAgent}
+
+  alias Fullstack.JidoMarketAgents.Agents.{
+    MarketResearchOutput,
+    BusinessAnalysisOutput,
+    SystemsStrategyOutput,
+    TechAdoptionOutput
+  }
+
+  alias Fullstack.JidoMarketAgents.Knowledge
   alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
 
   @pubsub Fullstack.PubSub
@@ -666,7 +675,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       run_ref: state.run_ref,
       request_ref: state.request_ref,
       input_fingerprint: fingerprint,
-      contract_version: "1",
+      contract_version: contract_version(stage),
+      guide_digest: guide_digest(stage),
       result_digest: digest(result),
       completed_at: DateTime.utc_now() |> DateTime.to_iso8601(),
       result: result,
@@ -708,11 +718,27 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   defp commit_stage(%{user_id: nil} = state, transition) do
+    meta =
+      transition
+      |> Map.take([
+        :stage,
+        :contract_version,
+        :input_fingerprint,
+        :result_digest,
+        :completed_at,
+        :run_ref,
+        :request_ref,
+        :guide_digest
+      ])
+      |> Map.put(:boundary_version, state.boundary_version + 1)
+
+    result = Map.put(transition.result, :_meta, meta)
+
     message = %{
       role: :assistant,
-      content: Jason.encode!(transition.result),
+      content: Jason.encode!(result),
       timestamp: DateTime.utc_now(),
-      metadata: %{type: result_key(transition.stage), result: transition.result}
+      metadata: %{type: result_key(transition.stage), result: result, _meta: meta}
     }
 
     {:ok, :committed,
@@ -770,11 +796,107 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp stage_event(:analysis), do: :analysis_complete
   defp stage_event(:research), do: :research_complete
 
-  defp stage_input_fingerprint(state, stage),
-    do: digest(%{stage: stage, data: state.validated_data})
+  @doc """
+  Computes a canonical stage eligibility key from owner-supplied inputs.
+
+  Owner metadata is excluded before closed contract normalization. Version
+  overrides are owner configuration, never extracted user instructions.
+  """
+  def fingerprint(stage, inputs) when stage in @stages do
+    facts = input_value(inputs, :validated_data, %{}) |> clean_facts()
+    facts = ExtractionOutput.normalize_map(facts)
+
+    upstream =
+      @stages
+      |> Enum.take_while(&(&1 != stage))
+      |> Map.new(fn upstream ->
+        key =
+          case upstream do
+            :research -> :research_output
+            :analysis -> :analysis_output
+            :systems -> :systems_output
+          end
+
+        raw = input_value(inputs, key, %{}) |> clean_result()
+        normalized = output_module(upstream).normalize_map(raw)
+        {upstream, digest(normalized)}
+      end)
+
+    digest(%{
+      stage: stage,
+      validated_data: facts,
+      output_language: input_value(inputs, :output_language, nil),
+      upstream: upstream,
+      refinements: input_value(inputs, :refinements, []),
+      contract_version: input_value(inputs, :contract_version, contract_version(stage)),
+      contract_schema: digest(output_module(stage).schema()),
+      prompt_version: input_value(inputs, :prompt_version, "1"),
+      guide_version: input_value(inputs, :guide_version, "1"),
+      guide_digest: guide_digest(stage)
+    })
+  end
+
+  defp input_value(map, key, default),
+    do: Map.get(map, key, Map.get(map, to_string(key), default))
+
+  defp clean_facts(map), do: Map.drop(map, ["_pipeline", :_pipeline, "_meta", :_meta])
+  defp output_module(:research), do: MarketResearchOutput
+  defp output_module(:analysis), do: BusinessAnalysisOutput
+  defp output_module(:systems), do: SystemsStrategyOutput
+  defp output_module(:tech_strategy), do: TechAdoptionOutput
+  defp contract_version(:research), do: "market-research/1"
+  defp contract_version(:analysis), do: "business-analysis/1"
+  defp contract_version(:systems), do: "systems-strategy/1"
+  defp contract_version(:tech_strategy), do: "tech-adoption/1"
+
+  defp guide_digest(stage) when stage in [:systems, :tech_strategy] do
+    guide = if stage == :systems, do: :six_systems, else: :tech_adoption
+
+    case Knowledge.fetch(guide) do
+      {:ok, content} -> digest(content)
+      {:error, _} -> nil
+    end
+  end
+
+  defp guide_digest(_), do: nil
+
+  defp stage_input_fingerprint(state, stage) do
+    fingerprint(stage, %{
+      validated_data: business_data(state),
+      research_output: state.results[:research] || %{},
+      analysis_output: state.results[:analysis] || %{},
+      systems_output: state.results[:systems] || %{},
+      refinements: stage_refinements(state, stage),
+      output_language: state.validator_agent.state.output_language
+    })
+  end
+
+  defp stage_refinements(state, stage) do
+    targets = [:validator | Enum.take_while(@stages, &(&1 != stage))] ++ [stage]
+
+    for message <- state.messages,
+        metadata = Map.get(message, :metadata, %{}),
+        to_string(metadata[:type] || metadata["type"]) == "stage_refinement",
+        to_string(metadata[:target] || metadata["target"]) in Enum.map(targets, &to_string/1),
+        do: %{target: metadata[:target] || metadata["target"], content: message.content}
+  end
 
   defp digest(value),
-    do: :crypto.hash(:sha256, :erlang.term_to_binary(value)) |> Base.encode16(case: :lower)
+    do:
+      :crypto.hash(:sha256, :erlang.term_to_binary(canonical(value)))
+      |> Base.encode16(case: :lower)
+
+  defp canonical(map) when is_map(map),
+    do:
+      {:map,
+       map |> Enum.map(fn {key, value} -> {to_string(key), canonical(value)} end) |> Enum.sort()}
+
+  defp canonical(list) when is_list(list), do: Enum.map(list, &canonical/1)
+
+  defp canonical(value) when is_atom(value) and value not in [nil, true, false],
+    do: to_string(value)
+
+  defp canonical(value), do: value
 
   defp stage_failure(state, stage, reason) do
     message = %{
@@ -890,7 +1012,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   defp facts_changed?(state, data) do
     map_size(state.results) > 0 and
-      Jason.encode!(business_data(state)) != Jason.encode!(data)
+      digest(business_data(state)) != digest(data)
   end
 
   defp commit_validation(state, changed) do

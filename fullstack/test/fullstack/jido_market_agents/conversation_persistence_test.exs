@@ -62,7 +62,17 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
 
   defp start_conversation_for(user) do
     id = unique_id()
-    {:ok, _pid} = Conversation.ensure_started(id, user.id)
+    {:ok, pid} = Conversation.ensure_started(id, user.id)
+
+    on_exit(fn ->
+      if Process.alive?(pid),
+        do:
+          DynamicSupervisor.terminate_child(
+            Fullstack.JidoMarketAgents.ConversationSupervisor,
+            pid
+          )
+    end)
+
     Conversation.subscribe(id)
     id
   end
@@ -264,6 +274,11 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
 
       assert match?({:research_complete, _}, msg) or match?({:error, %{stage: :research}}, msg)
 
+      if match?({:research_complete, _}, msg) do
+        assert_receive {event, _}, 2_000
+        assert event in [:error, :tech_strategy_complete]
+      end
+
       record = find_record(user)
       db_messages = Conversations.list_messages(record.id)
 
@@ -305,11 +320,153 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
 
     result =
       Conversations.list_messages(record.id)
-      |> Enum.find(&(&1.metadata["type"] == "research_result"))
+      |> Enum.find(&(&1.metadata["type"] == "market_research"))
 
     assert is_binary(result.content)
     assert Jason.decode!(result.content) == result.metadata["result"]
     assert result.metadata["result"]["sources"] == []
     assert result.metadata["result"]["limitations"] == ["No retrieval"]
+  end
+
+  test "stage results carry contract version fingerprint timestamp stage and run_ref" do
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    Application.put_env(
+      :fullstack,
+      Fullstack.JidoMarketAgents,
+      Keyword.put(config, :researcher_backend, {StructuredResearchBackend, []})
+    )
+
+    on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    user = user_fixture()
+    id = start_conversation_for(user)
+    Conversation.send_message(id, complete_input())
+    assert_receive {:research_complete, payload}, 2_000
+    meta = payload.market_research["_meta"]
+    assert meta["contract_version"] == "market-research/1"
+    assert meta["stage"] == "research"
+    assert meta["run_ref"] == payload.run_ref
+    assert meta["request_ref"] == payload.request_ref
+    assert meta["input_fingerprint"] =~ ~r/\A[0-9a-f]{64}\z/
+    assert {:ok, _, _} = DateTime.from_iso8601(meta["completed_at"])
+  end
+
+  defp complete_input do
+    %{
+      country: "Spain",
+      business_market: "fintech",
+      initial_budget: "50000 EUR",
+      final_product_proposal: "Payment app",
+      product_price: "10 EUR",
+      team_size: %{status: "unknown", count: nil, notes: nil},
+      current_tools_systems: %{status: "unknown", items: []},
+      repetitive_processes_pain_points: %{status: "unknown", items: []},
+      digital_maturity: %{level: "unknown", evidence: nil},
+      metrics_baselines: %{status: "unknown", items: []}
+    }
+  end
+
+  test "fingerprints canonicalize keys ignore owner metadata and bind ordered refinements versions and upstream outputs" do
+    inputs = %{
+      validated_data: complete_input(),
+      research_output: %{
+        market_evidence: [],
+        market_gaps: [],
+        demand_signals: [],
+        sources: [],
+        limitations: ["No retrieval"]
+      },
+      analysis_output: %{
+        viable_offer: nil,
+        evidence: [],
+        blocker: "Unknown",
+        experiment: "Interview"
+      },
+      systems_output: fingerprint_systems(),
+      refinements: ["First", "Second"],
+      output_language: "es"
+    }
+
+    first = Conversation.fingerprint(:tech_strategy, inputs)
+    assert is_binary(first)
+    equivalent = inputs |> Jason.encode!() |> Jason.decode!()
+
+    equivalent =
+      put_in(equivalent, ["systems_output", "_meta"], %{
+        "run_ref" => Ecto.UUID.generate(),
+        "completed_at" => "later"
+      })
+
+    equivalent = put_in(equivalent, ["validated_data", "_pipeline"], %{"run_ref" => "volatile"})
+    assert Conversation.fingerprint(:tech_strategy, equivalent) == first
+
+    assert Conversation.fingerprint(:tech_strategy, %{inputs | refinements: ["Second", "First"]}) !=
+             first
+
+    changed = put_in(inputs, [:systems_output, :quarterly_focus], "Retention instead")
+    assert Conversation.fingerprint(:tech_strategy, changed) != first
+
+    assert Conversation.fingerprint(:tech_strategy, Map.put(inputs, :prompt_version, "next")) !=
+             first
+
+    assert Conversation.fingerprint(:tech_strategy, Map.put(inputs, :guide_version, "next")) !=
+             first
+
+    assert Conversation.fingerprint(:tech_strategy, Map.put(inputs, :contract_version, "next")) !=
+             first
+  end
+
+  defp fingerprint_systems do
+    system = %{
+      current_state: "Needs improvement",
+      priority: "high",
+      actions: ["Run an experiment"],
+      kpis: ["Leads"],
+      pitfall: "Do not skip foundational work"
+    }
+
+    systems =
+      Map.new(
+        [:acquisition, :authority, :conversion, :delivery_retention, :referrals, :information],
+        &{&1, system}
+      )
+      |> Map.update!(
+        :authority,
+        &Map.put(&1, :layers, %{
+          personal_discourse: "Explain proven capabilities",
+          third_party_endorsement: "Collect endorsements",
+          success_cases: "Collect customer outcomes"
+        })
+      )
+      |> Map.update!(
+        :conversion,
+        &Map.put(&1, :phases, %{
+          qualification: "Identify suitable buyers",
+          education_nurturing: "Explain the problem",
+          proposal: "Present the offer",
+          close: "Agree on the next step"
+        })
+      )
+      |> Map.update!(
+        :information,
+        &Map.merge(&1, %{
+          kpis: ["Leads", "Conversion", "Retention"],
+          upward_information_flow: %{
+            channel: "Weekly frontline feedback",
+            incentive: "Recognize actionable feedback",
+            review_cadence: "Weekly"
+          }
+        })
+      )
+
+    %{
+      systems: systems,
+      sequencing:
+        Enum.map(
+          [:acquisition, :authority, :conversion, :delivery_retention, :referrals, :information],
+          &to_string/1
+        ),
+      quarterly_focus: "Improve acquisition"
+    }
   end
 end
