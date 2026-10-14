@@ -25,7 +25,9 @@ defmodule Fullstack.JidoMarketAgents.KnowledgeTest do
     path = Application.app_dir(:fullstack, "priv/knowledge/guia-implementacion-ia-pymes.md")
     assert {:ok, content} = Knowledge.fetch(:tech_adoption)
     assert content == File.read!(path)
-    assert content == File.read!("guia_implementacion_ia_pymes.md")
+    if File.exists?("guia_implementacion_ia_pymes.md") do
+      assert content == File.read!("guia_implementacion_ia_pymes.md")
+    end
 
     Application.put_env(:fullstack, :knowledge_module, ConfiguredKnowledge)
 
@@ -62,7 +64,12 @@ defmodule Fullstack.JidoMarketAgents.KnowledgeTest do
     path = Application.app_dir(:fullstack, "priv/knowledge/six-systems-to-scale-a-business.md")
     assert {:ok, content} = Knowledge.fetch(:six_systems)
     assert content == File.read!(path)
-    assert content == File.read!("six-systems-to-scale-a-business.md")
+    # Byte-equality with the developer's root-level original is a dev-tree
+    # nicety only: the root file is untracked, so a clean checkout must not
+    # depend on it (the committed priv copy is the release artifact).
+    if File.exists?("six-systems-to-scale-a-business.md") do
+      assert content == File.read!("six-systems-to-scale-a-business.md")
+    end
     assert content =~ "## 6. Information"
     assert {:error, :unknown_knowledge} = Knowledge.fetch(:unsupported)
     assert {:error, :unknown_knowledge} = Knowledge.fetch("../../etc/passwd")
