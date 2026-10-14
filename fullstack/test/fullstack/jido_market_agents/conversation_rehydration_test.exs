@@ -300,6 +300,39 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
     end
   end
 
+  # ── Output language durability (system control metadata) ───────────────────
+
+  describe "output language durability" do
+    test "output_language survives conversation restart" do
+      user = user_fixture()
+      id = new_persisted_id(user)
+      {:ok, pid} = Conversation.ensure_started(id, user.id)
+      Conversation.subscribe(id)
+
+      # Turn 1: explicit client language override
+      assert {:ok, :accepted, ^id} =
+               Conversation.send_message(id, %{"output_language" => "es", country: "Spain"})
+
+      assert_receive {:extraction_complete, %{conversation_id: ^id} = payload}, 2_000
+      assert payload.output_language == "es"
+
+      # durable: persisted as system control metadata, outside the
+      # user-editable business fields
+      record = Conversations.get_for_user(id, user.id)
+      assert record.validated_data["_pipeline"]["output_language"] == "es"
+
+      {:ok, _pid2} = kill_and_await_restart(id, pid)
+      Conversation.subscribe(id)
+
+      # Turn 2: no language input at all — the restored language must not
+      # silently drift back to the default.
+      assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{business_market: "fintech"})
+
+      assert_receive {:extraction_complete, %{conversation_id: ^id} = payload}, 2_000
+      assert payload.output_language == "es"
+    end
+  end
+
   # ── No-duplicate-on-resume ──────────────────────────────────────────────────
 
   describe "No duplicate persistence after rehydration" do
