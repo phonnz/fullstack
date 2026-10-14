@@ -55,6 +55,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :record_id,
     :mode,
     :pending_stage,
+    validation_provider_free: false,
     last_commit_failed: false,
     task: nil,
     task_stage: nil,
@@ -494,6 +495,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         queue: rest,
         run_ref: request.run_ref,
         request_ref: request.request_ref,
+        validation_provider_free: is_map(request.message),
         status: :active,
         mode: request.mode,
         pending_stage: nil
@@ -994,6 +996,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   # Private helpers
 
   defp process_extraction(state) do
+    last_durable = state
     case MarketValidator.check_completeness(state.validator_agent) do
       {:complete, data} ->
         # Data is complete - delegate to researcher
@@ -1018,17 +1021,19 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
         state = commit_validation(state, changed)
 
-        state =
-          broadcast(state, :extraction_complete, %{
-            status: status,
-            stage: :validator,
-            validated_data: state.validated_data
-          })
+        if state.last_commit_failed do
+          stage_failure(last_durable, :validator, :persistence_failed)
+        else
+          state =
+            broadcast(state, :extraction_complete, %{
+              status: status,
+              stage: :validator,
+              validated_data: state.validated_data
+            })
 
-        if state.mode == :automatic and not state.last_commit_failed,
-          do: send(self(), {:run_stage, :research})
-
-        {:noreply, state}
+          if state.mode == :automatic, do: send(self(), {:run_stage, :research})
+          {:noreply, state}
+        end
 
       {:incomplete, fields} ->
         prompt = MarketValidator.format_missing_prompt(fields)
@@ -1055,16 +1060,25 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
         state = commit_validation(state, changed)
 
-        state =
-          broadcast(state, :extraction_complete, %{
+        if state.last_commit_failed and not state.validation_provider_free do
+          stage_failure(last_durable, :validator, :persistence_failed)
+        else
+          payload = %{
             status: :needs_data,
             stage: :validator,
             validated_data: state.validated_data,
             missing_fields: fields
-          })
+          }
 
-        send(self(), :drain_queue)
-        {:noreply, state}
+          # Preserve the historical provider-free display fallback without
+          # claiming that its undurable answer is a committed boundary.
+          payload =
+            if state.last_commit_failed, do: Map.put(payload, :durability, :failed), else: payload
+
+          state = broadcast(state, :extraction_complete, payload)
+          send(self(), :drain_queue)
+          {:noreply, state}
+        end
     end
   end
 

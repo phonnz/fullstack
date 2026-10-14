@@ -562,4 +562,34 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert_receive {:error, %{durability: :failed}}, 1_000
     refute_receive {:provider, _, _, _}, 50
   end
+
+  for shape <- [:complete, :incomplete] do
+    test "failed #{shape} validation commit emits no success or descendant work", %{
+      id: id,
+      pid: pid,
+      user: user
+    } do
+      Conversation.send_message(id, "Paid validation whose durable record will disappear")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      assert length(Conversations.list_messages(id)) == 1
+      Fullstack.Repo.delete!(Conversations.get_for_user(id, user.id))
+      output = if unquote(shape) == :complete, do: data(), else: %{country: "Spain"}
+      reply(worker, output)
+      refute_receive {:extraction_complete, _}, 100
+
+      assert_receive {:error,
+                      %{
+                        stage: :extraction,
+                        durability: :failed,
+                        boundary_version: 0,
+                        reason: {:stage_failed, :persistence_failed}
+                      }},
+                     1_000
+
+      refute_receive {:provider, _, _, _}, 50
+      assert Conversations.get_for_user(id, user.id) == nil
+      state = :sys.get_state(pid)
+      assert state.task == nil and state.pending_stage == nil
+    end
+  end
 end
