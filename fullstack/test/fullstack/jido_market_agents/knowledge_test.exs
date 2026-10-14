@@ -3,6 +3,61 @@ defmodule Fullstack.JidoMarketAgents.KnowledgeTest do
 
   alias Fullstack.JidoMarketAgents.Knowledge
 
+  defmodule ConfiguredKnowledge do
+    def fetch(key), do: Process.get({__MODULE__, key}, {:error, :not_configured})
+  end
+
+  setup do
+    previous = Application.fetch_env(:fullstack, :knowledge_module)
+    Application.delete_env(:fullstack, :knowledge_module)
+
+    on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:fullstack, :knowledge_module, value)
+        :error -> Application.delete_env(:fullstack, :knowledge_module)
+      end
+    end)
+
+    :ok
+  end
+
+  test "fetch(:tech_adoption) loads priv content and missing or blank configured content fails before provider dispatch" do
+    path = Application.app_dir(:fullstack, "priv/knowledge/guia-implementacion-ia-pymes.md")
+    assert {:ok, content} = Knowledge.fetch(:tech_adoption)
+    assert content == File.read!(path)
+    assert content == File.read!("guia_implementacion_ia_pymes.md")
+
+    Application.put_env(:fullstack, :knowledge_module, ConfiguredKnowledge)
+
+    for key <- [:six_systems, :tech_adoption] do
+      Process.put({ConfiguredKnowledge, key}, {:ok, "Configured grounding"})
+      assert {:ok, "Configured grounding"} = Knowledge.fetch(key)
+
+      for configured <- [
+            {:error, :not_configured},
+            {:error, :enoent},
+            {:ok, ""},
+            {:ok, " \n\t "},
+            {:ok, nil},
+            {:ok, 123}
+          ] do
+        Process.put({ConfiguredKnowledge, key}, configured)
+        # The consumer's provider call is reachable only after successful grounding resolution.
+        result =
+          with {:ok, _grounding} <- Knowledge.fetch(key), do: send(self(), :provider_dispatch)
+
+        assert result == {:error, :not_configured}
+        refute_received :provider_dispatch
+      end
+    end
+
+    assert {:error, :unknown_knowledge} = Knowledge.fetch(:unsupported)
+    Application.put_env(:fullstack, :knowledge_module, Knowledge)
+    assert {:ok, ^content} = Knowledge.fetch(:tech_adoption)
+    Application.put_env(:fullstack, :knowledge_module, nil)
+    assert {:error, :not_configured} = Knowledge.fetch(:six_systems)
+  end
+
   test "fetch(:six_systems) reads the release-safe priv file" do
     path = Application.app_dir(:fullstack, "priv/knowledge/six-systems-to-scale-a-business.md")
     assert {:ok, content} = Knowledge.fetch(:six_systems)
