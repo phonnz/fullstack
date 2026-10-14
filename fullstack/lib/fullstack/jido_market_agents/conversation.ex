@@ -1032,6 +1032,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             })
 
           if state.mode == :automatic, do: send(self(), {:run_stage, :research})
+          send(self(), :drain_queue)
           {:noreply, state}
         end
 

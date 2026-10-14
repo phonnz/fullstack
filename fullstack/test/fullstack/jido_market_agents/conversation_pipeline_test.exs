@@ -592,4 +592,32 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       assert state.task == nil and state.pending_stage == nil
     end
   end
+
+  test "manual complete validation drains an accepted competing automatic turn", %{
+    id: id,
+    user: user
+  } do
+    run = Ecto.UUID.generate()
+    request = Ecto.UUID.generate()
+
+    Conversation.send_message(id, %{
+      __pipeline_request__: true,
+      message: "Manual paid validation",
+      run_ref: run,
+      request_ref: request,
+      mode: :manual
+    })
+
+    assert_receive {:provider, validator, "validator", _}, 1_000
+    assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "France"})
+    reply(validator, data())
+    assert_receive {:extraction_complete, %{run_ref: ^run, mode: :manual, status: :active}}, 1_000
+    assert_receive {:extraction_complete, %{mode: :automatic, validated_data: facts}}, 1_000
+    assert (facts[:country] || facts["country"]) == "France"
+    assert Conversations.get_for_user(id, user.id).validated_data["country"] == "France"
+    assert_receive {:provider, researcher, "researcher", messages}, 1_000
+    assert List.last(messages)["content"] =~ "France"
+    refute List.last(messages)["content"] =~ "Spain"
+    reply(researcher, research())
+  end
 end
