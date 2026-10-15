@@ -268,6 +268,124 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
     stop_runtime(session)
   end
 
+  test "wait ignores stale run_ref wrong stage and foreign conversation events" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+
+    current = %{
+      conversation_id: session.conversation_id,
+      run_ref: session.run_ref,
+      request_ref: session.request_ref,
+      stage: :analysis,
+      boundary_version: 1,
+      status: :active
+    }
+
+    parent = self()
+
+    producer =
+      spawn(fn ->
+        for payload <- [
+              Map.put(current, :run_ref, Ecto.UUID.generate()),
+              Map.put(current, :stage, :systems),
+              Map.put(current, :conversation_id, Ecto.UUID.generate()),
+              Map.put(current, :request_ref, Ecto.UUID.generate()),
+              Map.put(current, :boundary_version, 0)
+            ] do
+          Phoenix.PubSub.broadcast(Fullstack.PubSub, session.topic, {:analysis_complete, payload})
+        end
+
+        Process.sleep(40)
+        persist_analysis(session, 1)
+        Phoenix.PubSub.broadcast(Fullstack.PubSub, session.topic, {:analysis_complete, current})
+        send(parent, :valid_boundary_committed)
+      end)
+
+    start = System.monotonic_time(:millisecond)
+    assert {:ok, payload, updated} = Step.wait(session, :analysis)
+    assert payload.business_analysis["summary"] == "durable"
+    assert updated.stage_versions[:analysis] == 1
+    assert updated.boundary_version == 1
+    assert System.monotonic_time(:millisecond) - start >= 30
+    assert_receive :valid_boundary_committed
+    refute Process.alive?(producer)
+    Step.close(updated)
+    stop_runtime(updated)
+  end
+
+  test "wait reconciles a committed boundary even when PubSub delivery was dropped" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+
+    :sys.replace_state(session.observer, fn state ->
+      Phoenix.PubSub.unsubscribe(Fullstack.PubSub, session.topic)
+      state
+    end)
+
+    spawn(fn ->
+      Process.sleep(30)
+      persist_analysis(session, 1)
+    end)
+
+    assert {:ok, %{business_analysis: %{"summary" => "durable"}}, updated} =
+             Step.wait(session, :analysis)
+
+    Step.close(updated)
+    stop_runtime(updated)
+  end
+
+  test "wait distinguishes a durable incomplete validation from enqueue acceptance" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+
+    envelope = %{
+      __pipeline_request__: true,
+      mode: :manual,
+      message: %{country: "Spain"},
+      run_ref: session.run_ref,
+      request_ref: session.request_ref,
+      lease_ref: session.lease_ref
+    }
+
+    assert {:ok, :accepted, _} = Conversation.send_message(session.conversation_id, envelope)
+
+    assert {:waiting, %{status: :needs_data, validated_data: data}, updated} =
+             Step.wait(session, :validator)
+
+    assert data["country"] == "Spain"
+    assert updated.stage_versions[:validator] == 1
+    Step.close(updated)
+    stop_runtime(updated)
+  end
+
+  defp persist_analysis(session, version) do
+    record = Conversations.get_for_user(session.conversation_id, session.user_id)
+
+    control =
+      Map.merge(record.validated_data["_pipeline"], %{
+        "boundary_version" => version,
+        "run_ref" => session.run_ref,
+        "request_ref" => session.request_ref,
+        "pending_stage" => "systems"
+      })
+
+    result = %{
+      "summary" => "durable",
+      "_meta" => %{
+        "stage" => "analysis",
+        "boundary_version" => version,
+        "run_ref" => session.run_ref,
+        "request_ref" => session.request_ref
+      }
+    }
+
+    assert {:ok, _} =
+             Conversations.update_state(record, %{
+               business_analysis: result,
+               validated_data: Map.put(record.validated_data, "_pipeline", control)
+             })
+  end
+
   defp eventually(fun, attempts \\ 100)
   defp eventually(fun, 0), do: assert(fun.())
 
