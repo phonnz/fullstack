@@ -677,6 +677,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
+  def handle_call({:release_step, ref}, {caller, _}, %{manual_lease: lease} = state)
+      when not is_nil(lease) and ref == lease.ref and
+             (caller == lease.owner or caller == lease.observer) do
+    {:reply, :ok, release_manual_lease(state)}
+  end
+
+  # Old tokens cannot release a newer grant, even on the same run.
+  def handle_call({:release_step, _ref}, _from, state), do: {:reply, :ok, state}
+
   def handle_call({:send_message, message}, {caller, _}, state) do
     if state.manual_lease != nil and not manual_request?(state, caller, message) do
       {:reply, {:error, :already_running}, state}

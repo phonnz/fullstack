@@ -7,6 +7,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
   alias __MODULE__.Observer
 
   defstruct [
+    :owner,
     :conversation_id,
     :user_id,
     :pid,
@@ -52,6 +53,26 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     end
   end
 
+  @doc "Closes only this lease and observer, leaving accepted stage work alive."
+  def close(%__MODULE__{owner: owner} = session) when owner == self() do
+    try do
+      GenServer.call(session.pid, {:release_step, session.lease_ref})
+    catch
+      :exit, _ -> :ok
+    after
+      stop_observer(session.observer)
+    end
+  end
+
+  def close(%__MODULE__{}), do: {:error, :not_owner}
+
+  defp stop_observer(observer) do
+    if Process.alive?(observer), do: GenServer.stop(observer, :normal)
+    :ok
+  catch
+    :exit, _ -> :ok
+  end
+
   defp attach(record, user_id) do
     with {:ok, pid} <- Conversation.ensure_step_started(record.id, user_id),
          {:ok, observer} <- Observer.start(self(), pid, Conversation.topic(record.id)) do
@@ -63,6 +84,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
            struct!(
              __MODULE__,
              Map.merge(binding, %{
+               owner: self(),
                conversation_id: record.id,
                user_id: user_id,
                pid: pid,
@@ -89,7 +111,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     @impl true
     def init({owner, pid, topic}) do
       :ok = Phoenix.PubSub.subscribe(Fullstack.PubSub, topic)
-      {:ok, %{owner_ref: Process.monitor(owner), runtime_ref: Process.monitor(pid)}}
+      {:ok, %{topic: topic, owner_ref: Process.monitor(owner), runtime_ref: Process.monitor(pid)}}
     end
 
     @impl true
@@ -98,5 +120,12 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     @impl true
     def handle_info({:DOWN, _, :process, _, _}, state), do: {:stop, :normal, state}
     def handle_info(_event, state), do: {:noreply, state}
+
+    @impl true
+    def terminate(_reason, state) do
+      Process.demonitor(state.owner_ref, [:flush])
+      Process.demonitor(state.runtime_ref, [:flush])
+      Phoenix.PubSub.unsubscribe(Fullstack.PubSub, state.topic)
+    end
   end
 end

@@ -186,6 +186,88 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
     stop_runtime(reopened)
   end
 
+  test "close/1 releases manual mode demonitor flushes and unsubscribes" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+    Conversation.subscribe(session.conversation_id)
+    send(self(), :unrelated_message)
+    Phoenix.PubSub.broadcast(Fullstack.PubSub, session.topic, {:caller_event, %{keep: true}})
+    assert :ok = Step.close(session)
+    refute Process.alive?(session.observer)
+    assert :sys.get_state(session.pid).manual_lease == nil
+    assert :sys.get_state(session.pid).mode == :automatic
+
+    assert Conversations.get_for_user(session.conversation_id, user.id).validated_data[
+             "_pipeline"
+           ]["mode"] == "automatic"
+
+    assert_receive :unrelated_message
+    assert_receive {:caller_event, %{keep: true}}
+    Phoenix.PubSub.broadcast(Fullstack.PubSub, session.topic, :still_subscribed)
+    assert_receive :still_subscribed
+    refute_receive {:DOWN, _, :process, _, _}, 10
+
+    assert {:ok, newer} = Step.open(user.id, session.conversation_id, [])
+    assert :ok = Step.close(%{session | run_ref: "older-returned-token"})
+    assert :sys.get_state(newer.pid).manual_lease.ref == newer.lease_ref
+    assert Process.alive?(newer.observer)
+    assert :ok = Step.close(newer)
+    assert :ok = Step.close(newer)
+    stop_runtime(newer)
+  end
+
+  test "close does not kill accepted manual work or generate its descendants" do
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    Application.put_env(
+      :fullstack,
+      Fullstack.JidoMarketAgents,
+      Keyword.put(config, :validator_backend, {BlockingBackend, owner: self()})
+    )
+
+    on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+
+    envelope = %{
+      __pipeline_request__: true,
+      mode: :manual,
+      message: "manual input",
+      run_ref: session.run_ref,
+      request_ref: session.request_ref,
+      lease_ref: session.lease_ref
+    }
+
+    assert {:ok, :accepted, _} = Conversation.send_message(session.conversation_id, envelope)
+    assert_receive {:provider, worker}, 1_000
+    assert :ok = Step.close(session)
+    assert Process.alive?(worker)
+    assert {:error, :already_running} = Step.open(user.id, session.conversation_id, [])
+
+    send(
+      worker,
+      {:reply,
+       %{
+         country: "Spain",
+         business_market: "retail",
+         initial_budget: "1000 EUR",
+         final_product_proposal: "Shop",
+         product_price: "10 EUR",
+         team_size: %{status: "unknown", count: nil, notes: nil},
+         current_tools_systems: %{status: "unknown", items: []},
+         repetitive_processes_pain_points: %{status: "unknown", items: []},
+         digital_maturity: %{level: "unknown", evidence: nil},
+         metrics_baselines: %{status: "unknown", items: []}
+       }}
+    )
+
+    eventually(fn -> :sys.get_state(session.pid).task == nil end)
+    assert :sys.get_state(session.pid).mode == :automatic
+    assert :sys.get_state(session.pid).pending_stage == :research
+    refute_receive {:provider, _}, 20
+    stop_runtime(session)
+  end
+
   defp eventually(fun, attempts \\ 100)
   defp eventually(fun, 0), do: assert(fun.())
 
