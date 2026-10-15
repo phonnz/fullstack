@@ -32,13 +32,28 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     :run_ref,
     :request_ref,
     :boundary_version,
+    :deadline,
     mode: :manual,
     stage_versions: %{}
   ]
 
-  def open(user_id, conversation_id \\ nil, opts \\ [])
+  def open(user_id, conversation_id \\ nil, opts \\ []) do
+    with {:ok, timeout} <- timeout_ms(opts) do
+      deadline = System.monotonic_time(:millisecond) + timeout
+      do_open(user_id, conversation_id, deadline)
+    end
+  end
 
-  def open(user_id, nil, _opts) do
+  defp timeout_ms(opts) do
+    timeout =
+      if is_list(opts) and Keyword.keyword?(opts), do: Keyword.get(opts, :timeout_ms, 120_000)
+
+    if is_integer(timeout) and timeout > 0, do: {:ok, timeout}, else: {:error, :invalid_timeout}
+  end
+
+  defp remaining(deadline), do: max(deadline - System.monotonic_time(:millisecond), 0)
+
+  defp do_open(user_id, nil, deadline) do
     run = Ecto.UUID.generate()
     request = Ecto.UUID.generate()
 
@@ -53,15 +68,15 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
                }
              }
            }) do
-      attach(record, user_id)
+      attach(record, user_id, deadline)
     end
   end
 
-  def open(user_id, id, _opts) do
+  defp do_open(user_id, id, deadline) do
     with {:ok, id} <- Ecto.UUID.cast(id),
          {:ok, user_id} <- Ecto.UUID.cast(user_id),
          %Conversations.Record{} = record <- Conversations.get_for_user(id, user_id) do
-      attach(record, user_id)
+      attach(record, user_id, deadline)
     else
       _ -> {:error, :not_found}
     end
@@ -70,7 +85,12 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
   @doc "Waits for a correlated durable completion, not a stage enqueue acknowledgement."
   def wait(%__MODULE__{owner: owner} = session, stage) when owner == self() do
     if Map.has_key?(@stage_events, stage) do
-      case GenServer.call(session.observer, {:wait, session, stage}, :infinity) do
+      result =
+        if remaining(session.deadline) == 0,
+          do: {:error, {:timeout, stage}},
+          else: GenServer.call(session.observer, {:wait, session, stage}, :infinity)
+
+      case result do
         {:error, _} = error ->
           close(session)
           error
@@ -232,33 +252,59 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     :exit, _ -> :ok
   end
 
-  defp attach(record, user_id) do
-    with {:ok, pid} <- Conversation.ensure_step_started(record.id, user_id),
-         {:ok, observer} <- Observer.start(self(), pid, Conversation.topic(record.id)) do
+  defp attach(record, user_id, deadline) do
+    with true <- remaining(deadline) > 0,
+         {:ok, pid} <- Conversation.ensure_step_started(record.id, user_id),
+         true <- remaining(deadline) > 0,
+         {:ok, observer} <- Observer.start(self(), pid, Conversation.topic(record.id), deadline) do
       lease = make_ref()
 
-      case GenServer.call(pid, {:claim_step, user_id, self(), observer, lease}) do
-        {:ok, binding} ->
-          {:ok,
-           struct!(
-             __MODULE__,
-             Map.merge(binding, %{
-               owner: self(),
-               conversation_id: record.id,
-               user_id: user_id,
-               pid: pid,
-               observer: observer,
-               monitor_ref: GenServer.call(observer, :monitor_ref),
-               topic: Conversation.topic(record.id),
-               lease_ref: lease,
-               stage_versions: stage_versions(record)
-             })
-           )}
+      try do
+        case GenServer.call(
+               pid,
+               {:claim_step, user_id, self(), observer, lease},
+               max(remaining(deadline), 1)
+             ) do
+          {:ok, binding} ->
+            session =
+              struct!(
+                __MODULE__,
+                Map.merge(binding, %{
+                  deadline: deadline,
+                  owner: self(),
+                  conversation_id: record.id,
+                  user_id: user_id,
+                  pid: pid,
+                  observer: observer,
+                  monitor_ref: GenServer.call(observer, :monitor_ref),
+                  topic: Conversation.topic(record.id),
+                  lease_ref: lease,
+                  stage_versions: stage_versions(record)
+                })
+              )
 
-        error ->
-          GenServer.stop(observer)
-          error
+            if remaining(deadline) > 0 do
+              {:ok, session}
+            else
+              close(session)
+              {:error, {:timeout, :open}}
+            end
+
+          error ->
+            stop_observer(observer)
+            error
+        end
+      catch
+        :exit, reason ->
+          stop_observer(observer)
+
+          if remaining(deadline) == 0,
+            do: {:error, {:timeout, :open}},
+            else: {:error, {:open_failed, reason}}
       end
+    else
+      false -> {:error, {:timeout, :open}}
+      error -> error
     end
   end
 
@@ -267,15 +313,25 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     use GenServer
     alias Fullstack.JidoMarketAgents.Conversations.Step
 
-    def start(owner, pid, topic), do: GenServer.start(__MODULE__, {owner, pid, topic})
+    def start(owner, pid, topic, deadline),
+      do: GenServer.start(__MODULE__, {owner, pid, topic, deadline})
 
     @impl true
-    def init({owner, pid, topic}) do
+    def init({owner, pid, topic, deadline}) do
       :ok = Phoenix.PubSub.subscribe(Fullstack.PubSub, topic)
+
+      deadline_timer =
+        Process.send_after(
+          self(),
+          :expired,
+          max(deadline - System.monotonic_time(:millisecond), 0)
+        )
 
       {:ok,
        %{
          topic: topic,
+         deadline: deadline,
+         deadline_timer: deadline_timer,
          owner: owner,
          owner_ref: Process.monitor(owner),
          runtime_ref: Process.monitor(pid),
@@ -305,6 +361,13 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     end
 
     @impl true
+    def handle_info(:expired, %{waiting: nil} = state), do: {:stop, :normal, state}
+
+    def handle_info(:expired, state) do
+      {:noreply, state} = check(state)
+      {:stop, :normal, state}
+    end
+
     def handle_info(:reconcile, state), do: check(%{state | poll_timer: nil})
 
     def handle_info({event, payload}, %{waiting: waiting} = state) when not is_nil(waiting) do
@@ -327,8 +390,13 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     defp check(%{waiting: waiting} = state) do
       case Step.reconcile(waiting.session, waiting.stage, waiting.floor) do
         :pending ->
-          if state.poll_timer, do: Process.cancel_timer(state.poll_timer)
-          {:noreply, %{state | poll_timer: Process.send_after(self(), :reconcile, 20)}}
+          if state.deadline <= System.monotonic_time(:millisecond) do
+            finish(state, {:error, {:timeout, waiting.stage}})
+          else
+            if state.poll_timer, do: Process.cancel_timer(state.poll_timer)
+            delay = min(20, state.deadline - System.monotonic_time(:millisecond)) |> max(0)
+            {:noreply, %{state | poll_timer: Process.send_after(self(), :reconcile, delay)}}
+          end
 
         result ->
           finish(state, result)
@@ -365,6 +433,8 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
 
     @impl true
     def terminate(_reason, state) do
+      Process.cancel_timer(state.deadline_timer)
+      if state.poll_timer, do: Process.cancel_timer(state.poll_timer)
       Process.demonitor(state.owner_ref, [:flush])
       Process.demonitor(state.runtime_ref, [:flush])
       Phoenix.PubSub.unsubscribe(Fullstack.PubSub, state.topic)

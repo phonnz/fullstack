@@ -358,6 +358,95 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
     stop_runtime(updated)
   end
 
+  test "stage wait returns tagged timeout without killing conversation" do
+    user = user_fixture()
+    assert {:error, :invalid_timeout} = Step.open(user.id, nil, timeout_ms: 0)
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    Application.put_env(
+      :fullstack,
+      Fullstack.JidoMarketAgents,
+      Keyword.put(config, :validator_backend, {BlockingBackend, owner: self()})
+    )
+
+    on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    {:ok, session} = Step.open(user.id, nil, timeout_ms: 300)
+
+    envelope = %{
+      __pipeline_request__: true,
+      mode: :manual,
+      message: "blocked",
+      run_ref: session.run_ref,
+      request_ref: session.request_ref,
+      lease_ref: session.lease_ref
+    }
+
+    assert {:ok, :accepted, _} = Conversation.send_message(session.conversation_id, envelope)
+    assert_receive {:provider, worker}, 1_000
+    Process.sleep(180)
+    observer = session.observer
+
+    flood =
+      spawn(fn ->
+        for _ <- 1..15 do
+          send(observer, {:extraction_complete, %{run_ref: "stale"}})
+          Process.sleep(5)
+        end
+      end)
+
+    start = System.monotonic_time(:millisecond)
+    assert {:error, {:timeout, :validator}} = Step.wait(session, :validator)
+    assert System.monotonic_time(:millisecond) - start < 180
+    eventually(fn -> not Process.alive?(session.observer) end)
+    assert Process.alive?(session.pid) and Process.alive?(worker)
+    assert :sys.get_state(session.pid).manual_lease == nil
+    send(worker, {:reply, %{country: "Spain"}})
+    eventually(fn -> :sys.get_state(session.pid).task == nil end)
+    eventually(fn -> not Process.alive?(flood) end)
+
+    assert Conversations.get_for_user(session.conversation_id, user.id).validated_data["country"] ==
+             "Spain"
+
+    stop_runtime(session)
+  end
+
+  test "finite positive timeout is validated before any record is created" do
+    user = user_fixture()
+
+    for timeout <- [0, -1, :infinity, nil, 1.5, "100"] do
+      assert {:error, :invalid_timeout} = Step.open(user.id, nil, timeout_ms: timeout)
+    end
+
+    assert Conversations.list_for_user(user.id) == []
+  end
+
+  test "the session deadline includes think time and does not renew after a completion" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, timeout_ms: 120)
+    persist_analysis(session, 1)
+    assert {:ok, _, updated} = Step.wait(session, :analysis)
+    assert updated.deadline == session.deadline
+    Process.sleep(130)
+    start = System.monotonic_time(:millisecond)
+    assert {:error, {:timeout, :systems}} = Step.wait(updated, :systems)
+    assert System.monotonic_time(:millisecond) - start < 50
+    refute Process.alive?(session.observer)
+    assert :sys.get_state(session.pid).manual_lease == nil
+    stop_runtime(session)
+  end
+
+  test "manual admission uses the same deadline and cannot leave a late orphan grant" do
+    user = user_fixture()
+    {:ok, record} = Conversations.create(user.id)
+    {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+    :ok = :sys.suspend(pid)
+    assert {:error, {:timeout, :open}} = Step.open(user.id, record.id, timeout_ms: 30)
+    :ok = :sys.resume(pid)
+    eventually(fn -> :sys.get_state(pid).manual_lease == nil end)
+    assert :sys.get_state(pid).mode == :automatic
+    DynamicSupervisor.terminate_child(Fullstack.JidoMarketAgents.ConversationSupervisor, pid)
+  end
+
   defp persist_analysis(session, version) do
     record = Conversations.get_for_user(session.conversation_id, session.user_id)
 
