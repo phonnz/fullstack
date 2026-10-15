@@ -30,6 +30,25 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
     stop_runtime(session)
   end
 
+  test "open/3 returns not_found for missing and foreign-owned ids without leakage" do
+    user = user_fixture()
+    other = user_fixture()
+    {:ok, foreign} = Conversations.create(other.id)
+    {:ok, owned} = Conversations.create(user.id)
+    missing = Ecto.UUID.generate()
+
+    for id <- [missing, foreign.id, "not-a-uuid"] do
+      assert {:error, :not_found} = Step.open(user.id, id, [])
+      assert Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, id) == []
+    end
+
+    assert {:ok, session} = Step.open(user.id, owned.id, [])
+    assert session.conversation_id == owned.id
+    assert :sys.get_state(session.pid).user_id == user.id
+    assert length(Conversations.list_for_user(user.id)) == 1
+    stop_runtime(session)
+  end
+
   defp stop_runtime(session) do
     if Process.alive?(session.observer), do: GenServer.stop(session.observer)
 

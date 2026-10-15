@@ -42,6 +42,16 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     end
   end
 
+  def open(user_id, id, _opts) do
+    with {:ok, id} <- Ecto.UUID.cast(id),
+         {:ok, user_id} <- Ecto.UUID.cast(user_id),
+         %Conversations.Record{} = record <- Conversations.get_for_user(id, user_id) do
+      attach(record, user_id)
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
   defp attach(record, user_id) do
     with {:ok, pid} <- Conversation.ensure_step_started(record.id, user_id),
          {:ok, observer} <- Observer.start(self(), pid, Conversation.topic(record.id)) do
