@@ -52,6 +52,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :mode,
     :pending_stage,
     :manual_lease,
+    manual_release_pending: false,
     validation_provider_free: false,
     last_commit_failed: false,
     task: nil,
@@ -638,34 +639,53 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   @impl true
-  def handle_call({:claim_step, user_id, owner, observer, lease}, _from, state) do
-    if state.user_id == user_id and not is_nil(state.record_id) do
-      state = %{
-        state
-        | mode: :manual,
-          run_ref: state.run_ref || Ecto.UUID.generate(),
-          request_ref: state.request_ref || Ecto.UUID.generate(),
-          manual_lease: %{ref: lease, owner: owner, observer: observer}
-      }
+  # The Registry is the single ordering authority on ONE node. Multi-node
+  # manual leases would need a distributed ownership mechanism instead.
+  def handle_call({:claim_step, user_id, owner, observer, lease}, {caller, _}, state) do
+    cond do
+      state.user_id != user_id or is_nil(state.record_id) or caller != owner ->
+        {:reply, {:error, :not_found}, state}
 
-      case persist_owned_boundary(state, %{}) do
-        {:ok, admitted} ->
-          binding = Map.take(admitted, [:run_ref, :request_ref, :boundary_version])
-          {:reply, {:ok, binding}, admitted}
+      state.task != nil or state.manual_lease != nil or state.queue != [] or
+          (state.mode == :automatic and match?({:run, _}, resume_point(state))) ->
+        {:reply, {:error, :already_running}, state}
 
-        {:error, _} ->
-          {:reply, {:error, :persistence_failed}, %{state | manual_lease: nil}}
-      end
-    else
-      {:reply, {:error, :not_found}, state}
+      true ->
+        claimed = %{
+          state
+          | mode: :manual,
+            run_ref: state.run_ref || Ecto.UUID.generate(),
+            request_ref: state.request_ref || Ecto.UUID.generate(),
+            manual_lease: %{
+              ref: lease,
+              owner: owner,
+              observer: observer,
+              owner_monitor: Process.monitor(owner),
+              observer_monitor: Process.monitor(observer)
+            }
+        }
+
+        case persist_owned_boundary(claimed, %{}) do
+          {:ok, admitted} ->
+            binding = Map.take(admitted, [:run_ref, :request_ref, :boundary_version])
+            {:reply, {:ok, binding}, admitted}
+
+          {:error, _} ->
+            demonitor_lease(claimed.manual_lease)
+            {:reply, {:error, :persistence_failed}, state}
+        end
     end
   end
 
-  def handle_call({:send_message, message}, _from, state) do
-    request = request_envelope(message)
-    state = %{state | queue: state.queue ++ [request]}
-    send(self(), :drain_queue)
-    {:reply, {:ok, :accepted, state.id}, state}
+  def handle_call({:send_message, message}, {caller, _}, state) do
+    if state.manual_lease != nil and not manual_request?(state, caller, message) do
+      {:reply, {:error, :already_running}, state}
+    else
+      request = request_envelope(message)
+      state = %{state | queue: state.queue ++ [request]}
+      send(self(), :drain_queue)
+      {:reply, {:ok, :accepted, state.id}, state}
+    end
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -682,8 +702,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     {:reply, {:ok, snapshot}, state}
   end
 
-  def handle_call({:run_stage, stage, run, request}, _from, state) do
+  def handle_call({:run_stage, stage, run, request}, {caller, _}, state) do
     cond do
+      state.manual_lease != nil and state.manual_lease.owner != caller ->
+        {:reply, {:error, :already_running}, state}
+
       run != state.run_ref or request != state.request_ref ->
         {:reply, {:error, :stale_binding}, state}
 
@@ -772,7 +795,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   def handle_info(:drain_queue, state), do: {:noreply, state}
 
-  def handle_info({:run_stage, stage}, %{task: nil} = state) when stage in @stages do
+  def handle_info({:run_stage, stage}, %{task: nil, mode: :automatic, manual_lease: nil} = state)
+      when stage in @stages do
     if state.pending_stage == stage, do: run_stage(state, stage), else: {:noreply, state}
   end
 
@@ -784,25 +808,46 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     stage = state.task_stage
     state = %{state | task: nil, task_stage: nil, task_timer: nil}
 
-    case {stage, result} do
-      {:validator, {:ok, validator}} -> process_extraction(%{state | validator_agent: validator})
-      {stage, {:ok, result}} -> stage_success(state, stage, result)
-      {stage, {:error, _reason}} -> stage_failure(state, stage, :provider_failed)
-      {stage, _} -> stage_failure(state, stage, :invalid_result)
-    end
+    outcome =
+      case {stage, result} do
+        {:validator, {:ok, validator}} ->
+          process_extraction(%{state | validator_agent: validator})
+
+        {stage, {:ok, result}} ->
+          stage_success(state, stage, result)
+
+        {stage, {:error, _reason}} ->
+          stage_failure(state, stage, :provider_failed)
+
+        {stage, _} ->
+          stage_failure(state, stage, :invalid_result)
+      end
+
+    settle_manual_release(outcome)
   end
 
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{task: %Task{ref: ref}} = state) do
     Process.cancel_timer(state.task_timer)
-    stage_failure(%{state | task: nil, task_timer: nil}, state.task_stage, :worker_failed)
+
+    settle_manual_release(
+      stage_failure(%{state | task: nil, task_timer: nil}, state.task_stage, :worker_failed)
+    )
   end
 
   def handle_info({:stage_timeout, ref}, %{task: %Task{ref: ref} = task} = state) do
     Task.shutdown(task, :brutal_kill)
-    stage_failure(%{state | task: nil, task_timer: nil}, state.task_stage, :timeout)
+
+    settle_manual_release(
+      stage_failure(%{state | task: nil, task_timer: nil}, state.task_stage, :timeout)
+    )
   end
 
   # Results and DOWNs from completed/obsolete tasks never cross the boundary.
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{manual_lease: lease} = state)
+      when not is_nil(lease) and (ref == lease.owner_monitor or ref == lease.observer_monitor) do
+    {:noreply, release_manual_lease(state)}
+  end
+
   def handle_info({_ref, _result}, state), do: {:noreply, state}
   def handle_info({:DOWN, _, :process, _, _}, state), do: {:noreply, state}
   def handle_info({:EXIT, _, _}, state), do: {:noreply, state}
@@ -819,6 +864,36 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
        end)
      end)}
   end
+
+  defp manual_request?(%{manual_lease: lease}, caller, message) do
+    is_map(message) and message[:__pipeline_request__] == true and
+      message[:mode] == :manual and message[:lease_ref] == lease.ref and caller == lease.owner
+  end
+
+  defp demonitor_lease(lease) do
+    Process.demonitor(lease.owner_monitor, [:flush])
+    Process.demonitor(lease.observer_monitor, [:flush])
+  end
+
+  defp release_manual_lease(state) do
+    demonitor_lease(state.manual_lease)
+    state = %{state | manual_lease: nil, manual_release_pending: true}
+    if state.task == nil and state.queue == [], do: restore_scheduling(state), else: state
+  end
+
+  defp restore_scheduling(state) do
+    state = %{state | mode: :automatic, manual_release_pending: false}
+
+    case persist_owned_boundary(state, %{}) do
+      {:ok, persisted} -> persisted
+      {:error, _} -> state
+    end
+  end
+
+  defp settle_manual_release({:noreply, %{manual_release_pending: true} = state}),
+    do: {:noreply, restore_scheduling(state)}
+
+  defp settle_manual_release(outcome), do: outcome
 
   defp request_envelope(
          %{__pipeline_request__: true, message: message, run_ref: run, request_ref: request} =
