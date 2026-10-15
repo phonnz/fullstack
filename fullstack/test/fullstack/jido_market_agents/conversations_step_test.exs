@@ -447,6 +447,73 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
     DynamicSupervisor.terminate_child(Fullstack.JidoMarketAgents.ConversationSupervisor, pid)
   end
 
+  test "monitored process death returns tagged stage error and cleans observer state" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+    Conversation.subscribe(session.conversation_id)
+
+    killer =
+      spawn(fn ->
+        eventually(fn -> :sys.get_state(session.observer).waiting != nil end)
+        Process.exit(session.pid, :kill)
+      end)
+
+    assert {:error, {:process_down, :analysis, :killed}} = Step.wait(session, :analysis)
+    eventually(fn -> not Process.alive?(session.observer) end)
+    refute Process.alive?(session.pid)
+    eventually(fn -> not Process.alive?(killer) end)
+    Phoenix.PubSub.broadcast(Fullstack.PubSub, session.topic, :caller_subscription_survives)
+    assert_receive :caller_subscription_survives
+    refute_receive {:DOWN, _, :process, _, _}, 10
+    assert :ok = Step.close(session)
+
+    eventually(fn ->
+      Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, session.conversation_id) !=
+        []
+    end)
+
+    [{restarted, _}] =
+      Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, session.conversation_id)
+
+    assert restarted != session.pid
+    assert :sys.get_state(restarted).manual_lease == nil
+
+    DynamicSupervisor.terminate_child(
+      Fullstack.JidoMarketAgents.ConversationSupervisor,
+      restarted
+    )
+  end
+
+  test "runtime death before waiting retains its tagged reason without reattaching" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+
+    :ok =
+      DynamicSupervisor.terminate_child(
+        Fullstack.JidoMarketAgents.ConversationSupervisor,
+        session.pid
+      )
+
+    assert {:error, {:process_down, :research, :shutdown}} = Step.wait(session, :research)
+    refute Process.alive?(session.observer)
+
+    assert Registry.lookup(
+             Fullstack.JidoMarketAgents.ConversationRegistry,
+             session.conversation_id
+           ) == []
+  end
+
+  test "unexpected observer death uses the same non-destructive cleanup" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+    Process.exit(session.observer, :kill)
+    eventually(fn -> not Process.alive?(session.observer) end)
+    assert {:error, {:observer_down, :systems}} = Step.wait(session, :systems)
+    eventually(fn -> :sys.get_state(session.pid).manual_lease == nil end)
+    assert Process.alive?(session.pid)
+    stop_runtime(session)
+  end
+
   defp persist_analysis(session, version) do
     record = Conversations.get_for_user(session.conversation_id, session.user_id)
 

@@ -88,7 +88,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
       result =
         if remaining(session.deadline) == 0,
           do: {:error, {:timeout, stage}},
-          else: GenServer.call(session.observer, {:wait, session, stage}, :infinity)
+          else: await_observer(session, stage)
 
       case result do
         {:error, _} = error ->
@@ -104,6 +104,12 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
   end
 
   def wait(%__MODULE__{}, _stage), do: {:error, :not_owner}
+
+  defp await_observer(session, stage) do
+    GenServer.call(session.observer, {:wait, session, stage}, :infinity)
+  catch
+    :exit, _ -> {:error, {:observer_down, stage}}
+  end
 
   @doc false
   def correlated?(session, stage, floor, event, payload) when is_map(payload) do
@@ -335,6 +341,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
          owner: owner,
          owner_ref: Process.monitor(owner),
          runtime_ref: Process.monitor(pid),
+         down_reason: nil,
          waiting: nil,
          poll_timer: nil,
          versions: %{}
@@ -382,20 +389,38 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
       end
     end
 
-    def handle_info({:DOWN, _, :process, _, _}, state), do: {:stop, :normal, state}
+    def handle_info({:DOWN, ref, :process, _pid, _reason}, %{owner_ref: ref} = state),
+      do: {:stop, :normal, state}
+
+    def handle_info({:DOWN, ref, :process, _pid, reason}, %{runtime_ref: ref} = state) do
+      Process.demonitor(ref, [:flush])
+      Phoenix.PubSub.unsubscribe(Fullstack.PubSub, state.topic)
+      check(%{state | down_reason: down_reason(reason)})
+    end
+
+    def handle_info({:DOWN, _, :process, _, _}, state), do: {:noreply, state}
     def handle_info(_event, state), do: {:noreply, state}
+
+    # Do not expose arbitrary exit terms (which may contain provider or DB data).
+    defp down_reason(reason) when reason in [:normal, :shutdown, :killed], do: reason
+    defp down_reason(_reason), do: :runtime_failed
 
     defp check(%{waiting: nil} = state), do: {:noreply, state}
 
     defp check(%{waiting: waiting} = state) do
       case Step.reconcile(waiting.session, waiting.stage, waiting.floor) do
         :pending ->
-          if state.deadline <= System.monotonic_time(:millisecond) do
-            finish(state, {:error, {:timeout, waiting.stage}})
-          else
-            if state.poll_timer, do: Process.cancel_timer(state.poll_timer)
-            delay = min(20, state.deadline - System.monotonic_time(:millisecond)) |> max(0)
-            {:noreply, %{state | poll_timer: Process.send_after(self(), :reconcile, delay)}}
+          cond do
+            not is_nil(state.down_reason) ->
+              finish(state, {:error, {:process_down, waiting.stage, state.down_reason}})
+
+            state.deadline <= System.monotonic_time(:millisecond) ->
+              finish(state, {:error, {:timeout, waiting.stage}})
+
+            true ->
+              if state.poll_timer, do: Process.cancel_timer(state.poll_timer)
+              delay = min(20, state.deadline - System.monotonic_time(:millisecond)) |> max(0)
+              {:noreply, %{state | poll_timer: Process.send_after(self(), :reconcile, delay)}}
           end
 
         result ->
