@@ -103,7 +103,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   @doc false
-  def ensure_step_started(id, user_id), do: find_or_start(id, user_id, manual_open: true)
+  def ensure_step_started(id, user_id),
+    do: find_or_start(id, user_id, manual_open: :atomics.new(1, []))
 
   def resume(id) do
     case lookup(id) do
@@ -369,7 +370,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       end
 
     Logger.info("Conversation started: #{id}")
-    unless Keyword.get(opts, :manual_open, false), do: maybe_enqueue_resume(state)
+    # Supervisor retains the original start arguments on restart. Suppress
+    # resume only for the opening attempt, not for subsequent automatic crash
+    # recovery after the caller closes its lease. This flag is never persisted.
+    opening = Keyword.get(opts, :manual_open)
+
+    unless is_reference(opening) and :atomics.exchange(opening, 1, 1) == 0,
+      do: maybe_enqueue_resume(state)
+
     {:ok, state}
   end
 
@@ -646,8 +654,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       state.user_id != user_id or is_nil(state.record_id) or caller != owner ->
         {:reply, {:error, :not_found}, state}
 
-      state.task != nil or state.manual_lease != nil or state.queue != [] or
-          (state.mode == :automatic and match?({:run, _}, resume_point(state))) ->
+      state.task != nil or state.manual_lease != nil or state.queue != [] ->
         {:reply, {:error, :already_running}, state}
 
       true ->

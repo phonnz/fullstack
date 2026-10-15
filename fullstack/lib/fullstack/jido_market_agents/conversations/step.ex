@@ -121,7 +121,9 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     event in [Map.get(@stage_events, stage), :error] and wire_stage == stage and
       payload[:conversation_id] == session.conversation_id and
       payload[:run_ref] == session.run_ref and payload[:request_ref] == session.request_ref and
-      is_integer(version) and version > floor
+      is_integer(version) and
+      (version > floor or
+         (event == :error and payload[:durability] == :failed and version == floor))
   end
 
   def correlated?(_, _, _, _, _), do: false
@@ -157,7 +159,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     cond do
       record.status == "error" and not is_nil(error) and
           error.metadata["stage"] == to_string(stage) ->
-        {:error, {:stage_failed, stage, error.metadata["reason"]}}
+        {:error, {:stage_failed, stage, failure_reason(error.metadata["reason"])}}
 
       stage == :validator ->
         payload =
@@ -196,6 +198,22 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
           :pending
         end
     end
+  end
+
+  @doc false
+  def failure_reason({:stage_failed, reason}), do: failure_reason(reason)
+
+  def failure_reason(reason) do
+    known = [
+      :provider_failed,
+      :invalid_result,
+      :worker_failed,
+      :timeout,
+      :persistence_failed,
+      :invalid_input
+    ]
+
+    Enum.find(known, :stage_failed, fn tag -> reason == tag or reason == to_string(tag) end)
   end
 
   defp durable_payload(session, stage, version),
@@ -380,7 +398,10 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
     def handle_info({event, payload}, %{waiting: waiting} = state) when not is_nil(waiting) do
       if Step.correlated?(waiting.session, waiting.stage, waiting.floor, event, payload) do
         if event == :error do
-          finish(state, {:error, {:stage_failed, waiting.stage, payload[:reason]}})
+          finish(
+            state,
+            {:error, {:stage_failed, waiting.stage, Step.failure_reason(payload[:reason])}}
+          )
         else
           check(state)
         end

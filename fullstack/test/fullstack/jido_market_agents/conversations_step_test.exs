@@ -514,6 +514,135 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
     stop_runtime(session)
   end
 
+  test "an idle durable automatic pending stage can be claimed without automatic resume" do
+    user = user_fixture()
+
+    {:ok, record} =
+      Conversations.create(user.id, %{
+        validated_data: %{
+          "_pipeline" => %{
+            "mode" => "automatic",
+            "run_ref" => Ecto.UUID.generate(),
+            "request_ref" => Ecto.UUID.generate(),
+            "boundary_version" => 1,
+            "pending_stage" => "research"
+          },
+          "country" => "Spain",
+          "business_market" => "retail",
+          "initial_budget" => "1000 EUR",
+          "final_product_proposal" => "Shop",
+          "product_price" => "10 EUR",
+          "team_size" => %{"status" => "unknown", "count" => nil, "notes" => nil},
+          "current_tools_systems" => %{"status" => "unknown", "items" => []},
+          "repetitive_processes_pain_points" => %{"status" => "unknown", "items" => []},
+          "digital_maturity" => %{"level" => "unknown", "evidence" => nil},
+          "metrics_baselines" => %{"status" => "unknown", "items" => []}
+        }
+      })
+
+    assert {:ok, session} = Step.open(user.id, record.id, [])
+    assert :sys.get_state(session.pid).task == nil
+    assert :sys.get_state(session.pid).mode == :manual
+    Step.close(session)
+    assert {:ok, reopened} = Step.open(user.id, record.id, [])
+    Step.close(reopened)
+    stop_runtime(reopened)
+  end
+
+  test "a correlated persistence failure at the unadvanced boundary terminates the wait" do
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, timeout_ms: 150)
+
+    spawn(fn ->
+      eventually(fn -> :sys.get_state(session.observer).waiting != nil end)
+
+      Phoenix.PubSub.broadcast(
+        Fullstack.PubSub,
+        session.topic,
+        {:error,
+         %{
+           conversation_id: session.conversation_id,
+           run_ref: session.run_ref,
+           request_ref: session.request_ref,
+           stage: :extraction,
+           boundary_version: session.boundary_version,
+           durability: :failed,
+           reason: {:stage_failed, :persistence_failed}
+         }}
+      )
+    end)
+
+    assert {:error, {:stage_failed, :validator, :persistence_failed}} =
+             Step.wait(session, :validator)
+
+    refute Process.alive?(session.observer)
+    assert :sys.get_state(session.pid).manual_lease == nil
+    stop_runtime(session)
+  end
+
+  test "manual startup suppression is one-shot so closing preserves automatic crash recovery" do
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    Application.put_env(
+      :fullstack,
+      Fullstack.JidoMarketAgents,
+      Keyword.put(config, :researcher_backend, {BlockingBackend, owner: self()})
+    )
+
+    on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    user = user_fixture()
+    {:ok, session} = Step.open(user.id, nil, [])
+    pid = session.pid
+
+    on_exit(fn ->
+      for {runtime, _} <-
+            Registry.lookup(
+              Fullstack.JidoMarketAgents.ConversationRegistry,
+              session.conversation_id
+            ),
+          do:
+            DynamicSupervisor.terminate_child(
+              Fullstack.JidoMarketAgents.ConversationSupervisor,
+              runtime
+            )
+    end)
+
+    :sys.replace_state(pid, fn state ->
+      %{
+        state
+        | pending_stage: :research,
+          validated_data: %{
+            country: "Spain",
+            business_market: "retail",
+            initial_budget: "1000 EUR",
+            final_product_proposal: "Shop",
+            product_price: "10 EUR",
+            team_size: %{status: "unknown", count: nil, notes: nil},
+            current_tools_systems: %{status: "unknown", items: []},
+            repetitive_processes_pain_points: %{status: "unknown", items: []},
+            digital_maturity: %{level: "unknown", evidence: nil},
+            metrics_baselines: %{status: "unknown", items: []}
+          }
+      }
+    end)
+
+    assert :ok = Step.close(session)
+    Process.exit(pid, :kill)
+    assert_receive {:provider, worker}, 1_000
+    assert Process.alive?(worker)
+
+    [{restarted, _}] =
+      Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, session.conversation_id)
+
+    assert restarted != pid
+    assert :sys.get_state(restarted).task_stage == :research
+
+    DynamicSupervisor.terminate_child(
+      Fullstack.JidoMarketAgents.ConversationSupervisor,
+      restarted
+    )
+  end
+
   defp persist_analysis(session, version) do
     record = Conversations.get_for_user(session.conversation_id, session.user_id)
 
