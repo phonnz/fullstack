@@ -363,7 +363,26 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       end
 
     Logger.info("Conversation started: #{id}")
+    maybe_enqueue_resume(state)
     {:ok, state}
+  end
+
+  # Commit-before-broadcast crash recovery (P58): initialization inspects
+  # the durable boundaries and enqueues ONLY the next stage — never a
+  # committed one (no regeneration) and never a successor behind a missing
+  # prerequisite. The durable `pending_stage` claim must name the same
+  # stage (it is written atomically with the boundary), so inconsistent or
+  # legacy evidence fails closed instead of scheduling work. Automatic
+  # mode only: manual and legacy rows expose idle pending work without
+  # generating a successor, and error rows never auto-retry.
+  defp maybe_enqueue_resume(state) do
+    with {:run, stage} <- resume_point(state),
+         true <- state.mode == :automatic,
+         true <- state.pending_stage == stage do
+      send(self(), {:run_stage, stage})
+    end
+
+    state
   end
 
   defp fresh_state(id, user_id, researcher) do

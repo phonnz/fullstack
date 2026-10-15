@@ -857,6 +857,103 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
     end
   end
 
+  # ── P58: commit-before-broadcast crash recovery ────────────────────────────
+
+  defmodule BlockingProbeBackend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(messages, opts) do
+      send(opts[:owner], {:provider, opts[:model], messages})
+
+      receive do
+        {:reply, result} -> result
+      end
+    end
+  end
+
+  describe "commit-before-broadcast crash recovery" do
+    test "restart after committed result before broadcast resumes next stage without regeneration" do
+      config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+      Application.put_env(
+        :fullstack,
+        Fullstack.JidoMarketAgents,
+        Enum.reduce(
+          [:researcher, :analyzer, :systems, :strategy],
+          config,
+          fn role, acc ->
+            Keyword.put(
+              acc,
+              :"#{role}_backend",
+              {BlockingProbeBackend, owner: self(), model: to_string(role)}
+            )
+          end
+        )
+      )
+
+      on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+
+      user = user_fixture()
+      facts = complete_facts()
+      research = research_boundary(facts, "committed-research")
+
+      control = fn pending ->
+        %{
+          "mode" => "automatic",
+          "pending_stage" => pending,
+          "boundary_version" => 2,
+          "run_ref" => Ecto.UUID.generate(),
+          "request_ref" => Ecto.UUID.generate()
+        }
+      end
+
+      # The four crash windows and their durable evidence (the plan's
+      # crash table): windows 1-2 leave no result transition and re-run the
+      # same stage; windows 3-4 leave the committed boundary and resume the
+      # successor without ever regenerating the committed stage (window 4
+      # additionally replays as a fingerprint no-op — no duplicate message
+      # or result).
+      windows = [
+        {1, Map.put(facts, "_pipeline", control.("research")), nil, "researcher"},
+        {2, Map.put(facts, "_pipeline", control.("research")), nil, "researcher"},
+        {3, Map.put(facts, "_pipeline", control.("analysis")), research, "analyzer"},
+        {4, Map.put(facts, "_pipeline", control.("analysis")), research, "analyzer"}
+      ]
+
+      for {window, window_facts, window_research, first_role} <- windows do
+        {:ok, created} = Conversations.create(user.id)
+        {:ok, record} = Conversations.update_state(created, %{validated_data: window_facts})
+
+        if window_research do
+          {:ok, _} =
+            Conversations.append_message(record.id, %{
+              role: "assistant",
+              content: "research",
+              metadata: %{"type" => "market_research", "result" => window_research}
+            })
+        end
+
+        {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+        assert_receive {:provider, ^first_role, messages}, 2_000
+
+        if window in [3, 4] do
+          # No regeneration of the committed research boundary.
+          refute_received {:provider, "researcher", _}
+          assert List.last(messages)["content"] =~ "committed-research"
+        end
+
+        # Each window's world ends before the next: parked provider workers
+        # die with their conversation so they cannot pollute the next row.
+        DynamicSupervisor.terminate_child(
+          Fullstack.JidoMarketAgents.ConversationSupervisor,
+          pid
+        )
+      end
+    end
+  end
+
   # ── No-duplicate-on-resume ──────────────────────────────────────────────────
   describe "No duplicate persistence after rehydration" do
     test "restored messages are not re-persisted; only the new turn adds rows" do
