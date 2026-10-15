@@ -51,6 +51,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :record_id,
     :mode,
     :pending_stage,
+    :manual_lease,
     validation_provider_free: false,
     last_commit_failed: false,
     task: nil,
@@ -100,6 +101,9 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     find_or_start(id, user_id)
   end
 
+  @doc false
+  def ensure_step_started(id, user_id), do: find_or_start(id, user_id, manual_open: true)
+
   def resume(id) do
     case lookup(id) do
       {:ok, pid} -> GenServer.call(pid, :resume)
@@ -146,13 +150,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   # user-scoped query (D8) with no new unscoped getter. Callers that want
   # a rehydratable conversation create the `Record` first
   # (`Conversations.create/1`) and pass `record.id` as `id` here.
-  defp find_or_start(id, user_id \\ nil) do
+  defp find_or_start(id, user_id \\ nil, start_opts \\ []) do
     case lookup(id) do
       {:ok, pid} ->
         {:ok, pid}
 
       :not_found ->
-        opts = if user_id, do: [id: id, user_id: user_id], else: [id: id]
+        opts =
+          Keyword.merge(start_opts, if(user_id, do: [id: id, user_id: user_id], else: [id: id]))
 
         case DynamicSupervisor.start_child(
                Fullstack.JidoMarketAgents.ConversationSupervisor,
@@ -363,7 +368,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       end
 
     Logger.info("Conversation started: #{id}")
-    maybe_enqueue_resume(state)
+    unless Keyword.get(opts, :manual_open, false), do: maybe_enqueue_resume(state)
     {:ok, state}
   end
 
@@ -633,6 +638,29 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   end
 
   @impl true
+  def handle_call({:claim_step, user_id, owner, observer, lease}, _from, state) do
+    if state.user_id == user_id and not is_nil(state.record_id) do
+      state = %{
+        state
+        | mode: :manual,
+          run_ref: state.run_ref || Ecto.UUID.generate(),
+          request_ref: state.request_ref || Ecto.UUID.generate(),
+          manual_lease: %{ref: lease, owner: owner, observer: observer}
+      }
+
+      case persist_owned_boundary(state, %{}) do
+        {:ok, admitted} ->
+          binding = Map.take(admitted, [:run_ref, :request_ref, :boundary_version])
+          {:reply, {:ok, binding}, admitted}
+
+        {:error, _} ->
+          {:reply, {:error, :persistence_failed}, %{state | manual_lease: nil}}
+      end
+    else
+      {:reply, {:error, :not_found}, state}
+    end
+  end
+
   def handle_call({:send_message, message}, _from, state) do
     request = request_envelope(message)
     state = %{state | queue: state.queue ++ [request]}
