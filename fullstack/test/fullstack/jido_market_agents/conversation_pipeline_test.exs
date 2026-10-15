@@ -593,6 +593,43 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     end
   end
 
+  test "stage error persists and broadcasts once without retry or descendant scheduling", %{
+    id: id,
+    pid: pid,
+    user: user
+  } do
+    Conversation.send_message(id, "Paid text whose extraction will crash")
+    assert_receive {:provider, worker, "validator", _}, 1_000
+    send(worker, :crash)
+
+    assert_receive {:error, %{status: :error, reason: {:stage_failed, :worker_failed}} = payload},
+                   1_000
+
+    # Exactly one terminal event: no retry, no second error, and no
+    # descendant stage work is ever scheduled.
+    refute_receive {:error, _}, 100
+    refute_receive {:extraction_complete, _}, 100
+    refute_receive {:research_complete, _}, 100
+    refute_receive {:provider, _, _, _}, 100
+
+    # A stale successor message after the terminal error stays inert.
+    send(pid, {:run_stage, :research})
+    refute_receive {:provider, _, _, _}, 100
+
+    # Persisted atomically: one typed error message, stage :validator (the
+    # durable vocabulary — never :extraction), and the terminal status.
+    error_message = List.last(Conversations.list_messages(id))
+    assert error_message.metadata["type"] == "error"
+    assert error_message.metadata["stage"] == "validator"
+    assert error_message.metadata["reason"] == "worker_failed"
+    assert Conversations.get_for_user(id, user.id).status == "error"
+
+    # Sanitized: raw provider payloads, credentials and stacktraces never
+    # reach the wire.
+    assert payload.reason == {:stage_failed, :worker_failed}
+    refute inspect(payload) =~ "provider_crash"
+  end
+
   test "manual complete validation drains an accepted competing automatic turn", %{
     id: id,
     user: user

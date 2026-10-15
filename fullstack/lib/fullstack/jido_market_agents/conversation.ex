@@ -1161,13 +1161,23 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   defp canonical(value), do: value
 
-  defp stage_failure(state, stage, reason) do
-    message = %{
+  # Shared terminal-error construction (P59): the persisted typed message
+  # and the wire event derive from one sanitized envelope. `reason` is an
+  # internal tag only — raw provider payloads, credentials and stacktraces
+  # never leave this module.
+  defp stage_error_message(stage, reason) do
+    %{
       role: :assistant,
       content: "Stage failed. Please try again.",
       timestamp: DateTime.utc_now(),
       metadata: %{type: :error, stage: stage, reason: reason}
     }
+  end
+
+  defp stage_error_reason(reason), do: {:stage_failed, reason}
+
+  defp stage_failure(state, stage, reason) do
+    message = stage_error_message(stage, reason)
 
     candidate = %{
       state
@@ -1188,7 +1198,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       broadcast(state, :error, %{
         status: :error,
         stage: if(stage == :validator, do: :extraction, else: stage),
-        reason: {:stage_failed, reason},
+        reason: stage_error_reason(reason),
         durability: durability
       })
 
