@@ -15,7 +15,7 @@ The extraction prompt requests fields only; its closed output contract and norma
 - Engram mirror: PENDING. Runtime session identity is unavailable and attributed memory writes are prohibited.
 
 ## Tasks
-- [ ] T1 — Add structured Validator assessment end to end, with prompt/context, separately retained factual model justification, deterministic sufficiency, merged data and missing fields, and complete/incomplete Conversation delivery. Include regression tests and one scoped Conventional Commit after verified checks.
+- [x] T1 — Add structured Validator assessment end to end, with prompt/context, separately retained factual model justification, deterministic sufficiency, merged data and missing fields, and complete/incomplete Conversation delivery. Include regression tests and one scoped Conventional Commit after verified checks.
 
 ## Acceptance criteria
 - Assessment exposes `sufficient`, `data`, `missing_fields`, `justification`, and `next_question`; complete assessments have no next question.
@@ -33,11 +33,11 @@ Regression runner: `mix test test/fullstack/jido_market_agents test/fullstack/ji
 Run scoped `mix format` before final verification; check with `mix format --check-formatted` on changed files. Tests use fake backends, not paid provider calls. Mix test alias creates/migrates the local test database.
 
 ## Progress and evidence
-Implementation complete; T1 remains open until independent verification and the scoped work-unit commit.
+T1 completed with observed implementation, independent verification, and scoped source commit `32f026bc43f3426438139fa6e1dc00ec1b54ed46` (`feat(validator): return reusable completeness assessments`).
 
 - RED: focused runner observed 123 tests, 5 failures before production changes (missing assessment API, justification schema, and event payload).
 - Additional regression RED: Validator and ExtractionOutput tests observed 34 tests, 6 failures before production changes, including initial assessment and preserved prior diagnosis context.
-- GREEN: focused runner observed 125 tests, 0 failures.
+- GREEN: focused runner observed 125 tests, 0 failures; final focused rerun after the metadata-comment correction also passed 125 tests, 0 failures (seed 477972).
 - Writer regression runner: 414 tests, 0 failures.
 - Parent structural readback found no correctness issue; parent spot check of Validator and ExtractionOutput tests passed 34 tests, 0 failures.
 - Independent verification: initial full regression had 414 tests, 1 failure (ConversationRehydrationTest legacy six-field restart timed out at conversation_rehydration_test.exs:353, seed 419919). Targeted `mix test test/fullstack/jido_market_agents/conversation_rehydration_test.exs:288 --seed 419919` passed 1 test, 0 failures; full same-seed regression rerun passed 414 tests, 0 failures. The timeout's root cause and pre-existing status are unproven.
@@ -45,9 +45,9 @@ Implementation complete; T1 remains open until independent verification and the 
 - Scoped `mix format` and `mix format --check-formatted` completed; scoped `git diff --check` passed.
 - Existing compiler warnings and intentional provider-crash test logs remain. Regression also logged SQL Sandbox owner-exit disconnects, with no test failures. Global diff whitespace warnings are confined to unrelated `.elixir-tools/next-ls.log`; that file was not edited by this feature.
 - Runtime harness: fake-backend Conversation tests observed both complete/incomplete `:extraction_complete` assessments and reloaded the assistant metadata from the database. No real model/provider call was made; real-model prompt adherence is unverified.
-- Feature source/test diff: 287 authored changed lines, excluding the 24-line pre-existing unrelated Conversation telemetry change. The new feature document is additional; no unrelated file is included.
+- Committed source/test diff: 291 authored changed lines; source commit includes a 59-line feature document for 350 total authored changed lines (300 additions, 50 deletions across seven files). The pre-existing unrelated 24-line Conversation telemetry change remains unstaged and was excluded from the commit; no unrelated file was included.
 - Engram mirror remains PENDING because no authoritative runtime session identity is available. No memory write was attempted.
-- Work-unit commit: PENDING; RDD is disabled and no review lifecycle was launched.
+- Work-unit commit observed and verified: `32f026bc43f3426438139fa6e1dc00ec1b54ed46`; RDD is disabled and no review lifecycle was launched. A documentation-only follow-up records task closure after observing that source commit.
 
 ## Usage and rationale
 `MarketValidator.extract_fields(agent, message)` still returns `{:ok, updated_agent}`. Call `MarketValidator.assessment(updated_agent)` to receive `sufficient`, `data`, `missing_fields`, deterministic `justification`, separate untrusted `model_justification`, and `next_question` (nil when complete). The same report is present in extraction history, Conversation extraction events, and persisted assistant-message metadata. Next text turns receive only accumulated structured data and completeness context, never extraction history or model commentary.
@@ -56,4 +56,4 @@ The model extracts supporting facts and factual justification; deterministic dom
 
 Rollback boundary: remove only this feature's prompt/assessment/metadata/event additions and accompanying tests; retain unrelated existing Conversation edits.
 
-Next step: parent independently verifies, excludes the pre-existing telemetry hunk from the feature commit, records its commit identity, and closes T1 only after the commit is verified.
+Next step: no implementation work remains. Engram mirror synchronization is pending runtime identity restoration. Real-provider prompt adherence was not exercised. Push, PR, and merge remain separate user decisions.
