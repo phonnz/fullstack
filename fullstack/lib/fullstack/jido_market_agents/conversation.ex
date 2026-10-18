@@ -1329,6 +1329,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   defp process_extraction(state) do
     last_durable = state
+    assessment = MarketValidator.assessment(state.validator_agent)
+
     case MarketValidator.check_completeness(state.validator_agent) do
       {:complete, data} ->
         # Data is complete - delegate to researcher
@@ -1336,6 +1338,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           role: :assistant,
           content:
             "Data is complete. Researching market for #{data.final_product_proposal} in #{data.country}...",
+          metadata: %{assessment: assessment},
           timestamp: DateTime.utc_now()
         }
 
@@ -1360,7 +1363,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             broadcast(state, :extraction_complete, %{
               status: status,
               stage: :validator,
-              validated_data: state.validated_data
+              validated_data: state.validated_data,
+              assessment: assessment
             })
 
           if state.mode == :automatic, do: send(self(), {:run_stage, :research})
@@ -1377,7 +1381,12 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
         content = "#{summary}\n\n#{prompt}"
 
-        assistant_msg = %{role: :assistant, content: content, timestamp: DateTime.utc_now()}
+        assistant_msg = %{
+          role: :assistant,
+          content: content,
+          metadata: %{assessment: assessment},
+          timestamp: DateTime.utc_now()
+        }
 
         data = partial_validated_data(state.validator_agent)
         changed = facts_changed?(state, data)
@@ -1400,7 +1409,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             status: :needs_data,
             stage: :validator,
             validated_data: state.validated_data,
-            missing_fields: fields
+            missing_fields: fields,
+            assessment: assessment
           }
 
           # Preserve the historical provider-free display fallback without

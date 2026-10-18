@@ -26,6 +26,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     defp reply("first text" <> _) do
       Jason.encode!(%{
         "country" => "Spain",
+        "justification" => "The message explicitly names Spain.",
         "output_language" => "es",
         "language_switch_requested" => false
       })
@@ -187,6 +188,13 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
       assert data.team_size == %{status: "unknown", count: nil, notes: nil}
       # city stays optional: an absent city does not block completeness
       assert data.city == nil
+      report = MarketValidator.assessment(agent)
+      assert report.sufficient
+      assert report.data == data
+      assert report.missing_fields == []
+      assert report.next_question == nil
+      assert report.justification =~ "explicit unknown"
+      assert List.last(agent.state.extraction_history).assessment == report
 
       # top-level nil is not an explicit answer: it stays missing
       {:ok, agent} =
@@ -198,7 +206,95 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
       assert {:incomplete, missing} = MarketValidator.check_completeness(agent)
       assert missing == [:team_size]
       refute :city in missing
+      report = MarketValidator.assessment(agent)
+      refute report.sufficient
+      assert report.missing_fields == [:team_size]
+      assert report.data.team_size == nil
+      assert report.justification =~ "team size"
+      assert report.next_question =~ "team size"
+      assert MarketValidator.format_extraction_summary(agent) =~ "Missing: team size"
     end
+  end
+
+  test "text extraction retains factual metadata and supplies nonrecursive accumulated context" do
+    put_validator_backend(LanguageFakeBackend)
+    {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), "first text")
+    assert_receive {:backend_called, _, _, _}
+    report = MarketValidator.assessment(agent)
+    assert report.model_justification == "The message explicitly names Spain."
+    refute report.sufficient
+    refute Map.has_key?(report.data, :justification)
+    assert report.data.team_size == nil
+
+    {:ok, updated} = MarketValidator.extract_fields(agent, "silent hint")
+    assert_receive {:backend_called, _, messages, _}
+    assert List.last(messages) == %{"role" => "user", "content" => "silent hint"}
+    context = Enum.at(messages, 1)
+    assert context["role"] == "system"
+    assert context["content"] =~ "Accumulated assessment"
+    assert context["content"] =~ "Spain"
+    refute context["content"] =~ "extraction_history"
+    assert updated.state.country == "Spain"
+    assert updated.state.team_size == nil
+    assert length(updated.state.extraction_history) == 2
+    assert hd(updated.state.extraction_history).assessment == report
+    refute Map.has_key?(report, :extraction_history)
+
+    prompt = MarketValidator.extraction_prompt()
+    assert prompt =~ "justification"
+    assert prompt =~ "null"
+    assert prompt =~ "explicitly says"
+    refute prompt =~ "When the user does not provide a diagnosis answer, set"
+  end
+
+  test "assessment is available before the first extraction and ignores model sufficiency claims" do
+    empty = MarketValidator.assessment(MarketValidator.new())
+    refute empty.sufficient
+    assert map_size(empty.data) == 11
+    assert empty.model_justification == nil
+    assert length(empty.missing_fields) == 10
+
+    {:ok, agent} =
+      MarketValidator.extract_fields(MarketValidator.new(), %{
+        country: "Spain",
+        sufficient: true,
+        justification: "All information is complete."
+      })
+
+    report = MarketValidator.assessment(agent)
+    refute report.sufficient
+    assert report.model_justification == "All information is complete."
+    refute Map.has_key?(report.data, :sufficient)
+    refute Map.has_key?(report.data, :justification)
+    assert report.justification =~ "Missing required answers"
+  end
+
+  test "absent diagnosis in a later text preserves prior explicit answers" do
+    put_validator_backend(LanguageFakeBackend)
+
+    {:ok, agent} =
+      MarketValidator.extract_fields(MarketValidator.new(), %{
+        team_size: %{status: "known", count: 3},
+        digital_maturity: %{level: "unknown"}
+      })
+
+    {:ok, updated} = MarketValidator.extract_fields(agent, "first text")
+    assert_receive {:backend_called, _, messages, _}
+    assert updated.state.team_size == %{status: "known", count: 3, notes: nil}
+    assert updated.state.digital_maturity == %{level: "unknown", evidence: nil}
+    context = Enum.at(messages, 1)["content"]
+    assert context =~ ~s("count":3)
+    assert context =~ ~s("level":"unknown")
+
+    assert MarketValidator.assessment(updated).missing_fields == [
+             :business_market,
+             :initial_budget,
+             :final_product_proposal,
+             :product_price,
+             :current_tools_systems,
+             :repetitive_processes_pain_points,
+             :metrics_baselines
+           ]
   end
 
   describe "atomic field replacement" do

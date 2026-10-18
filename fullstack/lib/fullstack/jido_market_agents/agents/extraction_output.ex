@@ -96,10 +96,11 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
       "type" => "object",
       "properties" =>
         Map.merge(properties, %{
-          # Language wire metadata lives OUTSIDE `fields/0`: it is
-          # system-owned control data, not a business field. Both keys are
+          # Assessment and language metadata live OUTSIDE `fields/0`:
+          # they are metadata, not business fields. All metadata keys are
           # covered by the closed schema so a supplied-schema CLI backend
           # neither rejects nor discards them.
+          "justification" => nullable_string(),
           "output_language" => nullable_string(),
           "language_switch_requested" => %{"type" => ["boolean", "null"]}
         }),
@@ -258,6 +259,21 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
         {:error, {:reserved_key, atom}}
       end
     end)
+  end
+
+  @doc "Returns trimmed factual model justification, separate from normalized business data."
+  @spec justification(map()) :: String.t() | nil
+  def justification(map) do
+    case fetch_field(map, :justification) do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> nil
+          text -> text
+        end
+
+      _other ->
+        nil
+    end
   end
 
   @default_language "en"

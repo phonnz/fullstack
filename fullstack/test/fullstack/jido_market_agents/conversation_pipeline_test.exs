@@ -75,12 +75,30 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
   test "complete validation enqueues run_stage research", %{id: id, pid: pid} do
     :erlang.trace(pid, true, [:receive])
     Conversation.send_message(id, data())
+    assert_receive {:extraction_complete, %{assessment: assessment}}, 1_000
+    assert assessment.sufficient
+    assert assessment.next_question == nil
+    assert assessment.data.country == "Spain"
+    assistant = Enum.find(Conversations.list_messages(id), &(&1.role == "assistant"))
+    assert assistant.metadata["assessment"]["sufficient"] == true
     assert_receive {:trace, ^pid, :receive, {:run_stage, :research}}, 1_000
     assert_receive {:provider, worker, "researcher", _}, 1_000
     refute worker == pid
     assert {:ok, _, _} = Conversation.resume(id)
     reply(worker, research())
     assert_receive {:research_complete, %{conversation_id: ^id}}, 1_000
+  end
+
+  test "incomplete extraction publishes and persists a reusable assessment", %{id: id} do
+    Conversation.send_message(id, %{country: "Spain"})
+    assert_receive {:extraction_complete, %{status: :needs_data, assessment: report}}, 1_000
+    refute report.sufficient
+    assert :team_size in report.missing_fields
+    assert report.data.country == "Spain"
+    assert report.next_question =~ "team size"
+    message = List.last(Conversations.list_messages(id))
+    assert message.metadata["assessment"]["data"]["country"] == "Spain"
+    assert message.metadata["assessment"]["sufficient"] == false
   end
 
   test "blocked provider keeps reads admission and close responsive and preserves queued turns",

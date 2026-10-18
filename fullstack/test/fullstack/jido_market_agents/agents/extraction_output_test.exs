@@ -13,6 +13,19 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
   ]
 
   describe "schema/0" do
+    test "declares optional factual justification outside business fields" do
+      schema = ExtractionOutput.schema()
+      assert schema["properties"]["justification"] == %{"type" => ["string", "null"]}
+      refute "justification" in schema["required"]
+      refute :justification in ExtractionOutput.fields()
+
+      assert ExtractionOutput.justification(%{"justification" => "  Explicit facts.  "}) ==
+               "Explicit facts."
+
+      assert ExtractionOutput.justification(%{justification: %{bad: "value"}}) == nil
+      assert ExtractionOutput.justification(%{justification: " "}) == nil
+    end
+
     test "declares all six extraction fields in both properties and required" do
       schema = ExtractionOutput.schema()
 
@@ -150,13 +163,13 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutputTest do
       assert item["additionalProperties"] == false
     end
 
-    test "declares exactly the canonical field keys plus language wire metadata" do
+    test "declares exactly the canonical field keys plus assessment and language metadata" do
       schema = ExtractionOutput.schema()
       field_keys = ExtractionOutput.fields() |> Enum.map(&to_string/1) |> Enum.sort()
 
       # language wire metadata is covered by the closed schema but lives
       # OUTSIDE fields/0 (system-owned, not a business field)
-      metadata_keys = ["language_switch_requested", "output_language"]
+      metadata_keys = ["justification", "language_switch_requested", "output_language"]
 
       assert Map.keys(schema["properties"]) |> Enum.sort() ==
                Enum.sort(field_keys ++ metadata_keys)
