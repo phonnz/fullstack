@@ -415,6 +415,52 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
       assert html =~ "authoritative user msg"
       assert html =~ "authoritative reply"
     end
+
+    # The Conversation GenServer builds its in-memory messages with ATOM
+    # roles (`%{role: :user}`, `conversation.ex:323`/`352`), and `broadcast/3`
+    # puts `state.messages` on the wire verbatim (`conversation.ex:497`).
+    # Persisted messages use a `:string` role field
+    # (`conversations/message.ex:21`), so the two shapes differ. Every other
+    # test in this file hand-builds the payload with string roles, which is a
+    # shape production never emits — so the transcript must place an atom
+    # `:user` message on the user side, not fall through to the assistant
+    # branch.
+    test "a broadcast carrying atom roles renders the user message on the user side", %{
+      conn: conn,
+      user: user
+    } do
+      record = start_conversation!(user)
+
+      {:ok, view, _html} = live(conn, @evaluate_path <> "/" <> record.id)
+
+      Phoenix.PubSub.broadcast(
+        Fullstack.PubSub,
+        JidoMarketAgents.topic(record.id),
+        {:research_complete,
+         %{
+           status: :completed,
+           messages: [
+             %{role: :user, content: "atom user msg"},
+             %{role: :assistant, content: "atom assistant msg"}
+           ]
+         }}
+      )
+
+      html = render(view)
+
+      assert html =~ "atom user msg"
+      assert html =~ "atom assistant msg"
+
+      # The user bubble carries `justify-end` and the assistant bubble
+      # `justify-start` (evaluate.html.heex:45-56). Assert on the markup
+      # immediately preceding this message's text, so the check cannot be
+      # satisfied by an unrelated bubble elsewhere in the document.
+      [before_user_msg | _] = String.split(html, "atom user msg")
+
+      assert String.match?(before_user_msg, ~r/justify-end[^>]*>\s*<div[^>]*>\s*<p[^>]*>\s*$/),
+             "atom-role user message rendered on the assistant side: " <>
+               inspect(String.slice(before_user_msg, -160, 160))
+    end
   end
 
   describe "S17.1 the indicator appears on submit" do

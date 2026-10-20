@@ -40,6 +40,7 @@ defmodule Fullstack.JidoMarketAgents.MessageBuffer do
   require Logger
 
   alias Fullstack.JidoMarketAgents.{Conversation, MessageBufferSupervisor, RateLimiter}
+  alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
 
   @registry Fullstack.JidoMarketAgents.ConversationRegistry
 
@@ -107,6 +108,15 @@ defmodule Fullstack.JidoMarketAgents.MessageBuffer do
     entry = %{conversation_id: conversation_id, message: message, queued_at: DateTime.utc_now()}
     state = %{state | pending: state.pending ++ [entry]}
 
+    # First probe in the pipeline: the message is now in the system. Every
+    # later stage is expected to produce its own line for this
+    # conversation_id; the first one missing localizes the stall.
+    AgentTelemetry.emit(
+      [:fullstack, :jido_market_agents, :message, :received],
+      %{pending_count: length(state.pending)},
+      %{conversation_id: conversation_id, user_id: state.user_id, message: message}
+    )
+
     broadcast_buffered(state, conversation_id)
 
     state = reset_debounce_timer(state)
@@ -119,6 +129,22 @@ defmodule Fullstack.JidoMarketAgents.MessageBuffer do
     state.pending
     |> Enum.group_by(& &1.conversation_id, & &1.message)
     |> Enum.each(fn {conversation_id, messages} ->
+      # The debounce window elapsed and this batch is moving on. A
+      # `message.received` with no `buffer.flushed` for the same
+      # conversation means the message is still sitting in this window.
+      # The window is `debounce_ms` (45s in dev config), long enough to
+      # look like a hang to anyone watching the UI — the emitted
+      # measurement reports the real value for this environment.
+      AgentTelemetry.emit(
+        [:fullstack, :jido_market_agents, :buffer, :flushed],
+        %{batch_size: length(messages)},
+        %{
+          conversation_id: conversation_id,
+          user_id: state.user_id,
+          debounce_ms: debounce_ms()
+        }
+      )
+
       forward_batch(state.user_id, conversation_id, messages)
     end)
 

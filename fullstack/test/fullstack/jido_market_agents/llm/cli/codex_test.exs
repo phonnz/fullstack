@@ -346,4 +346,26 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.CodexTest do
       end
     end
   end
+
+  # -- Shared Backend contract (T7) ---------------------------------------
+  #
+  # `codex_success_text.sh` / `codex_success_json.sh` are the existing
+  # valid-success fixtures reused verbatim; the contract macro itself
+  # introduces no new fixture.
+
+  use Fullstack.Support.BackendContract,
+    backend: Codex,
+    valid_config: [
+      command: Path.join(@fixtures_dir, "codex_success_text.sh"),
+      model: "gpt-5.6-terra"
+    ],
+    json_config: [
+      command: Path.join(@fixtures_dir, "codex_success_json.sh"),
+      model: "gpt-5.6-terra"
+    ],
+    error_config: [
+      command: Path.join(@fixtures_dir, "codex_missing_output.sh"),
+      model: "gpt-5.6-terra"
+    ],
+    error_sentinels: ["contract probe"]
 end

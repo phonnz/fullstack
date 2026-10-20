@@ -21,6 +21,7 @@ defmodule Fullstack.JidoMarketAgents.RateLimiter do
   require Logger
 
   alias Fullstack.JidoMarketAgents.Conversation
+  alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
 
   @table :rate_limiter
 
@@ -83,8 +84,14 @@ defmodule Fullstack.JidoMarketAgents.RateLimiter do
   end
 
   def handle_call({:check_and_process, user_id, conversation_id, message}, _from, state) do
+    # The limiter's verdict decides whether the message reaches the
+    # conversation at all. `:queued` and `:deny` are both legitimate and
+    # both silent from the user's point of view — the message is held, not
+    # lost — so each verdict is recorded with the window state that
+    # produced it.
     if MapSet.member?(state.cooldown_users, user_id) do
       state = enqueue(state, user_id, conversation_id, message)
+      decided(user_id, conversation_id, :queued)
       broadcast(conversation_id, :queued_during_cooldown, %{conversation_id: conversation_id})
       {:reply, :queued, state}
     else
@@ -92,9 +99,11 @@ defmodule Fullstack.JidoMarketAgents.RateLimiter do
 
       if count(user_id) < limit() do
         record(user_id)
+        decided(user_id, conversation_id, :allow)
         forward(conversation_id, message)
         {:reply, :allow, state}
       else
+        decided(user_id, conversation_id, :deny)
         state = enter_cooldown(state, user_id, conversation_id, message)
         {:reply, :deny, state}
       end
@@ -163,7 +172,24 @@ defmodule Fullstack.JidoMarketAgents.RateLimiter do
     }
   end
 
+  defp decided(user_id, conversation_id, verdict) do
+    AgentTelemetry.emit(
+      [:fullstack, :jido_market_agents, :rate_limit, :decided],
+      %{recent_count: count(user_id), limit: limit()},
+      %{conversation_id: conversation_id, user_id: user_id, verdict: verdict}
+    )
+  end
+
   defp forward(conversation_id, message) do
+    # Last hop before the conversation GenServer. A `rate_limit.decided`
+    # with verdict=allow but no following `message.forwarded` means the
+    # conversation process could not be reached or started.
+    AgentTelemetry.emit(
+      [:fullstack, :jido_market_agents, :message, :forwarded],
+      %{},
+      %{conversation_id: conversation_id}
+    )
+
     Conversation.send_message(conversation_id, message)
   end
 

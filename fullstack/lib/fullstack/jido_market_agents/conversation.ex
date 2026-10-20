@@ -1329,9 +1329,31 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   defp process_extraction(state) do
     last_durable = state
+    completeness = MarketValidator.check_completeness(state.validator_agent)
+
+    # The fork the whole feature turns on. `:incomplete` is a SUCCESSFUL
+    # terminal state — the pipeline is now waiting on the user, not stuck —
+    # and distinguishing it in the trace from a stall is the main reason
+    # these probes exist.
+    case completeness do
+      {:incomplete, fields} ->
+        AgentTelemetry.emit(
+          [:fullstack, :jido_market_agents, :validation, :incomplete],
+          %{missing_count: length(fields)},
+          %{conversation_id: state.id, missing_fields: fields}
+        )
+
+      {:complete, _data} ->
+        AgentTelemetry.emit(
+          [:fullstack, :jido_market_agents, :validation, :complete],
+          %{},
+          %{conversation_id: state.id}
+        )
+    end
+
     assessment = MarketValidator.assessment(state.validator_agent)
 
-    case MarketValidator.check_completeness(state.validator_agent) do
+    case completeness do
       {:complete, data} ->
         # Data is complete - delegate to researcher
         assistant_msg = %{

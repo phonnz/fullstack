@@ -142,11 +142,22 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.RunnerTest do
   end
 
   describe "deadline holds against continuous output" do
-    test "a chatty process that never stops printing still times out" do
+    test "a chatty process that never stops printing still times out and is reaped" do
       started = System.monotonic_time(:millisecond)
 
-      result = Runner.run(fixture("chatty.sh"), [], timeout_ms: 300, grace_ms: 100)
+      run_task =
+        Task.async(fn ->
+          Runner.run(fixture("chatty.sh"), [],
+            timeout_ms: 3_000,
+            grace_ms: 100,
+            scratch_prefix: "runner_chatty_probe"
+          )
+        end)
 
+      scratch_dir = await_scratch_dir("runner_chatty_probe")
+      assert {:ok, pids} = await_pids_file(scratch_dir)
+
+      result = Task.await(run_task, 10_000)
       elapsed = System.monotonic_time(:millisecond) - started
 
       assert result == {:error, :timeout}
@@ -154,8 +165,18 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.RunnerTest do
       # If chunks reset the deadline, this would run far longer than the
       # configured timeout + grace. Allow generous scheduling slack while
       # still proving the deadline was not repeatedly extended.
-      assert elapsed < 2_000,
+      assert elapsed < 6_000,
              "expected the deadline to hold despite continuous output, took #{elapsed}ms"
+
+      # Asserting only that the timeout fired would leave a leak here
+      # invisible: `chatty.sh` loops forever, so if termination failed it
+      # would keep running after the test passed. Every timeout test must
+      # assert the process is actually gone, not merely that we stopped
+      # waiting for it.
+      tree = [pids["child"]]
+
+      assert await_all_dead(tree),
+             "chatty.sh survived the timeout, still alive: #{inspect(still_alive(tree))}"
     end
   end
 

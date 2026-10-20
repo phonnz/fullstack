@@ -12,8 +12,34 @@ defmodule FullstackWeb.WaitlistLiveTest do
       assert html =~ "business"
       assert html =~ "founding cohort"
       assert html =~ "I don&#39;t know yet"
+      refute html =~ "aria-label=\"Fullstack home\""
+      refute html =~ "id=\"main-content\""
       assert has_element?(view, "form")
       assert has_element?(view, "input[name='signup[discount_code]']")
+    end
+
+    test "places strategy methodology after all assessment cards", %{conn: conn} do
+      {:ok, view, html} = live(conn, ~p"/waitlist")
+
+      assert has_element?(view, ".wl-steps-section h2", "How the assessment works")
+      assert has_element?(view, ".wl-steps > .wl-step:nth-child(4) h3", "Walk to MVP")
+      assert has_element?(view, ".wl-steps-section + #strategy-methodology")
+      assert has_element?(view, "#strategy-methodology + .wl-framework")
+      assert has_element?(view, "#strategy-methodology h2", "Our strategy methodology")
+
+      assert has_element?(
+               view,
+               "ai-strategy-animation#waitlist-strategy-animation[phx-update='ignore']"
+             )
+
+      for heading <- [
+            "Describe the idea",
+            "Agents size the market",
+            "See the numbers",
+            "Walk to MVP"
+          ] do
+        assert html =~ heading
+      end
     end
 
     test "submitting a valid email with no country creates a signup with country: nil", %{

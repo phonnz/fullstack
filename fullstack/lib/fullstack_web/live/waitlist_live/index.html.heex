@@ -477,6 +477,10 @@
     margin: 7px 0 0;
   }
 
+  /* ---------- strategy methodology ---------- */
+  .wl .wl-methodology { padding: 0 0 48px; }
+  .wl .wl-methodology .wl-section-head .wl-mono { color: var(--ink-soft); }
+
   /* ---------- framework strip ---------- */
   .wl .wl-framework { padding: 40px 0 88px; }
   .wl .wl-framework-inner {
@@ -532,8 +536,7 @@
   <div class="wl-topbar">
     <div class="wl-wrap wl-topbar-inner">
       <div class="wl-brand">
-        <span class="wl-brand-mark">V.</span>
-        Viable
+        <span class="wl-brand-mark">V.</span> Viable
       </div>
       <span class="wl-doc-tag">Pre-launch · Founder Access</span>
     </div>
@@ -585,15 +588,17 @@
       <div class="wl-proof-row">
         <div class="wl-proof-item wl-mesh">
           <div class="wl-mesh-label">Agentic specialist mesh</div>
-          <div class="wl-lbl wl-mono">Not one model — several,<br>working your case together</div>
+          <div class="wl-lbl wl-mono">
+            Not one model — several,<br />working your case together
+          </div>
         </div>
         <div class="wl-proof-item">
           <div class="wl-num">&lt;20<span style="font-size:1rem;">min</span></div>
-          <div class="wl-lbl wl-mono">Idea to<br>report</div>
+          <div class="wl-lbl wl-mono">Idea to<br />report</div>
         </div>
         <div class="wl-proof-item">
           <div class="wl-num">€0</div>
-          <div class="wl-lbl wl-mono">Spent before<br>you know</div>
+          <div class="wl-lbl wl-mono">Spent before<br />you know</div>
         </div>
       </div>
     </section>
@@ -602,7 +607,9 @@
       <div class="wl-signup" id="waitlist">
         <div class="wl-signup-head">
           <h2>Get your first report, free.</h2>
-          <p>We're onboarding founders in small batches. Leave your details and we'll email you the moment your seat opens.</p>
+          <p>
+            We're onboarding founders in small batches. Leave your details and we'll email you the moment your seat opens.
+          </p>
         </div>
 
         <%= if @signed_up do %>
@@ -662,12 +669,16 @@
         <div class="wl-step">
           <span class="wl-step-icon">&#9998;</span>
           <h3>Describe the idea</h3>
-          <p>Talk through your product, price point, and starting budget — no forms, no slide decks.</p>
+          <p>
+            Talk through your product, price point, and starting budget — no forms, no slide decks.
+          </p>
         </div>
         <div class="wl-step">
           <span class="wl-step-icon">&#9678;</span>
           <h3>Agents size the market</h3>
-          <p>Specialist agents map competitors, diagnose real demand, and frame SMART objectives.</p>
+          <p>
+            Specialist agents map competitors, diagnose real demand, and frame SMART objectives.
+          </p>
         </div>
         <div class="wl-step">
           <span class="wl-step-icon">&Sigma;</span>
@@ -682,14 +693,33 @@
       </div>
     </section>
 
+    <section
+      id="strategy-methodology"
+      class="wl-methodology"
+      aria-labelledby="strategy-methodology-heading"
+    >
+      <div class="wl-section-head">
+        <h2 id="strategy-methodology-heading">Our strategy methodology</h2>
+        <span class="wl-mono">From insight to action</span>
+      </div>
+      <ai-strategy-animation id="waitlist-strategy-animation" phx-update="ignore">
+        <p>Explore the seven-step automation framework with JavaScript enabled.</p>
+      </ai-strategy-animation>
+    </section>
+
     <section class="wl-framework">
       <div class="wl-framework-inner">
         <div>
-          <h2 style="font-size:1.05rem; font-weight:600;">Grounded in Europe's recovery framework</h2>
+          <h2 style="font-size:1.05rem; font-weight:600;">
+            Grounded in Europe's recovery framework
+          </h2>
           <p>
             Our assessment method follows the same lens used across the EU's
-            <strong>NextGenerationEU</strong> recovery funds, Spain's <strong>ipyme.org</strong>
-            SME support programs, and the <strong>Plan de Recuperación, Transformación y Resiliencia</strong> —
+            <strong>NextGenerationEU</strong>
+            recovery funds, Spain's <strong>ipyme.org</strong>
+            SME support programs, and the
+            <strong>Plan de Recuperación, Transformación y Resiliencia</strong>
+            —
             so your business case speaks the language funders already expect.
           </p>
         </div>

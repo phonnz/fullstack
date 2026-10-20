@@ -33,6 +33,7 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
 
   alias Fullstack.JidoMarketAgents
   alias Fullstack.JidoMarketAgents.Conversations
+  alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
 
   @impl true
   def mount(_params, _session, socket) do
@@ -133,7 +134,8 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
     {:noreply,
      socket
      |> assign(:phase, :researching)
-     |> replace_messages(payload)}
+     |> replace_messages(payload)
+     |> handled(:extraction_complete_researching)}
   end
 
   def handle_info({:extraction_complete, %{status: :needs_data} = payload}, socket) do
@@ -143,7 +145,8 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
      socket
      |> assign(:phase, :idle)
      |> replace_messages(payload)
-     |> refresh_sidebar()}
+     |> refresh_sidebar()
+     |> handled(:extraction_complete_needs_data)}
   end
 
   def handle_info({:research_complete, payload}, socket) do
@@ -151,7 +154,8 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
      socket
      |> assign(:phase, :idle)
      |> replace_messages(payload)
-     |> refresh_sidebar()}
+     |> refresh_sidebar()
+     |> handled(:research_complete)}
   end
 
   def handle_info({:error, payload}, socket) do
@@ -159,7 +163,8 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
      socket
      |> assign(:phase, :idle)
      |> assign(:error, Map.get(payload, :reason))
-     |> replace_messages(payload)}
+     |> replace_messages(payload)
+     |> handled(:error)}
   end
 
   def handle_info({:rate_limited, payload}, socket) do
@@ -169,7 +174,8 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
     {:noreply,
      socket
      |> assign(:phase, :rate_limited)
-     |> assign(:rate_limited, payload)}
+     |> assign(:rate_limited, payload)
+     |> handled(:rate_limited)}
   end
 
   def handle_info({:queued_during_cooldown, _payload}, socket) do
@@ -183,7 +189,26 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
   # Ignores broadcasts for a conversation that is not currently selected
   # (defensive — handle_params unsubscribes from the previous topic on
   # every selection change, but this keeps handle_info total).
-  def handle_info(_other, socket), do: {:noreply, socket}
+  #
+  # This clause is the pipeline's one truly silent failure: a payload whose
+  # shape matches none of the clauses above is discarded with no assign
+  # change and no log line, so a response that WAS produced never reaches
+  # the screen and nothing anywhere records that it arrived. The probe
+  # makes that case loud — it is emitted at :warning by the reporter,
+  # unlike every other line in the trace.
+  def handle_info(other, socket) do
+    AgentTelemetry.emit(
+      [:fullstack, :jido_market_agents, :liveview, :dropped],
+      %{},
+      %{
+        conversation_id: current_conversation_id(socket),
+        event: dropped_event_name(other),
+        payload: other
+      }
+    )
+
+    {:noreply, socket}
+  end
 
   # ── Private helpers ─────────────────────────────────────────────────────
 
@@ -250,6 +275,36 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
     |> assign(:rate_limited, nil)
   end
 
+  # Records that a broadcast was actually matched and applied. Paired with
+  # `broadcast.emitted`, this closes the loop: emitted-without-handled is a
+  # dropped response, handled-without-render is a template problem.
+  defp handled(socket, event) do
+    AgentTelemetry.emit(
+      [:fullstack, :jido_market_agents, :liveview, :handled],
+      %{message_count: length(socket.assigns.messages)},
+      %{
+        conversation_id: current_conversation_id(socket),
+        event: event,
+        phase: socket.assigns.phase
+      }
+    )
+
+    socket
+  end
+
+  defp current_conversation_id(socket) do
+    case socket.assigns[:conversation] do
+      %Conversations.Record{id: id} -> id
+      _ -> nil
+    end
+  end
+
+  # A broadcast is a `{event, payload}` tuple in every producing path; the
+  # name is extracted for the trace without assuming the rest of the shape,
+  # since an unmatched message is by definition of unknown shape.
+  defp dropped_event_name({event, _payload}) when is_atom(event), do: event
+  defp dropped_event_name(_other), do: :unknown
+
   defp replace_messages(socket, %{messages: messages}) when is_list(messages) do
     # S16.4: the transcript re-renders from the authoritative
     # payload.messages, replacing the optimistic entry (D1).
@@ -274,14 +329,32 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
     end
   end
 
-  # Messages come in two shapes: persisted `Conversations.Message` structs
-  # (loaded on selection, or arriving via an authoritative broadcast) and
-  # the plain optimistic map assigned in the "send" event (D1). Both carry
-  # `role`/`content`, so the template renders either without branching on
-  # shape itself.
+  # Messages reach the template in THREE shapes, not two:
+  #
+  #   1. persisted `Conversations.Message` structs, loaded on selection —
+  #      `role` is a `:string` field (`conversations/message.ex:21`), so
+  #      `"user"` / `"assistant"`;
+  #   2. the plain optimistic map assigned in the "send" event (D1), which
+  #      uses the string `"user"` by construction (`handle_event("send")`);
+  #   3. the `Conversation` GenServer's IN-MEMORY maps, which use ATOM
+  #      roles (`%{role: :user}`, `conversation.ex:323`/`352`). `broadcast/3`
+  #      puts `state.messages` on the wire verbatim
+  #      (`conversation.ex:497`), so every authoritative PubSub payload
+  #      carries atoms, not strings.
+  #
+  # Shape 3 is the live path — the one the user actually watches. Comparing
+  # an atom `:user` against the template's `"user"` is always false, so
+  # before this normalization every broadcast message, user and assistant
+  # alike, fell through to the assistant branch and rendered left-aligned.
+  # The role is normalized to a string here, at the single point the
+  # template reads it, so the template keeps one comparison and the three
+  # producers stay free to use whichever shape is natural for them.
   @doc false
-  def message_role(%{role: role}), do: role
-  def message_role(message) when is_map(message), do: Map.get(message, "role")
+  def message_role(%{role: role}), do: normalize_role(role)
+  def message_role(message) when is_map(message), do: normalize_role(Map.get(message, "role"))
+
+  defp normalize_role(role) when is_atom(role) and not is_nil(role), do: Atom.to_string(role)
+  defp normalize_role(role), do: role
 
   @doc false
   def message_content(%{content: content}), do: content

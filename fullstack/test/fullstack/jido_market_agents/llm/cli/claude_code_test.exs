@@ -483,4 +483,25 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCodeTest do
       refute inspect(reason) =~ "s3cr3t-value"
     end
   end
+
+  # -- Shared Backend contract (T7) ---------------------------------------
+  #
+  # `claude_success_text.sh` / `claude_success_structured.sh` are the
+  # existing valid-success fixtures reused verbatim; the contract macro
+  # itself introduces no new fixture.
+
+  @contract_fixtures_dir Path.join(__DIR__, "../../../../support/fake_cli") |> Path.expand()
+
+  use Fullstack.Support.BackendContract,
+    backend: ClaudeCode,
+    valid_config: [
+      command: Path.join(@contract_fixtures_dir, "claude_success_text.sh"),
+      model: "sonnet"
+    ],
+    json_config: [
+      command: Path.join(@contract_fixtures_dir, "claude_success_structured.sh"),
+      model: "sonnet"
+    ],
+    error_config: [command: Path.join(@contract_fixtures_dir, "fail.sh"), model: "sonnet"],
+    error_sentinels: ["contract probe"]
 end

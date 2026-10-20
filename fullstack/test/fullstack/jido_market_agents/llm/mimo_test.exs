@@ -266,4 +266,17 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
                )
     end
   end
+
+  # -- Shared Backend contract (T7) ---------------------------------------
+  #
+  # Mimo has no per-call fixture mechanism; the module-wide Bandit
+  # harness (`setup_all` above) already answers every request with a
+  # 200 + `{}` body, so the contract's `chat_completion/2` probes are
+  # exercised against that same stub, no per-test wiring needed. Mimo
+  # never advertises `:json_schema`, so the structured-output contract
+  # test is inert here (skipped by the macro itself).
+
+  use Fullstack.Support.BackendContract,
+    backend: Mimo,
+    valid_config: [model: "mimo-v2.5-pro"]
 end
