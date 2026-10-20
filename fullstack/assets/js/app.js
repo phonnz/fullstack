@@ -23,6 +23,7 @@ import { LiveSocket } from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 import { createLiveToastHook } from 'live_toast'
 import Map from "./map";
+import "./strategy_animation.mjs"
 // import VegaLite from "../vendor/vegalite"
 
 

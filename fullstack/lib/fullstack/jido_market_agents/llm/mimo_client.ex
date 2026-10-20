@@ -12,7 +12,7 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoClient do
       "model" => model,
       "messages" => messages,
       "temperature" => Keyword.get(opts, :temperature, 0.7),
-      "max_tokens" => Keyword.get(opts, :max_tokens, 1024)
+      "max_completion_tokens" => Keyword.get(opts, :max_tokens, 1024)
     }
 
     body =
@@ -22,9 +22,13 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoClient do
         body
       end
 
-    body = Jason.encode!(body)
+    body =
+      case Keyword.fetch(opts, :thinking) do
+        {:ok, mode} -> Map.put(body, "thinking", %{type: Atom.to_string(mode)})
+        :error -> body
+      end
 
-    dbg(messages)
+    body = Jason.encode!(body)
 
     case Req.post(url,
            headers: [
@@ -34,16 +38,53 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoClient do
            body: body,
            receive_timeout: 60_000
          ) do
-      {:ok, %{status: 200, body: %{"choices" => [%{"message" => %{"content" => content}} | _]}}} ->
-        IO.inspect(content)
-        {:ok, content}
+      {:ok, %{status: 200, body: %{"choices" => [choice | _]} = body}} ->
+        read_final_content(choice, body)
 
       {:ok, %{status: status, body: body}} ->
-        dbg(body)
         {:error, {:api_error, status, body}}
 
       {:error, reason} ->
         {:error, {:request_failed, reason}}
     end
+  end
+
+  defp read_final_content(choice, body) do
+    metadata = response_metadata(choice, body)
+
+    case choice do
+      %{"finish_reason" => "length"} ->
+        {:error, {:invalid_response, :truncated, metadata}}
+
+      %{"message" => %{"content" => content}} when is_binary(content) ->
+        if String.trim(content) == "" do
+          {:error, {:invalid_response, :empty_content, metadata}}
+        else
+          {:ok, content}
+        end
+
+      _ ->
+        {:error, {:invalid_response, :invalid_content, metadata}}
+    end
+  end
+
+  defp response_metadata(choice, body) do
+    reason = if is_map(choice), do: Map.get(choice, "finish_reason")
+    reason = if is_binary(reason) and byte_size(reason) <= 32, do: reason
+    usage = if is_map(body["usage"]), do: body["usage"], else: %{}
+
+    details =
+      if is_map(usage["completion_tokens_details"]),
+        do: usage["completion_tokens_details"],
+        else: %{}
+
+    tokens =
+      usage
+      |> Map.take(["prompt_tokens", "completion_tokens", "total_tokens"])
+      |> Map.put("reasoning_tokens", details["reasoning_tokens"])
+      |> Enum.filter(fn {_key, value} -> is_integer(value) and value >= 0 end)
+      |> Map.new()
+
+    %{finish_reason: reason, usage: tokens}
   end
 end

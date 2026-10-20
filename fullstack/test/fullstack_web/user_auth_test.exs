@@ -185,6 +185,57 @@ defmodule FullstackWeb.UserAuthTest do
     end
   end
 
+  describe "on_mount :ensure_admin" do
+    setup %{user: user} do
+      %{admin: Fullstack.AccountsFixtures.admin_fixture(), user: user}
+    end
+
+    test "continues for an admin", %{conn: conn, admin: admin} do
+      user_token = Accounts.generate_user_session_token(admin)
+      session = conn |> put_session(:user_token, user_token) |> get_session()
+
+      {:cont, updated_socket} =
+        UserAuth.on_mount(:ensure_admin, %{}, session, %LiveView.Socket{})
+
+      assert updated_socket.assigns.current_user.id == admin.id
+    end
+
+    test "raises Ecto.NoResultsError for an authenticated non-admin", %{conn: conn, user: user} do
+      user_token = Accounts.generate_user_session_token(user)
+      session = conn |> put_session(:user_token, user_token) |> get_session()
+
+      # A 404 rather than a redirect: a redirect would confirm the route
+      # exists to any logged-in user who probes it.
+      assert_raise Ecto.NoResultsError, fn ->
+        UserAuth.on_mount(:ensure_admin, %{}, session, %LiveView.Socket{})
+      end
+    end
+
+    test "raises for a :staff user", %{conn: conn, user: user} do
+      {:ok, staff} =
+        user |> Fullstack.Accounts.User.role_changeset(%{role: :staff}) |> Fullstack.Repo.update()
+
+      user_token = Accounts.generate_user_session_token(staff)
+      session = conn |> put_session(:user_token, user_token) |> get_session()
+
+      assert_raise Ecto.NoResultsError, fn ->
+        UserAuth.on_mount(:ensure_admin, %{}, session, %LiveView.Socket{})
+      end
+    end
+
+    test "redirects to login when there is no user_token", %{conn: conn} do
+      session = get_session(conn)
+
+      socket = %LiveView.Socket{
+        endpoint: FullstackWeb.Endpoint,
+        assigns: %{__changed__: %{}, flash: %{}}
+      }
+
+      {:halt, updated_socket} = UserAuth.on_mount(:ensure_admin, %{}, session, socket)
+      assert updated_socket.assigns.current_user == nil
+    end
+  end
+
   describe "on_mount :redirect_if_user_is_authenticated" do
     test "redirects if there is an authenticated  user ", %{conn: conn, user: user} do
       user_token = Accounts.generate_user_session_token(user)

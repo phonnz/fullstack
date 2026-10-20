@@ -1,0 +1,26 @@
+<div class="bg-base-100 min-h-screen flex flex-col items-center justify-center px-4">
+  <div class="max-w-xl text-center space-y-6">
+    <span class="badge badge-warning">Placeholder — work in progress</span>
+
+    <h1 class="text-3xl font-bold text-base-content">Business Discovery</h1>
+
+    <p class="text-base-content/70">
+      Find out how your business could work with our agents. This page is a placeholder.
+    </p>
+
+    <div class="flex justify-center gap-3">
+      <%= if @current_user do %>
+        <.link href={~p"/business-discovery/evaluate"} class="btn btn-primary">
+          Start evaluation
+        </.link>
+      <% else %>
+        <.link navigate={~p"/users/log_in"} class="btn btn-primary">
+          Log in
+        </.link>
+        <.link navigate={~p"/users/register"} class="btn btn-outline">
+          Register
+        </.link>
+      <% end %>
+    </div>
+  </div>
+</div>

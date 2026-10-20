@@ -16,8 +16,34 @@ config :fullstack,
 # Per-host root path rewrite, see FullstackWeb.Plugs.HostRewrite.
 config :fullstack, :host_roots, %{
   "chat.agentson.live" => "/chat",
-  "agentson.live" => "/about"
+  "agentson.live" => "/about",
+  "discover.agentson.live" => "/business-discovery"
 }
+
+# Throttling durations for Fullstack.JidoMarketAgents.RateLimiter and MessageBuffer.
+# Read at runtime via Application.get_env/3, never as module attributes, so test
+# config takes effect (see config/test.exs for short deterministic values).
+config :fullstack, Fullstack.JidoMarketAgents,
+  debounce_ms: 45_000,
+  rate_limit_count: 10,
+  rate_limit_window_ms: 30 * 60 * 1000,
+  cooldown_ms: 15 * 60 * 1000,
+  # Approved deployment budgets; JSON completeness still requires runtime measurement.
+  default_output_language: "en",
+  stage_timeout_ms: 120_000,
+  systems_knowledge_max_chars: 24_000,
+  strategy_knowledge_max_chars: 24_000,
+  validator_backend:
+    {Fullstack.JidoMarketAgents.LLM.Mimo,
+     model: "mimo-v2.5-pro", temperature: 0.3, max_tokens: 1024, thinking: :disabled},
+  researcher_backend:
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 4096},
+  analyzer_backend:
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 6144},
+  systems_backend:
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 8192},
+  strategy_backend:
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 8192}
 
 # Configures the endpoint
 config :fullstack, FullstackWeb.Endpoint,
@@ -74,6 +100,11 @@ config :phoenix, :json_library, Jason
 
 config :money,
   default_currency: :EUR
+
+# Emails that are granted the :admin role automatically — both when the
+# add_user_role migration backfills existing rows and when one of these
+# addresses registers later. Empty by default; set per environment.
+config :fullstack, bootstrap_admin_emails: []
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

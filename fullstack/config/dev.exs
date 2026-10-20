@@ -88,3 +88,13 @@ config :phoenix, :plug_init_mode, :runtime
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Bootstrap admin for local development.
+config :fullstack, bootstrap_admin_emails: ["gonzalezm.alfonso@gmail.com"]
+
+# Market-agents trace logging (Fullstack.JidoMarketAgents.Telemetry.Reporter).
+# Prints one line per pipeline hand-off, correlated by conversation id, so a
+# response that never reaches the UI can be localized to the hop that lost
+# it. Dev-only by default: the probes themselves are always emitted and cost
+# almost nothing with no handler attached, this only turns on the log output.
+config :fullstack, Fullstack.JidoMarketAgents, trace_logging: true

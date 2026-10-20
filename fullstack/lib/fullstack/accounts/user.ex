@@ -8,6 +8,7 @@ defmodule Fullstack.Accounts.User do
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
     field :confirmed_at, :naive_datetime
+    field :role, Ecto.Enum, values: [:user, :staff, :admin], default: :user
 
     timestamps()
   end
@@ -40,6 +41,21 @@ defmodule Fullstack.Accounts.User do
     |> cast(attrs, [:email, :password])
     |> validate_email(opts)
     |> validate_password(opts)
+  end
+
+  @doc """
+  A changeset for changing a user's role.
+
+  `:role` is deliberately absent from `registration_changeset/3` and every
+  other user-facing changeset: it is a privilege, not a profile attribute,
+  so it can only be set through this function. Call sites are expected to
+  be administrative (seeds, the bootstrap-admin hook, a console) — never a
+  form submission.
+  """
+  def role_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:role])
+    |> validate_required([:role])
   end
 
   defp validate_email(changeset, opts) do

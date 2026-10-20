@@ -505,4 +505,144 @@ defmodule Fullstack.AccountsTest do
       refute inspect(%User{password: "123456"}) =~ "password: \"123456\""
     end
   end
+
+  # Swaps :bootstrap_admin_emails for the duration of `fun` and always
+  # restores the previous value, so a failing assertion cannot leak
+  # configuration into other tests.
+  defp with_bootstrap_admins(emails, fun) do
+    previous = Application.get_env(:fullstack, :bootstrap_admin_emails)
+    Application.put_env(:fullstack, :bootstrap_admin_emails, emails)
+
+    try do
+      fun.()
+    after
+      Application.put_env(:fullstack, :bootstrap_admin_emails, previous)
+    end
+  end
+
+  describe "user roles" do
+    test "a new user defaults to the :user role" do
+      assert %User{}.role == :user
+      assert user_fixture().role == :user
+    end
+
+    test "registration cannot set the role" do
+      {:ok, user} =
+        Accounts.register_user(
+          valid_user_attributes(email: "not-an-admin@example.com", role: :admin)
+        )
+
+      assert user.role == :user
+      assert Repo.get!(User, user.id).role == :user
+    end
+
+    test "role_changeset/2 accepts every valid role" do
+      user = user_fixture()
+
+      for role <- [:user, :staff, :admin] do
+        assert {:ok, updated} = user |> User.role_changeset(%{role: role}) |> Repo.update()
+        assert updated.role == role
+      end
+    end
+
+    test "role_changeset/2 rejects an unknown role" do
+      changeset = User.role_changeset(user_fixture(), %{role: :superuser})
+
+      refute changeset.valid?
+      assert %{role: ["is invalid"]} = errors_on(changeset)
+    end
+
+    test "bootstrap_admin_email?/1 matches a configured email case-insensitively" do
+      # `email` is a citext column, so the Elixir-side check must not be
+      # stricter than the database's own comparison.
+      with_bootstrap_admins(["boss@example.com"], fn ->
+        assert Accounts.bootstrap_admin_email?("boss@example.com")
+        assert Accounts.bootstrap_admin_email?("BOSS@example.com")
+        assert Accounts.bootstrap_admin_email?("  Boss@Example.COM  ")
+        refute Accounts.bootstrap_admin_email?("someone@example.com")
+      end)
+    end
+
+    test "bootstrap_admin_email?/1 is false when nothing is configured" do
+      with_bootstrap_admins([], fn ->
+        refute Accounts.bootstrap_admin_email?("boss@example.com")
+      end)
+    end
+
+    test "bootstrap_admin_email?/1 handles a nil email" do
+      with_bootstrap_admins(["boss@example.com"], fn ->
+        refute Accounts.bootstrap_admin_email?(nil)
+      end)
+    end
+
+    test "registering a configured bootstrap email grants the :admin role" do
+      with_bootstrap_admins(["boss@example.com"], fn ->
+        {:ok, user} =
+          Accounts.register_user(valid_user_attributes(email: "BOSS@example.com"))
+
+        assert user.role == :admin
+        assert Repo.get!(User, user.id).role == :admin
+      end)
+    end
+
+    test "registering any other email keeps the :user role" do
+      with_bootstrap_admins(["boss@example.com"], fn ->
+        {:ok, user} =
+          Accounts.register_user(valid_user_attributes(email: "someone@example.com"))
+
+        assert user.role == :user
+      end)
+    end
+
+    test "registration still reports validation errors when a bootstrap list is set" do
+      with_bootstrap_admins(["boss@example.com"], fn ->
+        assert {:error, changeset} = Accounts.register_user(%{email: "bad", password: "short"})
+        refute changeset.valid?
+      end)
+    end
+
+    test "promote_bootstrap_admins/0 promotes existing users and is idempotent" do
+      user = user_fixture(email: "boss@example.com")
+      other = user_fixture(email: "someone@example.com")
+
+      with_bootstrap_admins(["boss@example.com"], fn ->
+        assert {1, _} = Accounts.promote_bootstrap_admins()
+        assert Repo.get!(User, user.id).role == :admin
+        assert Repo.get!(User, other.id).role == :user
+
+        # Running twice must not fail or change anything further.
+        assert {0, _} = Accounts.promote_bootstrap_admins()
+        assert Repo.get!(User, user.id).role == :admin
+      end)
+    end
+
+    test "promote_bootstrap_admins/0 is a no-op with an empty configuration" do
+      user = user_fixture()
+
+      with_bootstrap_admins([], fn ->
+        assert {0, _} = Accounts.promote_bootstrap_admins()
+        assert Repo.get!(User, user.id).role == :user
+      end)
+    end
+
+    test "admin?/1 is true only for the :admin role" do
+      assert Accounts.admin?(%User{role: :admin})
+      refute Accounts.admin?(%User{role: :staff})
+      refute Accounts.admin?(%User{role: :user})
+    end
+
+    test "admin?/1 is false for a nil user" do
+      refute Accounts.admin?(nil)
+    end
+
+    test "the database rejects a role outside the enum type" do
+      user = user_fixture()
+
+      assert_raise Postgrex.Error, fn ->
+        Repo.query!("UPDATE users SET role = 'superuser' WHERE id = $1", [
+          Ecto.UUID.dump!(user.id)
+        ])
+      end
+    end
+  end
 end

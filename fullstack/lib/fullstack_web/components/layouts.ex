@@ -85,6 +85,9 @@ defmodule FullstackWeb.Layouts do
           <li class="hidden max-w-[16rem] truncate text-muted lg:block">
             {@current_user.email}
           </li>
+          <li :if={Fullstack.Accounts.admin?(@current_user)}>
+            <.link href={~p"/evaluations"} class={nav_link_class()}>Evaluations</.link>
+          </li>
           <li>
             <.link href={~p"/users/settings"} class={nav_link_class()}>Settings</.link>
           </li>

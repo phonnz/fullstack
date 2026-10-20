@@ -24,6 +24,20 @@
     <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
     </script>
+    <%!--
+      Fallback font load for the /waitlist page's scoped design (see
+      odd/tasks/waitlist-landing-page.md, Round 3). Phoenix LiveView 1.2 has
+      no per-LiveView <head> injection mechanism, and /waitlist shares this
+      app's single root layout / :browser pipeline with every other route,
+      so there is no clean way to load this stylesheet only on that page.
+      This is just a font stylesheet load (no new CSS rules), scoped CSS for
+      the design itself lives entirely in that LiveView's own template under
+      the .wl class.
+    --%>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    />
   </head>
   <body class="bg-base-100 text-base-content antialiased">
     <a

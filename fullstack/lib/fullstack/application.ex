@@ -25,8 +25,23 @@ defmodule Fullstack.Application do
         Fullstack.Servers.Generators.Transactions,
         {Registry, [keys: :unique, name: :wallet_projectors]},
         {Registry, [keys: :unique, name: Fullstack.Wallet.Aggregate.WalletAggregators]},
+        {Registry, keys: :unique, name: Fullstack.JidoMarketAgents.ConversationRegistry},
+        Fullstack.JidoMarketAgents.RateLimiter,
+        Fullstack.JidoMarketAgents.MessageBufferSupervisor,
+        Fullstack.JidoMarketAgents.ConversationSupervisor,
         Fullstack.Agents.AgentServer
       ] ++ prod_child()
+
+    # Market-agents trace logging. Opt-in via config so it is a deliberate
+    # choice per environment rather than something production inherits:
+    # the pipeline crosses five processes and most hand-offs are async, so
+    # without this the only signal between "user pressed send" and
+    # "research completed" is silence. Attached before the supervisor
+    # starts so no conversation can begin un-traced.
+    if Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+       |> Keyword.get(:trace_logging, false) do
+      Fullstack.JidoMarketAgents.Telemetry.Reporter.attach()
+    end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options

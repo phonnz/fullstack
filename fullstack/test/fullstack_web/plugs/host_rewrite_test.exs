@@ -46,4 +46,18 @@ defmodule FullstackWeb.Plugs.HostRewriteTest do
     assert conn.path_info == []
     assert conn.request_path == "/"
   end
+
+  test "discover host root rewrites to /business-discovery" do
+    conn = call("discover.agentson.live", "/")
+
+    assert conn.path_info == ["business-discovery"]
+    assert conn.request_path == "/business-discovery"
+  end
+
+  test "discover host non-root path is left untouched" do
+    conn = call("discover.agentson.live", "/business-discovery/evaluate")
+
+    assert conn.path_info == ["business-discovery", "evaluate"]
+    assert conn.request_path == "/business-discovery/evaluate"
+  end
 end

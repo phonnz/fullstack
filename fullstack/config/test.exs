@@ -42,3 +42,15 @@ config :logger, level: :warning
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
+
+# Short, deterministic throttling durations so tests never wait on production
+# timers (spec N3). See Fullstack.JidoMarketAgents.RateLimiter. cooldown_ms is
+# kept comfortably longer than rate_limit_window_ms so that once cooldown
+# ends, the entries that triggered it have already aged out of the window —
+# otherwise a batch sent right after cooldown would be correctly re-denied by
+# the still-sliding window, which is real behavior but not what S9.4 tests.
+config :fullstack, Fullstack.JidoMarketAgents,
+  debounce_ms: 50,
+  rate_limit_count: 3,
+  rate_limit_window_ms: 200,
+  cooldown_ms: 400

@@ -1,0 +1,31 @@
+<.header>
+  Evaluations
+  <:subtitle>
+    Every user's market discovery evaluation. Read-only.
+  </:subtitle>
+</.header>
+
+<p :if={@evaluations == []} class="mt-11 text-sm text-muted">
+  No evaluations yet.
+</p>
+
+<.table
+  :if={@evaluations != []}
+  id="evaluations"
+  rows={@evaluations}
+  row_id={&"evaluation-#{&1.id}"}
+  row_click={&JS.navigate(~p"/evaluations/#{&1.id}")}
+  row_label={&"View evaluation for #{&1.user.email}"}
+>
+  <:col :let={evaluation} label="User">{evaluation.user.email}</:col>
+  <:col :let={evaluation} label="Title">{evaluation.title || "—"}</:col>
+  <:col :let={evaluation} label="Status">
+    <span class="badge badge-outline badge-sm">{evaluation.status}</span>
+  </:col>
+  <:col :let={evaluation} label="Messages">{evaluation.message_count}</:col>
+  <:col :let={evaluation} label="Created">
+    <time datetime={NaiveDateTime.to_iso8601(evaluation.inserted_at)}>
+      {Calendar.strftime(evaluation.inserted_at, "%Y-%m-%d %H:%M")}
+    </time>
+  </:col>
+</.table>

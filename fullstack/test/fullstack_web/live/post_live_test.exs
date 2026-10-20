@@ -10,7 +10,7 @@ defmodule FullstackWeb.PostLiveTest do
 
   defp create_post(%{conn: conn}) do
     post = post_fixture()
-    user = Fullstack.AccountsFixtures.user_fixture()
+    user = Fullstack.AccountsFixtures.admin_fixture()
     %{conn: log_in_user(conn, user), post: post}
   end
 

@@ -5,7 +5,7 @@ defmodule Fullstack.MixProject do
     [
       app: :fullstack,
       version: "0.1.0",
-      elixir: "~> 1.14",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -80,7 +80,9 @@ defmodule Fullstack.MixProject do
       {:money, "~> 1.12"},
       {:tidewave, "~> 0.1", only: :dev},
       # Note: remove `only: :dev` and add route outside dev_routes guard to enable in production
-      {:phoenix_storybook, "~> 1.3", only: [:dev, :test]}
+      {:phoenix_storybook, "~> 1.3", only: [:dev, :test]},
+      {:jido, "~> 2.3"},
+      {:req, "~> 0.5"}
     ]
   end
 

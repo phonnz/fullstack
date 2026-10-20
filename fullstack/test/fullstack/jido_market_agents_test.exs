@@ -6,6 +6,55 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
   alias Fullstack.JidoMarketAgents.LLM.MimoClient
 
+  @carpet_message "Mexico city, Mexico, Cutom carpets for the main saloon. Initial budget fort the busines 300 euros. The price for a carpet of 1.5 m x .30 m is 70 euros. Delivery in 2 weeks. Business market: custom home furniture."
+
+  # Canned provider output verifies plumbing, not live MiMo generation.
+  defp canned_carpet_fields do
+    Map.merge(
+      %{
+        "country" => "Mexico",
+        "city" => "Mexico City",
+        "business_market" => "custom home furniture",
+        "initial_budget" => "300 euros",
+        "final_product_proposal" => "Custom carpet, 1.5 m x 0.30 m; delivery in 2 weeks",
+        "product_price" => "70 euros"
+      },
+      diagnosis_unknowns_json()
+    )
+  end
+
+  # Explicit-unknown diagnosis answers: the completeness contract requires
+  # an explicit answer for every diagnosis field — an explicit "unknown"
+  # state counts as collected.
+  defp diagnosis_unknowns do
+    %{
+      team_size: %{status: "unknown", count: nil, notes: nil},
+      current_tools_systems: %{status: "unknown", items: []},
+      repetitive_processes_pain_points: %{status: "unknown", items: []},
+      digital_maturity: %{level: "unknown", evidence: nil},
+      metrics_baselines: %{status: "unknown", items: []}
+    }
+  end
+
+  defp diagnosis_unknowns_json do
+    Map.new(diagnosis_unknowns(), fn {key, value} -> {Atom.to_string(key), value} end)
+  end
+
+  defmodule BlockingAnalyzerBackend do
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    def capabilities(_), do: [:json_object]
+    def validate_config(_), do: :ok
+
+    def chat_completion(_, opts) do
+      [conversation_owner | _] = Process.get(:"$ancestors")
+      send(opts[:owner], {:analyzer_blocked, conversation_owner, self()})
+
+      receive do
+        :finish -> {:error, :fixture_finished}
+      end
+    end
+  end
+
   setup_all do
     responses = start_supervised!({Agent, fn -> %{} end})
 
@@ -16,9 +65,15 @@ defmodule Fullstack.JidoMarketAgentsTest do
       {owner, content} = Agent.get(responses, &Map.get(&1, message, {nil, "{}"}))
       if owner, do: send(owner, {:mimo_request, request})
 
+      body =
+        case content do
+          {:response, body} -> body
+          _ -> %{choices: [%{message: %{content: content}}]}
+        end
+
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.send_resp(200, Jason.encode!(%{choices: [%{message: %{content: content}}]}))
+      |> Plug.Conn.send_resp(200, Jason.encode!(body))
     end
 
     server = start_supervised!({Bandit, plug: plug, ip: {127, 0, 0, 1}, port: 0})
@@ -39,10 +94,43 @@ defmodule Fullstack.JidoMarketAgentsTest do
     {:ok, mimo_responses: responses}
   end
 
+  setup do
+    supervisor = Fullstack.JidoMarketAgents.ConversationSupervisor
+
+    existing =
+      supervisor |> DynamicSupervisor.which_children() |> Enum.map(&elem(&1, 1)) |> MapSet.new()
+
+    config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+    on_exit(fn ->
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(supervisor),
+          is_pid(pid),
+          not MapSet.member?(existing, pid) do
+        monitor = Process.monitor(pid)
+        DynamicSupervisor.terminate_child(supervisor, pid)
+
+        receive do
+          {:DOWN, ^monitor, :process, ^pid, _} -> :ok
+        after
+          1_000 -> flunk("Conversation fixture did not terminate")
+        end
+      end
+
+      # Linked provider work has stopped before the global backend is restored.
+      Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config)
+    end)
+
+    :ok
+  end
+
   defp stub_mimo(responses, message, content) do
     owner = self()
     Agent.update(responses, &Map.put(&1, message, {owner, content}))
     [%{"role" => "user", "content" => message}]
+  end
+
+  defp stub_mimo_response(responses, message, body) do
+    stub_mimo(responses, message, {:response, body})
   end
 
   # ── Helper ──────────────────────────────────────────────────────────────────
@@ -72,13 +160,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       agent = MarketValidator.new()
 
       {:ok, agent} =
-        MarketValidator.set(agent, %{
-          country: "Spain",
-          business_market: "fintech",
-          initial_budget: "50000",
-          final_product_proposal: "Payment app",
-          product_price: "9.99"
-        })
+        MarketValidator.set(
+          agent,
+          Map.merge(
+            %{
+              country: "Spain",
+              business_market: "fintech",
+              initial_budget: "50000",
+              final_product_proposal: "Payment app",
+              product_price: "9.99"
+            },
+            diagnosis_unknowns()
+          )
+        )
 
       assert {:complete, data} = MarketValidator.check_completeness(agent)
       assert data.country == "Spain"
@@ -89,13 +183,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       agent = MarketValidator.new()
 
       {:ok, agent} =
-        MarketValidator.set(agent, %{
-          country: "Spain",
-          business_market: "fintech",
-          initial_budget: "50000",
-          final_product_proposal: "Payment app",
-          product_price: "9.99"
-        })
+        MarketValidator.set(
+          agent,
+          Map.merge(
+            %{
+              country: "Spain",
+              business_market: "fintech",
+              initial_budget: "50000",
+              final_product_proposal: "Payment app",
+              product_price: "9.99"
+            },
+            diagnosis_unknowns()
+          )
+        )
 
       assert {:complete, _} = MarketValidator.check_completeness(agent)
     end
@@ -134,13 +234,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       agent = MarketValidator.new()
 
       {:ok, agent} =
-        MarketValidator.set(agent, %{
-          country: "Spain",
-          business_market: "fintech",
-          initial_budget: "50000",
-          final_product_proposal: "Payment app",
-          product_price: "9.99"
-        })
+        MarketValidator.set(
+          agent,
+          Map.merge(
+            %{
+              country: "Spain",
+              business_market: "fintech",
+              initial_budget: "50000",
+              final_product_proposal: "Payment app",
+              product_price: "9.99"
+            },
+            diagnosis_unknowns()
+          )
+        )
 
       assert {:complete, data} = MarketValidator.validate_data(agent)
       assert data.country == "Spain"
@@ -179,13 +285,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       agent = MarketValidator.new()
 
       {:ok, agent} =
-        MarketValidator.set(agent, %{
-          country: "Spain",
-          business_market: "fintech",
-          initial_budget: "50000",
-          final_product_proposal: "Payment app",
-          product_price: "9.99"
-        })
+        MarketValidator.set(
+          agent,
+          Map.merge(
+            %{
+              country: "Spain",
+              business_market: "fintech",
+              initial_budget: "50000",
+              final_product_proposal: "Payment app",
+              product_price: "9.99"
+            },
+            diagnosis_unknowns()
+          )
+        )
 
       summary = MarketValidator.format_extraction_summary(agent)
       assert summary =~ "Country: Spain"
@@ -355,15 +467,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
     end
 
     test "normalizes complete JSON through the same schema", %{mimo_responses: responses} do
-      fields = %{
-        "country" => "Spain",
-        "city" => "Madrid",
-        "business_market" => "fintech",
-        "initial_budget" => 50000,
-        "final_product_proposal" => "Payment app",
-        "product_price" => 9.99,
-        "unexpected_model_field" => "ignored"
-      }
+      fields =
+        Map.merge(
+          %{
+            "country" => "Spain",
+            "city" => "Madrid",
+            "business_market" => "fintech",
+            "initial_budget" => 50000,
+            "final_product_proposal" => "Payment app",
+            "product_price" => 9.99,
+            "unexpected_model_field" => "ignored"
+          },
+          diagnosis_unknowns_json()
+        )
 
       stub_mimo(responses, "complete extraction", Jason.encode!(fields))
 
@@ -375,6 +491,51 @@ defmodule Fullstack.JidoMarketAgentsTest do
       assert data.product_price == "9.99"
       assert data.country == "Spain"
       refute Map.has_key?(agent.state, :unexpected_model_field)
+    end
+
+    for multiplier <- [1, 5], format <- [:plain, :fenced] do
+      test "#{multiplier}x carpet message is complete with canned #{format} JSON", %{
+        mimo_responses: responses
+      } do
+        message = String.duplicate(@carpet_message, unquote(multiplier))
+        assert String.length(message) == String.length(@carpet_message) * unquote(multiplier)
+        assert byte_size(message) == byte_size(@carpet_message) * unquote(multiplier)
+        json = Jason.encode!(canned_carpet_fields())
+        content = if unquote(format) == :fenced, do: "```json\n#{json}\n```", else: json
+        stub_mimo(responses, message, content)
+
+        assert {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), message)
+        assert {:complete, data} = MarketValidator.check_completeness(agent)
+        assert data.business_market == "custom home furniture"
+        assert data.initial_budget == "300 euros"
+        assert data.product_price == "70 euros"
+        assert_receive {:mimo_request, request}
+        assert List.last(request["messages"])["content"] == message
+        assert request["thinking"] == %{"type" => "disabled"}
+        assert request["max_completion_tokens"] == 1024
+        refute Map.has_key?(request, "max_tokens")
+        assert request["response_format"] == %{"type" => "json_object"}
+      end
+    end
+
+    test "missing market remains incomplete after valid extraction", %{mimo_responses: responses} do
+      fields = Map.delete(canned_carpet_fields(), "business_market")
+      stub_mimo(responses, @carpet_message, Jason.encode!(fields))
+
+      assert {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), @carpet_message)
+      assert {:incomplete, [:business_market]} = MarketValidator.check_completeness(agent)
+    end
+
+    test "provider failures stay errors instead of missing-data classifications", %{
+      mimo_responses: responses
+    } do
+      for content <- ["", " \n", nil, [], %{}] do
+        message = "invalid final content: #{inspect(content)}"
+        stub_mimo(responses, message, content)
+
+        assert {:error, {:llm_failed, {:invalid_response, _reason, _metadata}}} =
+                 MarketValidator.extract_fields(MarketValidator.new(), message)
+      end
     end
 
     test "empty JSON preserves previous fields", %{mimo_responses: responses} do
@@ -390,6 +551,46 @@ defmodule Fullstack.JidoMarketAgentsTest do
       messages = stub_mimo(responses, "json mode enabled", "{}")
       assert {:ok, "{}"} = MimoClient.chat_completion(messages, json_mode: true)
       assert_receive {:mimo_request, %{"response_format" => %{"type" => "json_object"}}}
+    end
+
+    test "rejects truncated final output and retains only safe diagnostics", %{
+      mimo_responses: responses
+    } do
+      response = %{
+        choices: [
+          %{
+            finish_reason: "length",
+            message: %{content: "{}", reasoning_content: "private reasoning sentinel"}
+          }
+        ],
+        usage: %{
+          completion_tokens: 1024,
+          completion_tokens_details: %{reasoning_tokens: 1020},
+          private_field: "private usage sentinel"
+        }
+      }
+
+      messages = stub_mimo_response(responses, "truncated extraction", response)
+
+      assert {:error, {:invalid_response, :truncated, metadata}} =
+               MimoClient.chat_completion(messages, json_mode: true)
+
+      assert metadata.finish_reason == "length"
+      assert metadata.usage["completion_tokens"] == 1024
+      assert metadata.usage["reasoning_tokens"] == 1020
+      refute inspect(metadata) =~ "private"
+    end
+
+    test "does not consume reasoning when the final answer is absent", %{
+      mimo_responses: responses
+    } do
+      messages =
+        stub_mimo_response(responses, "reasoning only", %{
+          choices: [%{finish_reason: "stop", message: %{reasoning_content: "{}"}}]
+        })
+
+      assert {:error, {:invalid_response, :invalid_content, _metadata}} =
+               MimoClient.chat_completion(messages, json_mode: true)
     end
 
     test "omits response_format by default and when disabled", %{mimo_responses: responses} do
@@ -438,19 +639,23 @@ defmodule Fullstack.JidoMarketAgentsTest do
       id = "test-complete-#{System.unique_integer([:positive])}"
       JidoMarketAgents.subscribe(id)
 
-      data = %{
-        country: "Spain",
-        business_market: "fintech",
-        initial_budget: "50000 EUR",
-        final_product_proposal: "Mobile payment app",
-        product_price: "9.99 EUR"
-      }
+      data =
+        Map.merge(
+          %{
+            country: "Spain",
+            business_market: "fintech",
+            initial_budget: "50000 EUR",
+            final_product_proposal: "Mobile payment app",
+            product_price: "9.99 EUR"
+          },
+          diagnosis_unknowns()
+        )
 
       assert {:ok, :accepted, ^id} = JidoMarketAgents.send_message(id, data)
       assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
 
       # Research may succeed or fail depending on MIMO availability
-      assert_receive {:research_complete, %{status: :completed}}, 60_000
+      assert_receive {:research_complete, %{status: :analyzing}}, 2_000
     end
 
     test "multi-turn: accumulate fields then trigger research" do
@@ -465,11 +670,17 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       # Turn 3: remaining fields → should trigger research
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{status: :researching}}, 2_000
 
@@ -570,13 +781,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
       JidoMarketAgents.subscribe(id)
 
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 country: "Spain",
-                 business_market: "fintech",
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     country: "Spain",
+                     business_market: "fintech",
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
     end
@@ -650,13 +867,19 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       # Send complete data to trigger research
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 country: "Spain",
-                 business_market: "fintech",
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     country: "Spain",
+                     business_market: "fintech",
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{status: :researching}}, 2_000
 
@@ -669,7 +892,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
         end
 
       case msg do
-        {:research_complete, %{status: :completed}} ->
+        {:research_complete, %{status: :analyzing}} ->
           # MIMO worked — test passes
           :ok
 
@@ -719,31 +942,52 @@ defmodule Fullstack.JidoMarketAgentsTest do
       assert p.messages == polled
     end
 
-    test "resume after research_complete returns :completed" do
+    test "resume after research_complete returns the analyzing boundary" do
+      config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+      Application.put_env(
+        :fullstack,
+        Fullstack.JidoMarketAgents,
+        Keyword.put(config, :analyzer_backend, {BlockingAnalyzerBackend, owner: self()})
+      )
+
       id = "test-poll-completed-#{System.unique_integer([:positive])}"
       JidoMarketAgents.subscribe(id)
 
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 country: "Spain",
-                 business_market: "fintech",
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     country: "Spain",
+                     business_market: "fintech",
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{status: :researching}}, 2_000
 
       msg =
         receive do
-          m -> m
+          {:research_complete, _} = event -> event
+          {:error, %{stage: :research}} = event -> event
         after
           60_000 -> flunk("Timed out waiting for research outcome")
         end
 
       case msg do
         {:research_complete, _} ->
-          assert {:ok, :completed, _} = JidoMarketAgents.resume(id)
+          [{conversation_owner, _}] =
+            Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, id)
+
+          assert_receive {:analyzer_blocked, ^conversation_owner, worker}, 2_000
+          assert {:ok, :analyzing, _} = JidoMarketAgents.resume(id)
+          send(worker, :finish)
+          assert_receive {:error, %{stage: :analysis}}, 2_000
 
         {event, %{stage: :research}} ->
           assert event == :error
@@ -788,11 +1032,17 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       # Turn 3 — complete data
       assert {:ok, :accepted, ^id} =
-               JidoMarketAgents.send_message(id, %{
-                 initial_budget: "50000 EUR",
-                 final_product_proposal: "Mobile payment app",
-                 product_price: "9.99 EUR"
-               })
+               JidoMarketAgents.send_message(
+                 id,
+                 Map.merge(
+                   %{
+                     initial_budget: "50000 EUR",
+                     final_product_proposal: "Mobile payment app",
+                     product_price: "9.99 EUR"
+                   },
+                   diagnosis_unknowns()
+                 )
+               )
 
       assert_receive {:extraction_complete, %{status: :researching}}, 2_000
     end

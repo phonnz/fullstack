@@ -164,6 +164,25 @@ defmodule FullstackWeb.UserAuth do
     end
   end
 
+  def on_mount(:ensure_admin, params, session, socket) do
+    case on_mount(:ensure_authenticated, params, session, socket) do
+      {:cont, socket} ->
+        if Accounts.admin?(socket.assigns.current_user) do
+          {:cont, socket}
+        else
+          # A 404, not a redirect. An authenticated non-admin must not be
+          # able to tell an admin-only route apart from one that does not
+          # exist — the same contract the Business Discovery LiveView
+          # applies to another user's conversation id.
+          raise Ecto.NoResultsError, queryable: Fullstack.Accounts.User
+        end
+
+      {:halt, socket} ->
+        # Not logged in at all: keep the ordinary login redirect.
+        {:halt, socket}
+    end
+  end
+
   def on_mount(:redirect_if_user_is_authenticated, _params, session, socket) do
     socket = mount_current_user(socket, session)
 
@@ -210,6 +229,29 @@ defmodule FullstackWeb.UserAuth do
       |> maybe_store_return_to()
       |> redirect(to: ~p"/users/log_in")
       |> halt()
+    end
+  end
+
+  @doc """
+  Used for routes that require the user to hold the `:admin` role.
+
+  Delegates to `require_authenticated_user/2` first, so an anonymous
+  visitor still gets the ordinary login redirect with its `return_to`.
+  An authenticated non-admin gets a 404 instead of a redirect: an
+  admin-only route must be indistinguishable from one that does not
+  exist, or it confirms its own presence to anyone who probes it.
+
+  This covers the initial dead render. The matching `live_session` must
+  also declare `on_mount: {FullstackWeb.UserAuth, :ensure_admin}` to
+  cover the live socket connection and subsequent patches.
+  """
+  def require_admin_user(conn, opts) do
+    conn = require_authenticated_user(conn, opts)
+
+    cond do
+      conn.halted -> conn
+      Accounts.admin?(conn.assigns[:current_user]) -> conn
+      true -> raise Ecto.NoResultsError, queryable: Fullstack.Accounts.User
     end
   end
 

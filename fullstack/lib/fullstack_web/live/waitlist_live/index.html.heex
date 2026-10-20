@@ -1,0 +1,739 @@
+<style>
+  /* Waitlist page visual design — scoped to .wl so it never leaks to other
+     routes. Tokens are declared on .wl itself (not :root) and redeclared
+     for dark mode via the ancestor selector html[data-theme="dark"] .wl,
+     matching this app's existing root.html.heex light/dark toggle (which
+     sets data-theme on <html>, not on this page's wrapper). See
+     odd/tasks/waitlist-landing-page.md, Round 3, for the scoping rationale. */
+  .wl {
+    --ink: #0F1B13;
+    --ink-soft: #33402F;
+    --paper: #F7F4EC;
+    --paper-card: #EDE8D8;
+    --forest: #2D5A3D;
+    --forest-deep: #1E3E29;
+    --terracotta: #C4623B;
+    --sage: #7C8B7F;
+    --sage-line: #D6D0BE;
+    --white: #FFFDF8;
+  }
+
+  html[data-theme="dark"] .wl {
+    --ink: #EFEAE0;
+    --ink-soft: #C4C4B8;
+    --paper: #10160F;
+    --paper-card: #182018;
+    --forest: #6FB98A;
+    --forest-deep: #4E8F68;
+    --terracotta: #E0855D;
+    --sage: #7E8B7D;
+    --sage-line: #2C3529;
+    --white: #161C15;
+  }
+
+  .wl {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  .wl .wl-wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  .wl h1, .wl h2, .wl h3, .wl .wl-display {
+    font-family: 'Fraunces', Georgia, serif;
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .wl .wl-mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    letter-spacing: 0.02em;
+  }
+
+  .wl a { color: inherit; }
+
+  /* ---------- top bar ---------- */
+  .wl .wl-topbar { border-bottom: 1px solid var(--sage-line); }
+  .wl .wl-topbar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 0;
+  }
+  .wl .wl-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 1.15rem;
+  }
+  .wl .wl-brand-mark {
+    width: 26px; height: 26px;
+    border: 1.5px solid var(--ink);
+    border-radius: 3px;
+    display: grid;
+    place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    flex: none;
+  }
+  .wl .wl-doc-tag {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--sage);
+  }
+
+  /* ---------- hero ---------- */
+  .wl .wl-hero {
+    padding: 64px 0 56px;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 56px;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .wl .wl-hero { grid-template-columns: 1fr; padding-top: 44px; }
+  }
+
+  .wl .wl-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--forest-deep);
+    background: color-mix(in srgb, var(--forest) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--forest) 30%, transparent);
+    padding: 6px 12px 6px 10px;
+    border-radius: 100px;
+    margin-bottom: 22px;
+  }
+  .wl .wl-eyebrow .wl-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--forest);
+    flex: none;
+  }
+
+  .wl .wl-hero h1 {
+    font-size: clamp(2.4rem, 4.6vw, 3.6rem);
+    font-weight: 600;
+    line-height: 1.06;
+    color: var(--ink);
+  }
+  .wl .wl-hero h1 em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--forest-deep);
+  }
+
+  .wl .wl-hero-sub {
+    margin-top: 22px;
+    font-size: 1.08rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 46ch;
+  }
+
+  .wl .wl-proof-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    margin-top: 40px;
+    background: var(--sage-line);
+    border: 1px solid var(--sage-line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  @media (max-width: 640px) { .wl .wl-proof-row { grid-template-columns: 1fr; } }
+  .wl .wl-proof-item {
+    background: var(--white);
+    padding: 22px 24px;
+  }
+  .wl .wl-proof-item.wl-mesh {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .wl .wl-proof-item .wl-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 2.1rem;
+    color: var(--forest-deep);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .wl .wl-proof-item .wl-mesh-label {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 1.25rem;
+    color: var(--forest-deep);
+    line-height: 1.15;
+  }
+  .wl .wl-proof-item .wl-lbl {
+    font-size: 0.82rem;
+    color: var(--sage);
+    margin-top: 6px;
+  }
+
+  /* ---------- report card ---------- */
+  .wl .wl-report {
+    background: var(--white);
+    border: 1px solid var(--sage-line);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15,27,19,0.04), 0 14px 36px -18px rgba(15,27,19,0.22);
+    overflow: hidden;
+  }
+  .wl .wl-report-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px dashed var(--sage-line);
+  }
+  .wl .wl-report-head .wl-rk {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--sage);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .wl .wl-report-head .wl-rv {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--forest-deep);
+  }
+  .wl .wl-report-body { padding: 22px 20px 8px; }
+  .wl .wl-report-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--sage-line);
+    gap: 16px;
+  }
+  .wl .wl-report-row:last-child { border-bottom: none; }
+  .wl .wl-report-row .wl-rk-label {
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+  }
+  .wl .wl-report-row .wl-rk-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--ink);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .wl .wl-score-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: color-mix(in srgb, var(--forest) 14%, transparent);
+    color: var(--forest-deep);
+    padding: 2px 9px;
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+  .wl .wl-report-foot {
+    background: var(--paper-card);
+    padding: 14px 20px;
+    font-size: 0.8rem;
+    color: var(--sage);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wl .wl-pulse {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--forest);
+    flex: none;
+    animation: wl-pulse 2.2s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) { .wl .wl-pulse { animation: none; } }
+  @keyframes wl-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+
+  /* ---------- signup strip ---------- */
+  .wl .wl-signup-section { padding: 8px 0 72px; }
+  .wl .wl-signup {
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 12px;
+    padding: 44px 40px;
+  }
+  html[data-theme="dark"] .wl .wl-signup { background: var(--paper-card); }
+  @media (max-width: 760px) {
+    .wl .wl-signup { padding: 32px 22px; }
+  }
+
+  .wl .wl-signup-head { text-align: center; max-width: 56ch; margin: 0 auto; }
+  .wl .wl-signup h2 {
+    font-size: 1.7rem;
+    font-weight: 600;
+    color: var(--paper);
+  }
+  html[data-theme="dark"] .wl .wl-signup h2 { color: var(--ink); }
+  .wl .wl-signup-head p {
+    margin: 10px 0 0;
+    color: color-mix(in srgb, var(--paper) 65%, transparent);
+    font-size: 0.95rem;
+  }
+  html[data-theme="dark"] .wl .wl-signup-head p { color: var(--ink-soft); }
+
+  .wl .wl-signup form { margin-top: 30px; }
+  /* .simple_form's own wrapper div carries daisyUI's bg-base-100 utility,
+     which would otherwise paint a light box inside this dark signup card. */
+  .wl .wl-signup form > div.bg-base-100 {
+    background: transparent;
+  }
+
+  .wl .wl-primary-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: start;
+  }
+  @media (max-width: 640px) {
+    .wl .wl-primary-row { grid-template-columns: 1fr; }
+  }
+
+  .wl .wl-field label,
+  .wl .wl-field .label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: color-mix(in srgb, var(--paper) 55%, transparent);
+    margin-bottom: 6px;
+    padding: 0;
+  }
+  html[data-theme="dark"] .wl .wl-field label,
+  html[data-theme="dark"] .wl .wl-field .label { color: var(--sage); }
+
+  .wl .wl-field .input,
+  .wl .wl-field .select {
+    width: 100%;
+    background: color-mix(in srgb, var(--paper) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--paper) 22%, transparent);
+    color: var(--paper);
+    border-radius: 6px;
+    padding: 11px 13px;
+    height: auto;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+  }
+  html[data-theme="dark"] .wl .wl-field .input,
+  html[data-theme="dark"] .wl .wl-field .select {
+    background: var(--paper);
+    border-color: var(--sage-line);
+    color: var(--ink);
+  }
+  .wl .wl-field .input::placeholder { color: color-mix(in srgb, var(--paper) 42%, transparent); }
+  .wl .wl-field .input:focus,
+  .wl .wl-field .select:focus,
+  .wl .wl-field .input:focus-visible,
+  .wl .wl-field .select:focus-visible {
+    outline: 2px solid var(--forest);
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+
+  .wl .wl-primary-row .wl-field .input {
+    padding: 14px 16px;
+    font-size: 1.02rem;
+  }
+
+  .wl .wl-submit-btn.btn {
+    background: var(--forest);
+    color: var(--white);
+    border: none;
+    border-radius: 6px;
+    padding: 14px 26px;
+    height: auto;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  @media (max-width: 640px) { .wl .wl-submit-btn.btn { width: 100%; } }
+  .wl .wl-submit-btn.btn:hover { background: var(--forest-deep); }
+  .wl .wl-submit-btn.btn:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 2px; }
+
+  .wl .wl-secondary-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  @media (max-width: 640px) { .wl .wl-secondary-row { flex-direction: column; } }
+  .wl .wl-secondary-row .wl-field { flex: 1; }
+  .wl .wl-secondary-row .wl-field label,
+  .wl .wl-secondary-row .wl-field .label {
+    font-size: 0.64rem;
+    color: color-mix(in srgb, var(--paper) 40%, transparent);
+  }
+  html[data-theme="dark"] .wl .wl-secondary-row .wl-field label,
+  html[data-theme="dark"] .wl .wl-secondary-row .wl-field .label { color: var(--sage); }
+  .wl .wl-secondary-row .wl-field .input,
+  .wl .wl-secondary-row .wl-field .select {
+    padding: 8px 11px;
+    font-size: 0.85rem;
+    background: transparent;
+    border-color: color-mix(in srgb, var(--paper) 16%, transparent);
+  }
+  html[data-theme="dark"] .wl .wl-secondary-row .wl-field .input,
+  html[data-theme="dark"] .wl .wl-secondary-row .wl-field .select { background: transparent; }
+
+  .wl .wl-fine-print {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 0.74rem;
+    color: color-mix(in srgb, var(--paper) 45%, transparent);
+  }
+  html[data-theme="dark"] .wl .wl-fine-print { color: var(--sage); }
+
+  .wl .wl-field .text-error,
+  .wl .wl-field p.text-error {
+    margin-top: 6px;
+    font-size: 0.78rem;
+    color: var(--terracotta);
+  }
+
+  .wl .wl-alert-success {
+    background: color-mix(in srgb, var(--forest) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--forest) 40%, transparent);
+    color: var(--paper);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin-top: 30px;
+    text-align: center;
+    font-size: 0.98rem;
+  }
+  html[data-theme="dark"] .wl .wl-alert-success { color: var(--ink); }
+
+  /* ---------- how it works ---------- */
+  .wl .wl-steps-section { padding: 12px 0 72px; }
+  .wl .wl-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 30px; gap: 20px; flex-wrap: wrap; }
+  .wl .wl-section-head h2 { font-size: 1.7rem; font-weight: 600; }
+  .wl .wl-section-head .wl-mono { font-size: 0.72rem; color: var(--sage); text-transform: uppercase; }
+
+  .wl .wl-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--sage-line);
+    border: 1px solid var(--sage-line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  @media (max-width: 880px) { .wl .wl-steps { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 520px) { .wl .wl-steps { grid-template-columns: 1fr; } }
+
+  .wl .wl-step {
+    background: var(--forest-deep);
+    padding: 28px 22px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .wl .wl-step-icon {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--paper) 14%, transparent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.35rem;
+    color: var(--paper);
+    line-height: 1;
+    margin-bottom: 14px;
+  }
+  .wl .wl-step h3 {
+    font-size: 0.98rem;
+    font-weight: 600;
+    color: var(--paper);
+  }
+  .wl .wl-step p {
+    font-size: 0.78rem;
+    color: color-mix(in srgb, var(--paper) 68%, transparent);
+    line-height: 1.5;
+    margin: 7px 0 0;
+  }
+
+  /* ---------- strategy methodology ---------- */
+  .wl .wl-methodology { padding: 0 0 48px; }
+  .wl .wl-methodology .wl-section-head .wl-mono { color: var(--ink-soft); }
+
+  /* ---------- framework strip ---------- */
+  .wl .wl-framework { padding: 40px 0 88px; }
+  .wl .wl-framework-inner {
+    border: 1px solid var(--sage-line);
+    border-left: 3px solid var(--forest);
+    border-radius: 8px;
+    padding: 26px 28px;
+    background: var(--paper-card);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: center;
+  }
+  @media (max-width: 760px) { .wl .wl-framework-inner { grid-template-columns: 1fr; } }
+  .wl .wl-framework-inner p {
+    margin: 8px 0 0;
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    max-width: 62ch;
+  }
+  .wl .wl-framework-inner p strong { color: var(--ink); font-weight: 600; }
+  .wl .wl-framework-tags {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--forest-deep);
+    white-space: nowrap;
+  }
+  .wl .wl-framework-tags span { display: flex; align-items: center; gap: 6px; }
+  .wl .wl-framework-tags span::before {
+    content: '';
+    width: 5px; height: 5px;
+    background: var(--forest);
+    border-radius: 50%;
+  }
+
+  .wl footer {
+    border-top: 1px solid var(--sage-line);
+    padding: 22px 0 40px;
+    font-size: 0.78rem;
+    color: var(--sage);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+</style>
+
+<div class="wl">
+  <div class="wl-topbar">
+    <div class="wl-wrap wl-topbar-inner">
+      <div class="wl-brand">
+        <span class="wl-brand-mark">V.</span> Viable
+      </div>
+      <span class="wl-doc-tag">Pre-launch · Founder Access</span>
+    </div>
+  </div>
+
+  <main class="wl-wrap">
+    <section class="wl-hero">
+      <div>
+        <span class="wl-eyebrow"><span class="wl-dot"></span>Now assembling the founding cohort</span>
+        <h1>Don't build the wrong business. <em>Find out first.</em></h1>
+        <p class="wl-hero-sub">
+          Describe your product idea in a conversation. A mesh of specialist agents checks it
+          against real competitors, sizes the market, and hands you back a financial picture
+          for your first six months — before you've spent a euro.
+        </p>
+      </div>
+
+      <div class="wl-report">
+        <div class="wl-report-head">
+          <span class="wl-rk wl-mono">Viability Draft · #0412</span>
+          <span class="wl-rv wl-mono">Live preview</span>
+        </div>
+        <div class="wl-report-body">
+          <div class="wl-report-row">
+            <span class="wl-rk-label">Idea</span>
+            <span class="wl-rk-value">Mobile bakery, Valencia</span>
+          </div>
+          <div class="wl-report-row">
+            <span class="wl-rk-label">Direct competitors found</span>
+            <span class="wl-rk-value">11</span>
+          </div>
+          <div class="wl-report-row">
+            <span class="wl-rk-label">Est. break-even</span>
+            <span class="wl-rk-value">Month 5</span>
+          </div>
+          <div class="wl-report-row">
+            <span class="wl-rk-label">Initial budget fit</span>
+            <span class="wl-rk-value">
+              <span class="wl-score-badge">Viable · 78/100</span>
+            </span>
+          </div>
+        </div>
+        <div class="wl-report-foot">
+          <span class="wl-pulse"></span>
+          <span class="wl-mono">Agent mesh reasoning over market data</span>
+        </div>
+      </div>
+
+      <div class="wl-proof-row">
+        <div class="wl-proof-item wl-mesh">
+          <div class="wl-mesh-label">Agentic specialist mesh</div>
+          <div class="wl-lbl wl-mono">
+            Not one model — several,<br />working your case together
+          </div>
+        </div>
+        <div class="wl-proof-item">
+          <div class="wl-num">&lt;20<span style="font-size:1rem;">min</span></div>
+          <div class="wl-lbl wl-mono">Idea to<br />report</div>
+        </div>
+        <div class="wl-proof-item">
+          <div class="wl-num">€0</div>
+          <div class="wl-lbl wl-mono">Spent before<br />you know</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wl-signup-section">
+      <div class="wl-signup" id="waitlist">
+        <div class="wl-signup-head">
+          <h2>Get your first report, free.</h2>
+          <p>
+            We're onboarding founders in small batches. Leave your details and we'll email you the moment your seat opens.
+          </p>
+        </div>
+
+        <%= if @signed_up do %>
+          <div class="wl-alert-success">
+            Thanks — you're on the list! We'll be in touch soon.
+          </div>
+        <% else %>
+          <.simple_form
+            for={@form}
+            id="waitlist-signup-form"
+            phx-change="validate"
+            phx-submit="save"
+          >
+            <div class="wl-primary-row">
+              <div class="wl-field">
+                <.input
+                  field={@form[:email]}
+                  type="email"
+                  label="Email"
+                  placeholder="you@yourcompany.com"
+                />
+              </div>
+              <.button class="wl-submit-btn" phx-disable-with="Joining...">
+                Join the founding cohort
+              </.button>
+            </div>
+            <div class="wl-secondary-row">
+              <div class="wl-field">
+                <.input
+                  field={@form[:country]}
+                  type="select"
+                  label="Target market"
+                  options={@country_options}
+                />
+              </div>
+              <div class="wl-field">
+                <.input
+                  field={@form[:discount_code]}
+                  type="text"
+                  label="Discount code"
+                  placeholder="Optional"
+                />
+              </div>
+            </div>
+            <p class="wl-fine-print">No spam. One email when your access opens.</p>
+          </.simple_form>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="wl-steps-section">
+      <div class="wl-section-head">
+        <h2>How the assessment works</h2>
+        <span class="wl-mono">04 stages</span>
+      </div>
+      <div class="wl-steps">
+        <div class="wl-step">
+          <span class="wl-step-icon">&#9998;</span>
+          <h3>Describe the idea</h3>
+          <p>
+            Talk through your product, price point, and starting budget — no forms, no slide decks.
+          </p>
+        </div>
+        <div class="wl-step">
+          <span class="wl-step-icon">&#9678;</span>
+          <h3>Agents size the market</h3>
+          <p>
+            Specialist agents map competitors, diagnose real demand, and frame SMART objectives.
+          </p>
+        </div>
+        <div class="wl-step">
+          <span class="wl-step-icon">&Sigma;</span>
+          <h3>See the numbers</h3>
+          <p>A realistic financial picture for your first months, with the tools to run it.</p>
+        </div>
+        <div class="wl-step">
+          <span class="wl-step-icon">&#9650;</span>
+          <h3>Walk to MVP</h3>
+          <p>A concrete path from zero to launch, plus how to iterate once you're live.</p>
+        </div>
+      </div>
+    </section>
+
+    <section
+      id="strategy-methodology"
+      class="wl-methodology"
+      aria-labelledby="strategy-methodology-heading"
+    >
+      <div class="wl-section-head">
+        <h2 id="strategy-methodology-heading">Our strategy methodology</h2>
+        <span class="wl-mono">From insight to action</span>
+      </div>
+      <ai-strategy-animation id="waitlist-strategy-animation" phx-update="ignore">
+        <p>Explore the seven-step automation framework with JavaScript enabled.</p>
+      </ai-strategy-animation>
+    </section>
+
+    <section class="wl-framework">
+      <div class="wl-framework-inner">
+        <div>
+          <h2 style="font-size:1.05rem; font-weight:600;">
+            Grounded in Europe's recovery framework
+          </h2>
+          <p>
+            Our assessment method follows the same lens used across the EU's
+            <strong>NextGenerationEU</strong>
+            recovery funds, Spain's <strong>ipyme.org</strong>
+            SME support programs, and the
+            <strong>Plan de Recuperación, Transformación y Resiliencia</strong>
+            —
+            so your business case speaks the language funders already expect.
+          </p>
+        </div>
+        <div class="wl-framework-tags">
+          <span>NextGenerationEU</span>
+          <span>ipyme.org</span>
+          <span>PRTR digital framework</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wl-wrap">
+    <span>Viable — pre-launch</span>
+    <span class="wl-mono">Founding cohort access · no card required</span>
+  </footer>
+</div>

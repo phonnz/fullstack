@@ -23,6 +23,10 @@ defmodule FullstackWeb.Router do
     resources "/about", AboutController, only: [:index]
     get "/u/:key", UrlRedirectController, :index
 
+    live_session :waitlist, layout: false do
+      live "/waitlist", WaitlistLive.Index, :index
+    end
+
     # The site header renders inside the LiveView, so these public routes need
     # :current_user assigned to show the right account links. mount_current_user
     # uses assign_new and does not require a session, so anonymous mounts are fine.
@@ -37,6 +41,8 @@ defmodule FullstackWeb.Router do
       live "/chat", ChatLive
       live "/channels-chat", ChannelsChatLive
 
+      live "/business-discovery", BusinessDiscoveryLive.Index, :index
+
       live "/urls", UrlLive.Index, :index
       live "/urls/new", UrlLive.Index, :new
       live "/urls/:id/edit", UrlLive.Index, :edit
@@ -45,6 +51,45 @@ defmodule FullstackWeb.Router do
       live "/urls/:id/show/edit", UrlLive.Show, :edit
 
       live "/", HomeLive.Index, :index
+    end
+
+    # New live_session for the authenticated Business Discovery chat (T9).
+    # Placed BEFORE the catch-all `live "/:key", HomeLive.Urls` scope below,
+    # so that scope does not swallow these routes. Named :business_discovery
+    # (the /admin scope uses :admin) and scoped at "/" per design/task
+    # instructions.
+    live_session :business_discovery,
+      on_mount: [{FullstackWeb.UserAuth, :ensure_authenticated}] do
+      live "/business-discovery/evaluate", BusinessDiscoveryLive.Evaluate, :index
+      live "/business-discovery/evaluate/:id", BusinessDiscoveryLive.Evaluate, :show
+    end
+
+    # Account settings belong to every authenticated user, not to admins.
+    # These routes previously sat inside the "/admin" scope and served at
+    # /admin/users/settings, which both mislabeled them and broke the header
+    # link in Layouts (it already pointed at ~p"/users/settings"). Gating
+    # "/admin" on the :admin role would otherwise have locked ordinary users
+    # out of their own password and email management.
+    #
+    # Must stay BEFORE the catch-all `live "/:key"` scope below.
+    live_session :user_settings,
+      on_mount: [{FullstackWeb.UserAuth, :ensure_authenticated}] do
+      live "/users/settings", UserSettingsLive, :edit
+      live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
+    end
+
+    # Admin-only review of every user's evaluations.
+    #
+    # One gate is enough here, unlike the "/admin" scope: on_mount runs for
+    # the dead render as well as the connected mount, and both routes are
+    # `live` with no controller action to reach separately. Verified: a plain
+    # GET as a non-admin raises, as an admin renders.
+    #
+    # Must stay BEFORE the catch-all `live "/:key"` scope below.
+    live_session :admin_evaluations,
+      on_mount: [{FullstackWeb.UserAuth, :ensure_admin}] do
+      live "/evaluations", EvaluationLive.Index, :index
+      live "/evaluations/:id", EvaluationLive.Show, :show
     end
   end
 
@@ -100,11 +145,14 @@ defmodule FullstackWeb.Router do
     post "/users/log_in", UserSessionController, :create
   end
 
+  # Admin-only. Gated at both layers on purpose: the plug covers the initial
+  # dead render, the on_mount covers the live socket connection and any
+  # subsequent patch. Either one alone leaves a gap on the other path.
   scope "/admin", FullstackWeb do
-    pipe_through [:browser, :require_authenticated_user]
+    pipe_through [:browser, :require_admin_user]
 
-    live_session :require_authenticated_user,
-      on_mount: [{FullstackWeb.UserAuth, :ensure_authenticated}] do
+    live_session :admin,
+      on_mount: [{FullstackWeb.UserAuth, :ensure_admin}] do
       live "/posts", PostLive.Index, :index
       live "/posts/new", PostLive.Index, :new
       live "/posts/:id/edit", PostLive.Index, :edit
@@ -128,8 +176,6 @@ defmodule FullstackWeb.Router do
 
       live "/transactions/:id", TransactionLive.Show, :show
       live "/transactions/:id/show/edit", TransactionLive.Show, :edit
-      live "/users/settings", UserSettingsLive, :edit
-      live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
       live "/devices", DeviceLive.Index, :index
       live "/devices/new", DeviceLive.Index, :new
       live "/devices/:id/edit", DeviceLive.Index, :edit
