@@ -593,7 +593,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert Conversations.get_for_user(id, user.id).status == "active"
   end
 
-  test "a message after delivery that changes facts keeps results and emits no invalidation", %{
+  test "a message after delivery that changes facts keeps results", %{
     id: id,
     pid: pid,
     user: user
@@ -613,7 +613,6 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert_receive {:tech_strategy_complete, _}, 1_000
     Conversation.send_message(id, %{country: "France"})
     assert_receive {:message_received, _}, 1_000
-    refute_receive {:stage_invalidated, _}, 100
     refute_receive {:provider, _, _, _}, 100
 
     record = Conversations.get_for_user(id, user.id)
@@ -623,6 +622,57 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
 
     assert {:ok, snapshot} = GenServer.call(pid, :snapshot)
     assert snapshot.record.validated_data["country"] == "Spain"
+  end
+
+  test "a user-less conversation follows the lifecycle and treats later messages as chat only" do
+    id = "userless-#{System.unique_integer([:positive])}"
+    Conversation.subscribe(id)
+    {:ok, pid} = Conversation.ensure_started(id)
+    assert :sys.get_state(pid).stage == :inserted
+
+    :erlang.trace(pid, true, [:receive])
+    Conversation.send_message(id, data())
+
+    assert_receive {:provider, worker, "researcher", _}, 1_000
+    assert :sys.get_state(pid).stage == :research
+    reply(worker, research())
+
+    for {role, output, stage} <- [
+          {"analyzer", analysis(), :proposal},
+          {"systems", systems(), :strategy},
+          {"strategy", tech(), :strategy}
+        ] do
+      assert_receive {:provider, worker, ^role, _}, 1_000
+      assert :sys.get_state(pid).stage == stage
+      reply(worker, output)
+    end
+
+    assert_receive {:tech_strategy_complete, _}, 1_000
+    assert_receive {:extraction_complete, _}, 1_000
+    assert :sys.get_state(pid).stage == :delivered
+
+    results = :sys.get_state(pid).results
+    assert map_size(results) == 4
+
+    Conversation.send_message(id, %{country: "France"})
+    assert_receive {:message_received, _}, 1_000
+    refute_receive {:extraction_complete, _}, 100
+    refute_receive {:provider, _, _, _}, 100
+
+    state = :sys.get_state(pid)
+    assert state.results == results
+    assert state.stage == :delivered
+  end
+
+  test "a user-less conversation reaches validating, ready, then research in order" do
+    id = "userless-#{System.unique_integer([:positive])}"
+    Conversation.subscribe(id)
+    {:ok, pid} = Conversation.ensure_started(id)
+    Conversation.send_message(id, data())
+
+    assert_receive {:extraction_complete, %{stage: :validator}}, 1_000
+    assert_receive {:provider, _worker, "researcher", _}, 1_000
+    assert :sys.get_state(pid).stage == :research
   end
 
   test "an isolated observer reconciles a durable result without any broadcast", %{
@@ -905,7 +955,6 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
         )
 
     defp refute_pipeline_events do
-      refute_receive {:stage_invalidated, _}, 100
       refute_receive {:research_complete, _}, 0
       refute_receive {:analysis_complete, _}, 0
       refute_receive {:error, _}, 0

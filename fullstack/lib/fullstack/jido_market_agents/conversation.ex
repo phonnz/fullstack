@@ -886,7 +886,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         start_validation(state, request.message)
 
       {:error, _} when is_nil(state.user_id) ->
-        start_validation(state, request.message)
+        start_validation(advance_memory_stage(state, :validating), request.message)
 
       {:error, _} when is_map(request.message) ->
         # Legacy provider-free maps retain the display-only degraded path.
@@ -1157,6 +1157,27 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     {:noreply, state}
   end
 
+  # A conversation without a user has no row, so its stage lives in memory and
+  # follows the same advance-only rules as `Conversations.advance_stage/3`.
+  defp advance_memory_stage(state, nil), do: state
+
+  defp advance_memory_stage(state, target) do
+    case Lifecycle.advance(state.stage, target) do
+      {:ok, next} ->
+        %{state | stage: next}
+
+      :noop ->
+        state
+
+      {:error, {:invalid_transition, from, to}} ->
+        Logger.warning(
+          "Conversation #{state.id}: stage #{from} cannot skip to #{to}; stage left unchanged"
+        )
+
+        state
+    end
+  end
+
   defp commit_stage(%{user_id: nil} = state, transition) do
     meta =
       transition
@@ -1181,12 +1202,17 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       metadata: %{type: result_key(transition.stage), result: result, _meta: meta}
     }
 
-    {:ok, :committed,
-     %{
-       state
-       | messages: state.messages ++ [message],
-         boundary_version: state.boundary_version + 1
-     }}
+    state =
+      advance_memory_stage(
+        %{
+          state
+          | messages: state.messages ++ [message],
+            boundary_version: state.boundary_version + 1
+        },
+        transition.lifecycle_stage
+      )
+
+    {:ok, :committed, state}
   end
 
   defp commit_stage(state, transition) do
@@ -1429,7 +1455,6 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           timestamp: DateTime.utc_now()
         }
 
-        changed = facts_changed?(state, data)
         status = if state.mode == :manual, do: :active, else: :researching
 
         state = %{
@@ -1441,7 +1466,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             pending_stage: :research
         }
 
-        state = commit_validation(state, changed, :ready)
+        state = commit_validation(state, :ready)
 
         if state.last_commit_failed do
           stage_failure(last_durable, :validator, :persistence_failed)
@@ -1476,7 +1501,6 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         }
 
         data = partial_validated_data(state.validator_agent)
-        changed = facts_changed?(state, data)
 
         state = %{
           state
@@ -1487,7 +1511,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             pending_stage: nil
         }
 
-        state = commit_validation(state, changed, nil)
+        state = commit_validation(state, nil)
 
         if state.last_commit_failed and not state.validation_provider_free do
           stage_failure(last_durable, :validator, :persistence_failed)
@@ -1524,33 +1548,10 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
-  defp facts_changed?(state, data) do
-    map_size(state.results) > 0 and
-      digest(business_data(state)) != digest(data)
-  end
-
-  defp commit_validation(state, changed, target_stage) do
-    attrs =
-      if changed,
-        do: %{business_analysis: nil, systems_strategy: nil, tech_strategy: nil},
-        else: %{}
-
-    case persist_owned_boundary(state, attrs, target_stage) do
+  defp commit_validation(state, target_stage) do
+    case persist_owned_boundary(state, %{}, target_stage) do
       {:ok, state} ->
-        state =
-          if changed,
-            do: rebuild_analysis_agents(%{state | results: %{}}),
-            else: state
-
-        if changed and state.record_id do
-          broadcast(state, :stage_invalidated, %{
-            invalidated: @stages,
-            stage: :validator,
-            record: Conversations.get_for_user(state.record_id, state.user_id)
-          })
-        else
-          state
-        end
+        state
 
       {:error, _} ->
         %{state | last_commit_failed: true, boundary_version: max(state.boundary_version - 1, 0)}
@@ -1563,7 +1564,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   # is a no-op.
   defp persist_owned_boundary(state, extra_attrs, target_stage \\ nil)
 
-  defp persist_owned_boundary(%{user_id: nil} = state, _attrs, _target_stage), do: {:ok, state}
+  defp persist_owned_boundary(%{user_id: nil} = state, _attrs, target_stage),
+    do: {:ok, advance_memory_stage(state, target_stage)}
 
   defp persist_owned_boundary(state, extra_attrs, target_stage) do
     result =

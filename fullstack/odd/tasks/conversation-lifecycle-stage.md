@@ -104,7 +104,15 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
     nothing retries the failed stage.
   - Paths made unreachable by the gate (for example `stage_invalidated` after research)
     are reported, not removed, in this slice.
-- [ ] T4 — Narrow `status` to run health (slice 4). Planned later; needs its own mapping
+- [x] T5 — Remove paths unreachable after T3 (slice 4, user 2026-10-23). Route: delegated
+  direct. `commit_validation` result wipe (`changed == true`), `rebuild_analysis_agents(results:
+  %{})` there, the `:stage_invalidated` broadcast and its `invalidated` payload, and any
+  tests or consumers that only exercise them.
+  - Decision (user 2026-10-23, option A): user-less conversations (`user_id: nil`) track
+    `stage` in memory with the same advance-only rules, so the message gate applies to
+    every conversation; then the whole wipe branch is dead and removed. Behavior change
+    for non-UI callers of `send_message/3`.
+- [ ] T4 — Narrow `status` to run health (slice 5). Planned later; needs its own mapping
   review of every reader before starting.
 
 ## Acceptance criteria
@@ -133,8 +141,9 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
   - Slice 1 (T1): `ft-conversation-lifecycle-01-stage-field`, base the tracker, commit
     `4233ae1`.
   - Slice 2 (T2): `ft-conversation-lifecycle-02-pipeline-stage`, base slice 1, commit `4fd46c5`.
-  - Slice 3 (T3): `ft-conversation-lifecycle-03-message-gating`, base slice 2.
-  - Slice 4 (T4): `ft-conversation-lifecycle-04-status-health`, base slice 3.
+  - Slice 3 (T3): `ft-conversation-lifecycle-03-message-gating`, base slice 2, commit `92c0be6`.
+  - Slice 4 (T5): `ft-conversation-lifecycle-04-unreachable-cleanup`, base slice 3.
+  - Slice 5 (T4): `ft-conversation-lifecycle-05-status-health`, base slice 4.
 - Migrations run only against the test database. The dev database is migrated by the
   user (`mix ecto.migrate`), never by an agent.
 - Commits: Conventional Commits, no AI attribution trailer.
@@ -203,7 +212,7 @@ Format: `mix format --check-formatted` on changed files.
     "worker failure is contained and terminal"; both read `List.last(list_messages)`
     and `inserted_at` has one-second resolution.
 - 2026-10-23: T3 implemented, verified, and committed on
-  `ft-conversation-lifecycle-03-message-gating`. Route: delegated direct (writer
+  `ft-conversation-lifecycle-03-message-gating` as `92c0be6`. Route: delegated direct (writer
   interrupted once by a usage limit and resumed), plus one inline parent fix.
   - Gate: `Lifecycle.accepts_messages?(state.stage)` in `handle_call({:send_message, ..})`
     (a closed gate stores at once, even while a stage task runs) and in `:drain_queue`
@@ -234,13 +243,33 @@ Format: `mix format --check-formatted` on changed files.
   - TDD: six new pipeline/rehydration gating tests RED ("no matching message" for
     `:message_received`), two before-research tests passed on old code as guards, then
     GREEN; Evaluate test RED (`refute html =~ "phase-buffering"`), then GREEN 25/25.
+  - Native assessment on the commit: risk `medium` (`slice_budget_reached`), RDD off.
   - Checks: regression 683 tests, 7 failures, exactly the baseline set (parent run);
     format clean on all five files; no compile warning from touched files.
   - More pre-existing flakes (same one-second ordering): `ConversationPipelineTest`
     "successful pipeline emits the five adopted events..." and "a map turn after an LLM
     turn does not inherit the previous raw reply".
 
+- 2026-10-23: T5 done on `ft-conversation-lifecycle-04-unreachable-cleanup`. Route:
+  delegated direct; first pass blocked with evidence (wipe reachable for user-less
+  conversations), resumed with option A.
+  - Option A: private `advance_memory_stage/2` (same `Lifecycle.advance/2` rules and skip
+    warning as `Conversations.advance_stage/3`) applied in the user-less clauses of
+    `persist_owned_boundary/3`, `commit_stage/2`, and the user-less admit branch.
+  - Removed: `facts_changed?/2`, the `changed` branch of `commit_validation` (DB wipe
+    attrs, `rebuild_analysis_agents(results: %{})`, `:stage_invalidated` broadcast);
+    `commit_validation/2` now takes `(state, target_stage)`. Kept: `rebuild_analysis_agents`,
+    `digest`, `business_data` (other callers).
+  - Tests: new user-less lifecycle test (reaches `:delivered`; later message is chat only)
+    and ordering test, both RED on stuck `:inserted`, then GREEN; two `refute_receive
+    {:stage_invalidated, _}` assertions removed; no existing expectation changed.
+  - Checks: focused 88 tests, 0 failures; regression 685 tests, 7 failures, exactly the
+    baseline set in two parent runs; format clean; no compile warning from touched files.
+  - Intermittent, seen once each in writer runs, not in parent runs:
+    `BusinessDiscoveryEvaluateTest` "messages render in order" (25/25 alone x3) and
+    `LLM.Cli.RunnerTest` "caller death ... OS process tree is reaped" (file has unrelated
+    dirty changes).
+
 ## Next step
 
-Decide between T4 (narrow `status` to run health, needs its own reader mapping first)
-and a small cleanup slice removing the paths T3 made unreachable.
+T4: map every reader of `status` before narrowing it to run health.
