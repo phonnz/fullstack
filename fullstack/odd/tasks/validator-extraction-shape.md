@@ -112,6 +112,17 @@ and left the five diagnosis fields `nil`.
   five diagnosis fields missing. (b) `Conversations.start_or_resume/3` with the sample
   user persists an assistant message whose `metadata["raw_response"]` holds the reply and
   whose record `validated_data` holds the commercial fields.
+- [x] T5 — Rejection log names only known keys (`market_validator.ex`).
+  Added 2026-10-23 after a proposal accepted by the user (option 4 of 5). Evidence: the
+  `inspect(limit: 20, printable_limit: 64)` caps bound size, which Logger's default
+  truncation (about 8 KB, no `:truncate` config in this project) and the 1024-token reply
+  budget already bound, but they log a model-authored key under 64 characters verbatim,
+  which breaks the "no response values in logs" invariant. Replace the caps with an
+  allowlist: log only top-level key names from a fixed set (the eleven field keys, the
+  three metadata keys, and the observed wrapper keys `data`, `sufficient`,
+  `missing_fields`), sorted, plus `unknown_key_count=N` for every other key. Remove the
+  numeric caps. The observed `data`-envelope line keeps its key list and gains
+  `unknown_key_count=0`.
 
 ## Acceptance criteria
 
@@ -127,6 +138,9 @@ and left the five diagnosis fields `nil`.
   message with its `metadata.raw_response`, as it already carries `assessment`; it stays
   server-side because the LiveViews render `content` only.
 - No log line includes prompt text, response values, or credentials.
+- The rejection log names only allowlisted keys (the eleven fields, the three metadata
+  keys, and the wrapper keys `data`, `sufficient`, `missing_fields`) plus
+  `unknown_key_count=N`; any other model-authored key is counted, never printed.
 
 ## Checks
 
@@ -215,8 +229,24 @@ Format: `mix format --check-formatted` on changed files.
     malformed reply cannot flood the log. The three tests that conflicted with the first
     version of the rule (`{}` and language-only replies) pass unchanged.
   - Commit: `fix(validator): reject extraction replies wrapped in an unrecognized shape`.
+- 2026-10-23 T5 (delegated writer). Accepted by the user (option 4 of 5). Strict TDD, runner
+  `mix test`.
+  - RED: after updating the exact-line envelope test to expect `unknown_key_count=0`, adding
+    a test for `{"Mexico City": {"country": "Mexico"}}`, and updating the long-keys test to
+    expect `unknown_key_count=30`, `market_validator_test.exs` ran 27 tests, 4 failures. The
+    new test showed the model-authored key `"Mexico City"` logged verbatim in the old
+    `top_level_keys=[...]` list, and the other three lacked `unknown_key_count`. The
+    existing `result` wrapper test also had to change: it asserted
+    `top_level_keys=["result"]`, and `result` is not an allowlisted name, so it now expects
+    `top_level_keys=[] unknown_key_count=1` (it was the fourth failure).
+  - GREEN: focused command 68 tests, 0 failures. Regression command
+    (`test/fullstack/jido_market_agents` plus `jido_market_agents_test.exs`): 438 tests,
+    0 failures (437 + 1). `mix format --check-formatted` on the two changed files: clean.
+  - `limit: 20, printable_limit: 64` are removed and no other numeric cap was added. The
+    accept/reject decision is unchanged; only the logged text differs.
+  - Commit: `fix(validator): log only allowlisted key names when rejecting a reply`.
 
 ## Next step
 
-All tasks (T1-T4) are done. The next step is a delivery decision for the user: push the
+All tasks (T1-T5) are done. The next step is a delivery decision for the user: push the
 branch and open a pull request, or hold. Nothing has been pushed.

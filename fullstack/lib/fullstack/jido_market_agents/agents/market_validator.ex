@@ -48,6 +48,12 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   @field_keys Enum.map(@extractable_fields, &Atom.to_string/1)
   @metadata_keys ["justification", "output_language", "language_switch_requested"]
 
+  # Wrapper keys observed live from a model that mirrored the old prior-state
+  # shape. Together with the two sets above they are the only key names a
+  # rejection log may name; every other key is model-authored text.
+  @wrapper_keys ["data", "sufficient", "missing_fields"]
+  @loggable_keys @field_keys ++ @metadata_keys ++ @wrapper_keys
+
   @doc """
   Pure extraction prompt shared by the text extraction path.
 
@@ -415,17 +421,20 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   # `ExtractionOutput.normalize_map/1` reads top-level keys only, so a reply
   # that names none of the eleven fields but carries other keys (a wrapper
   # such as `{"data": {...}}`) would merge nothing and look like "no new
-  # facts". Fail it loudly instead. Only key names are logged, bounded, never
-  # values, prompt text or raw content.
+  # facts". Fail it loudly instead. The log names only allowlisted keys and
+  # counts the rest: a model-authored key can itself carry a value, so it is
+  # never logged, nor are values, prompt text or raw content.
   defp ensure_recognized_shape(map) do
     keys = Map.keys(map)
 
     if Enum.any?(keys, &(&1 in @field_keys)) or Enum.all?(keys, &(&1 in @metadata_keys)) do
       :ok
     else
+      {known, unknown} = Enum.split_with(keys, &(&1 in @loggable_keys))
+
       Logger.warning(
-        "Validator reply rejected: :unrecognized_shape top_level_keys=" <>
-          inspect(Enum.sort(keys), limit: 20, printable_limit: 64)
+        "Validator reply rejected: :unrecognized_shape " <>
+          "top_level_keys=#{inspect(Enum.sort(known))} unknown_key_count=#{length(unknown)}"
       )
 
       {:error, :unrecognized_shape}

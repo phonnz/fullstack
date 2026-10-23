@@ -93,6 +93,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
 
     defp reply("data envelope" <> _), do: @data_envelope
     defp reply("result wrapper" <> _), do: ~s({"result": {"country": "Mexico"}})
+    defp reply("value as key" <> _), do: ~s({"Mexico City": {"country": "Mexico"}})
     defp reply("many long keys" <> _), do: Jason.encode!(long_keys())
     defp reply("empty object" <> _), do: "{}"
     defp reply("justification only" <> _), do: ~s({"justification": "Nothing new was stated."})
@@ -396,7 +397,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
         end)
 
       assert log =~
-               ~s(Validator reply rejected: :unrecognized_shape top_level_keys=["data", "justification", "missing_fields", "sufficient"])
+               ~s(Validator reply rejected: :unrecognized_shape top_level_keys=["data", "justification", "missing_fields", "sufficient"] unknown_key_count=0)
 
       assert Regex.scan(~r/Validator reply rejected/, log) |> length() == 1
 
@@ -420,11 +421,28 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
                    MarketValidator.extract_fields(MarketValidator.new(), "result wrapper")
         end)
 
-      assert log =~ ~s(top_level_keys=["result"])
+      # "result" is not an allowlisted name, so it is only counted
+      assert log =~ "top_level_keys=[] unknown_key_count=1"
+      refute log =~ "result"
       refute log =~ "Mexico"
     end
 
-    test "the logged key list is bounded and never carries values" do
+    test "a model-authored key that carries a value is counted, never logged" do
+      put_validator_backend(ShapeFakeBackend)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:parse_failed, :unrecognized_shape}} =
+                   MarketValidator.extract_fields(MarketValidator.new(), "value as key")
+        end)
+
+      assert log =~
+               "Validator reply rejected: :unrecognized_shape top_level_keys=[] unknown_key_count=1"
+
+      refute log =~ "Mexico"
+    end
+
+    test "unknown keys are only counted, so the log line stays bounded and value-free" do
       put_validator_backend(ShapeFakeBackend)
 
       log =
@@ -433,7 +451,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
                    MarketValidator.extract_fields(MarketValidator.new(), "many long keys")
         end)
 
-      assert log =~ "Validator reply rejected: :unrecognized_shape top_level_keys="
+      assert log =~ "top_level_keys=[] unknown_key_count=30"
       refute log =~ "SECRET"
       refute log =~ String.duplicate("k", 100)
     end
