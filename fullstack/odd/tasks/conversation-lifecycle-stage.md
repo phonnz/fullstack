@@ -60,8 +60,8 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
 
 - Q1 (resolved, user 2026-10-23): automatic. `ready` moves straight to `research` as
   today; no user action gates research.
-- Q2: A user message at `research` or later: reject it (`{:error, :conversation_locked}`,
-  nothing stored) or store it as chat only? Blocks T3.
+- Q2 (resolved, user 2026-10-23): a user message at `research` or later is stored as a
+  chat message and never re-runs the pipeline (no validation, no stage, no status reset).
 
 ## Tasks
 
@@ -91,9 +91,19 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
     gates messages, a message at `research` or later still re-runs the old loop, but
     `stage` stays where it is instead of hitting the trigger.
   - No new broadcast contract and no UI change in this slice.
-- [ ] T3 — Message gating (slice 3). Blocked on Q2. `drain_queue` processes a user message
-  only when `Lifecycle.accepts_messages?/1`; the `error`-reset retry applies only before
-  `research`.
+- [x] T3 — Message gating (slice 3). `drain_queue` processes a user message through
+  validation only when `Lifecycle.accepts_messages?/1`; the `error`-reset retry applies
+  only before `research`. Route: delegated direct (preparation trigger: `conversation.ex`).
+  - At `research` or later a user message is persisted and broadcast like any chat
+    message, then nothing else happens: no validator run, no `status` or `pending_stage`
+    reset, no result wipe, no stage change. A running stage is not interrupted.
+  - Chat-only messages must not change pipeline inputs: not replayed into the validator
+    on rehydration, not part of stage input fingerprints, not fed to later stage prompts.
+    Mark them so every reader can tell them apart.
+  - At `research` or later with `status` error, a message is stored and the error stays;
+    nothing retries the failed stage.
+  - Paths made unreachable by the gate (for example `stage_invalidated` after research)
+    are reported, not removed, in this slice.
 - [ ] T4 — Narrow `status` to run health (slice 4). Planned later; needs its own mapping
   review of every reader before starting.
 
@@ -122,7 +132,7 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
     unless that branch lands on `main` first.
   - Slice 1 (T1): `ft-conversation-lifecycle-01-stage-field`, base the tracker, commit
     `4233ae1`.
-  - Slice 2 (T2): `ft-conversation-lifecycle-02-pipeline-stage`, base slice 1.
+  - Slice 2 (T2): `ft-conversation-lifecycle-02-pipeline-stage`, base slice 1, commit `4fd46c5`.
   - Slice 3 (T3): `ft-conversation-lifecycle-03-message-gating`, base slice 2.
   - Slice 4 (T4): `ft-conversation-lifecycle-04-status-health`, base slice 3.
 - Migrations run only against the test database. The dev database is migrated by the
@@ -170,7 +180,7 @@ Format: `mix format --check-formatted` on changed files.
   (`ft-conversation-lifecycle-01-stage-field`); the tracker branch pointer reset to
   `bf53cfd` (local only, nothing was pushed).
 - 2026-10-23: T2 implemented, verified, and committed on
-  `ft-conversation-lifecycle-02-pipeline-stage`. Route: delegated direct.
+  `ft-conversation-lifecycle-02-pipeline-stage` as `4fd46c5`. Route: delegated direct. Native assessment on the commit: risk `medium` (`slice_budget_reached`), RDD off, so writer self-verification plus parent spot check.
   - Writes: `drain_queue` -> `:validating`; complete validation (`commit_validation`) ->
     `:ready`; `start_stage` -> phase via `stage_phase/1`; `tech_strategy` success ->
     `:delivered` inside `persist_stage_transition` (row lock plus `boundary_version`
@@ -192,7 +202,45 @@ Format: `mix format --check-formatted` on changed files.
     `ConversationPipelineTest` "an incomplete LLM turn persists the raw reply..." and
     "worker failure is contained and terminal"; both read `List.last(list_messages)`
     and `inserted_at` has one-second resolution.
+- 2026-10-23: T3 implemented, verified, and committed on
+  `ft-conversation-lifecycle-03-message-gating`. Route: delegated direct (writer
+  interrupted once by a usage limit and resumed), plus one inline parent fix.
+  - Gate: `Lifecycle.accepts_messages?(state.stage)` in `handle_call({:send_message, ..})`
+    (a closed gate stores at once, even while a stage task runs) and in `:drain_queue`
+    (a message queued before research and drained after it). Open gate keeps the old
+    body, now `admit_user_message/2`.
+  - Chat-only messages: role `user`, `metadata.type = "chat_only"`, persisted through
+    `persist_owned_boundary/2` with no stage target (same `boundary_version`, so a running
+    stage's commit check still matches), then broadcast as `:message_received` with no
+    `status:`.
+  - Readers checked, none changed: validator rehydration uses `validated_data` only;
+    fingerprints use data, results, language, and `stage_refinement` messages; stage
+    prompts use data and result maps; research/result lookups filter by
+    `metadata["type"]`.
+  - Parent inline fix: `Evaluate` handles `:message_received` (replace transcript, phase
+    `:idle`). Without it the "Thinking..." indicator set on submit never cleared, since
+    no pipeline event follows a chat-only message. Tradeoff: a chat message sent while a
+    stage runs clears the "researching" indicator until that stage's event arrives.
+  - Existing tests changed for Q2: the two T2 interim loop tests (replaced); "changed
+    facts publish committed invalidation..." (now: results kept, no invalidation);
+    "blocked provider keeps reads admission..." (mid-research turn stored as chat);
+    rehydration "legacy six-field ... waits for missing diagnosis" (post-research message
+    expects `message_received`, waits for `research_complete` before the kill).
+  - Unreachable now, reported not removed: `commit_validation` with `changed == true`
+    (result wipe, `rebuild_analysis_agents(results: %{})`, `:stage_invalidated`
+    broadcast and its `invalidated: @stages` payload). Manual-mode
+    `__pipeline_request__` messages after research are stored as chat too; stages after
+    research run through `run_stage`, so only stray validator requests are affected.
+  - TDD: six new pipeline/rehydration gating tests RED ("no matching message" for
+    `:message_received`), two before-research tests passed on old code as guards, then
+    GREEN; Evaluate test RED (`refute html =~ "phase-buffering"`), then GREEN 25/25.
+  - Checks: regression 683 tests, 7 failures, exactly the baseline set (parent run);
+    format clean on all five files; no compile warning from touched files.
+  - More pre-existing flakes (same one-second ordering): `ConversationPipelineTest`
+    "successful pipeline emits the five adopted events..." and "a map turn after an LLM
+    turn does not inherit the previous raw reply".
 
 ## Next step
 
-Ask Q2 (blocks T3).
+Decide between T4 (narrow `status` to run health, needs its own reader mapping first)
+and a small cleanup slice removing the paths T3 made unreachable.

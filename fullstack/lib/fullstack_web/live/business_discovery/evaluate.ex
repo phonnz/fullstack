@@ -158,6 +158,16 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
      |> handled(:research_complete)}
   end
 
+  # From `:research` onward a message is stored as chat only and no pipeline
+  # event follows it, so this is its terminal event.
+  def handle_info({:message_received, payload}, socket) do
+    {:noreply,
+     socket
+     |> assign(:phase, :idle)
+     |> replace_messages(payload)
+     |> handled(:message_received)}
+  end
+
   def handle_info({:error, payload}, socket) do
     {:noreply,
      socket

@@ -165,7 +165,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     end
   end
 
-  test "blocked provider keeps reads admission and close responsive and preserves queued turns",
+  test "blocked provider keeps reads admission and close responsive and stores a mid-research turn as chat",
        %{id: id, pid: pid, user: user} do
     Conversation.send_message(id, data())
     assert_receive {:provider, worker, "researcher", _}, 1_000
@@ -178,10 +178,13 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert {:ok, _} = Conversation.list_messages(id)
     assert :ok = GenServer.call(pid, :close)
     assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "France"})
+    assert_receive {:message_received, _}, 1_000
     reply(worker, research())
-    assert_receive {:provider, next, "researcher", _}, 1_000
-    assert Conversations.get_for_user(id, user.id).validated_data["country"] == "France"
-    reply(next, research())
+    assert_receive {:research_complete, _}, 1_000
+    refute_receive {:provider, _, "researcher", _}, 100
+    assert Conversations.get_for_user(id, user.id).validated_data["country"] == "Spain"
+    # Closing parked the conversation in manual mode: no descendant stage.
+    refute_receive {:provider, _, "analyzer", _}, 100
   end
 
   test "worker failure is contained and terminal", %{id: id, pid: pid} do
@@ -590,7 +593,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert Conversations.get_for_user(id, user.id).status == "active"
   end
 
-  test "changed facts publish committed invalidation before replacement results", %{
+  test "a message after delivery that changes facts keeps results and emits no invalidation", %{
     id: id,
     pid: pid,
     user: user
@@ -609,18 +612,17 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
 
     assert_receive {:tech_strategy_complete, _}, 1_000
     Conversation.send_message(id, %{country: "France"})
-
-    assert_receive {:stage_invalidated,
-                    %{invalidated: [:research, :analysis, :systems, :tech_strategy]}},
-                   1_000
+    assert_receive {:message_received, _}, 1_000
+    refute_receive {:stage_invalidated, _}, 100
+    refute_receive {:provider, _, _, _}, 100
 
     record = Conversations.get_for_user(id, user.id)
 
-    assert record.business_analysis == nil and record.systems_strategy == nil and
-             record.tech_strategy == nil
+    assert record.business_analysis != nil and record.systems_strategy != nil and
+             record.tech_strategy != nil
 
     assert {:ok, snapshot} = GenServer.call(pid, :snapshot)
-    assert snapshot.record.validated_data["country"] == "France"
+    assert snapshot.record.validated_data["country"] == "Spain"
   end
 
   test "an isolated observer reconciles a durable result without any broadcast", %{
@@ -826,8 +828,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       assert stage_of(id, user) == :research
     end
 
-    test "a message after delivery re-runs the old loop without moving the stage",
-         %{id: id, user: user} do
+    defp run_to_delivery(id) do
       Conversation.send_message(id, data())
 
       for {role, output} <- [
@@ -841,22 +842,18 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       end
 
       assert_receive {:tech_strategy_complete, _}, 1_000
-      assert stage_of(id, user) == :delivered
-
-      Conversation.send_message(id, %{country: "France"})
-      assert_receive {:stage_invalidated, _}, 1_000
-      assert_receive {:provider, worker, "researcher", _}, 1_000
-      assert stage_of(id, user) == :delivered
-      reply(worker, research())
-      assert_receive {:provider, worker, "analyzer", _}, 1_000
-      assert stage_of(id, user) == :delivered
-      reply(worker, analysis())
-      refute_receive {:error, _}, 50
-      assert stage_of(id, user) == :delivered
+      flush_events()
     end
 
-    test "a message at proposal re-runs validation and research without a backward move",
-         %{id: id, pid: pid, user: user} do
+    defp flush_events do
+      receive do
+        {_event, _payload} -> flush_events()
+      after
+        50 -> :ok
+      end
+    end
+
+    defp park_at_proposal(pid, id) do
       run = Ecto.UUID.generate()
       request = Ecto.UUID.generate()
       Conversation.send_message(id, manual_request(data(), run, request))
@@ -871,16 +868,180 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       assert_receive {:provider, worker, "analyzer", _}, 1_000
       reply(worker, analysis())
       assert_receive {:analysis_complete, _}, 1_000
+    end
+
+    @pipeline_keys [
+      :status,
+      :stage,
+      :mode,
+      :pending_stage,
+      :run_ref,
+      :request_ref,
+      :boundary_version,
+      :input_fingerprint,
+      :results,
+      :validated_data,
+      :queue
+    ]
+
+    defp pipeline_snapshot(pid), do: Map.take(:sys.get_state(pid), @pipeline_keys)
+
+    defp record_snapshot(id, user),
+      do:
+        Map.take(Conversations.get_for_user(id, user.id), [
+          :status,
+          :stage,
+          :validated_data,
+          :business_analysis,
+          :systems_strategy,
+          :tech_strategy
+        ])
+
+    defp chat_messages(id),
+      do:
+        Enum.filter(
+          Conversations.list_messages(id),
+          &((&1.metadata || %{})["type"] == "chat_only")
+        )
+
+    defp refute_pipeline_events do
+      refute_receive {:stage_invalidated, _}, 100
+      refute_receive {:research_complete, _}, 0
+      refute_receive {:analysis_complete, _}, 0
+      refute_receive {:error, _}, 0
+      refute_receive {:provider, _, _, _}, 0
+    end
+
+    test "a message at proposal is stored as chat and changes nothing else",
+         %{id: id, pid: pid, user: user} do
+      park_at_proposal(pid, id)
       assert stage_of(id, user) == :proposal
+      before_state = pipeline_snapshot(pid)
+      before_record = record_snapshot(id, user)
+
+      assert {:ok, :accepted, ^id} = Conversation.send_message(id, "What about Portugal?")
+      assert_receive {:message_received, %{messages: messages, conversation_id: ^id}}, 1_000
+      assert Enum.any?(messages, &(&1.role == :user and &1.content == "What about Portugal?"))
+      refute_pipeline_events()
+
+      assert [%{role: "user", content: "What about Portugal?"}] = chat_messages(id)
+      assert pipeline_snapshot(pid) == before_state
+      assert record_snapshot(id, user) == before_record
+    end
+
+    test "a message after delivery is stored as chat and keeps every result",
+         %{id: id, pid: pid, user: user} do
+      run_to_delivery(id)
+      assert stage_of(id, user) == :delivered
+      before_state = pipeline_snapshot(pid)
+      before_record = record_snapshot(id, user)
 
       Conversation.send_message(id, %{country: "France"})
-      assert_receive {:stage_invalidated, _}, 1_000
-      assert_receive {:provider, worker, "researcher", _}, 1_000
-      assert stage_of(id, user) == :proposal
-      reply(worker, research())
+      assert_receive {:message_received, %{messages: messages}}, 1_000
+      assert Enum.any?(messages, &(&1.role == :user and &1.metadata["type"] == "chat_only"))
+      refute_pipeline_events()
+
+      assert [_chat] = chat_messages(id)
+      assert pipeline_snapshot(pid) == before_state
+      assert record_snapshot(id, user) == before_record
+      assert before_record.stage == :delivered and before_record.status == "completed"
+    end
+
+    test "a message while research runs is stored, the stage completes and prompts exclude it",
+         %{id: id, pid: pid, user: user} do
+      Conversation.send_message(id, data())
+      assert_receive {:provider, researcher, "researcher", _}, 1_000
+      before_state = pipeline_snapshot(pid)
+
+      Conversation.send_message(id, "Please also consider Martian unicorns")
+      assert_receive {:message_received, _}, 1_000
+      assert [_chat] = chat_messages(id)
+      assert pipeline_snapshot(pid) == before_state
+      assert stage_of(id, user) == :research
+      refute_receive {:provider, _, _, _}, 100
+
+      reply(researcher, research())
       assert_receive {:research_complete, _}, 1_000
-      refute_receive {:error, _}, 50
+      assert_receive {:provider, analyzer, "analyzer", prompt}, 1_000
+      refute inspect(prompt) =~ "Martian"
       assert stage_of(id, user) == :proposal
+      reply(analyzer, analysis())
+      assert_receive {:analysis_complete, _}, 1_000
+      assert [_chat] = chat_messages(id)
+    end
+
+    test "a message at research with an error is stored, the error stays and nothing retries",
+         %{id: id, pid: pid, user: user} do
+      Conversation.send_message(id, data())
+      assert_receive {:provider, worker, "researcher", _}, 1_000
+      send(worker, :crash)
+      assert_receive {:error, %{stage: :research}}, 1_000
+      before_state = pipeline_snapshot(pid)
+
+      Conversation.send_message(id, "Any news?")
+      assert_receive {:message_received, _}, 1_000
+      refute_pipeline_events()
+
+      assert [_chat] = chat_messages(id)
+      assert Conversations.get_for_user(id, user.id).status == "error"
+      assert stage_of(id, user) == :research
+      assert pipeline_snapshot(pid) == before_state
+    end
+
+    test "before research a message still re-runs validation", %{id: id, user: user} do
+      Conversation.send_message(id, "Paid text naming Spain")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      reply(worker, %{country: "Spain"})
+      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+
+      Conversation.send_message(id, "The market is fintech")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      reply(worker, %{business_market: "fintech"})
+      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert stage_of(id, user) == :validating
+      assert chat_messages(id) == []
+    end
+
+    test "before research the error-reset retry still works", %{id: id, user: user} do
+      Conversation.send_message(id, "Paid text whose extraction will crash")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      send(worker, :crash)
+      assert_receive {:error, %{status: :error}}, 1_000
+      assert Conversations.get_for_user(id, user.id).status == "error"
+
+      Conversation.send_message(id, "Second attempt naming Spain")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      assert Conversations.get_for_user(id, user.id).status == "active"
+      reply(worker, %{country: "Spain"})
+      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert chat_messages(id) == []
+    end
+
+    test "rehydration ignores chat-only messages", %{id: id, pid: pid, user: user} do
+      run_to_delivery(id)
+      Conversation.send_message(id, "Thanks, Zanzibar report is great")
+      assert_receive {:message_received, _}, 1_000
+
+      # The supervisor restarts a killed conversation; rehydration runs in init.
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 1_000
+
+      restarted =
+        Enum.find_value(1..100, fn _ ->
+          case Conversation.ensure_started(id, user.id) do
+            {:ok, new_pid} when new_pid != pid -> new_pid
+            _ -> Process.sleep(20) && nil
+          end
+        end)
+
+      state = :sys.get_state(restarted)
+      assert state.stage == :delivered
+      assert Conversation.resume_point(state) == :complete
+      assert Enum.any?(state.messages, &(&1.content =~ "Zanzibar"))
+      refute inspect(state.validator_agent.state) =~ "Zanzibar"
+      refute_receive {:provider, _, _, _}, 100
+      assert stage_of(id, user) == :delivered
     end
   end
 end

@@ -347,16 +347,21 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, diagnosis)
 
       assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
+      assert_receive {:research_complete, %{conversation_id: ^id}}, 2_000
 
-      # The requalified diagnosis answers survive another process death:
-      # the next turn must not re-ask for them.
+      # The requalified diagnosis answers survive another process death, and
+      # a later message is chat only: it never re-opens validation.
       {:ok, pid2} = kill_and_await_restart(id, pid)
       assert Process.alive?(pid2)
       Conversation.subscribe(id)
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
 
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
+      assert_receive {:message_received, %{conversation_id: ^id}}, 2_000
+      refute_receive {:extraction_complete, %{conversation_id: ^id}}, 200
+
+      persisted = Conversations.get_for_user(id, user.id).validated_data
+      assert persisted["team_size"] == %{"status" => "unknown", "count" => nil, "notes" => nil}
     end
   end
 

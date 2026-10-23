@@ -500,6 +500,34 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
     end
   end
 
+  describe ":message_received clears the indicator" do
+    test "a chat-only message after research replaces the transcript and clears the phase",
+         %{conn: conn, user: user} do
+      record = start_conversation!(user)
+      {:ok, view, _html} = live(conn, @evaluate_path <> "/" <> record.id)
+
+      view
+      |> form("#message-form", %{"message" => "one more detail"})
+      |> render_submit()
+
+      Phoenix.PubSub.broadcast(
+        Fullstack.PubSub,
+        JidoMarketAgents.topic(record.id),
+        {:message_received,
+         %{
+           messages: [
+             %{role: "user", content: "stored after research", metadata: %{"type" => "chat_only"}}
+           ]
+         }}
+      )
+
+      html = render(view)
+      refute html =~ "phase-buffering"
+      refute html =~ "phase-researching"
+      assert html =~ "stored after research"
+    end
+  end
+
   describe "S17.3 :research_complete clears the indicator" do
     test "clears the phase", %{conn: conn, user: user} do
       record = start_conversation!(user)

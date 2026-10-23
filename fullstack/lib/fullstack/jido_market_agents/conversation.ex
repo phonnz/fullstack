@@ -31,6 +31,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   @pubsub Fullstack.PubSub
   @default_timeout 15_000
   @stages [:research, :analysis, :systems, :tech_strategy]
+  @chat_only_type :chat_only
 
   # Rehydration/persistence field allow-list, sourced from
   # `ExtractionOutput.fields/0` (six commercial scalars + five diagnosis
@@ -705,9 +706,16 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       {:reply, {:error, :already_running}, state}
     else
       request = request_envelope(message)
-      state = %{state | queue: state.queue ++ [request]}
-      send(self(), :drain_queue)
-      {:reply, {:ok, :accepted, state.id}, state}
+
+      if Lifecycle.accepts_messages?(state.stage) do
+        state = %{state | queue: state.queue ++ [request]}
+        send(self(), :drain_queue)
+        {:reply, {:ok, :accepted, state.id}, state}
+      else
+        # Past `:research` a message is chat only. It is stored at once, even
+        # while a stage task runs, because it never waits on the pipeline.
+        {:reply, {:ok, :accepted, state.id}, store_chat_message(state, request)}
+      end
     end
   end
 
@@ -774,47 +782,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   @impl true
   def handle_info(:drain_queue, %{task: nil, queue: [request | rest]} = state) do
-    user_msg = %{
-      role: :user,
-      content: request.message,
-      timestamp: DateTime.utc_now(),
-      metadata: %{run_ref: request.run_ref, request_ref: request.request_ref}
-    }
+    state = %{state | queue: rest}
 
-    state = %{
-      state
-      | messages: state.messages ++ [user_msg],
-        queue: rest,
-        run_ref: request.run_ref,
-        request_ref: request.request_ref,
-        validation_provider_free: is_map(request.message),
-        status: :active,
-        mode: request.mode,
-        pending_stage: nil
-    }
-
-    # Only the owner writes. The transaction admits input plus correlation
-    # before any paid provider task exists.
-    admitted =
-      with {:ok, state} <- ensure_record(state),
-           do: persist_owned_boundary(state, %{}, :validating)
-
-    case admitted do
-      {:ok, state} ->
-        start_validation(state, request.message)
-
-      {:error, _} when is_nil(state.user_id) ->
-        start_validation(state, request.message)
-
-      {:error, _} when is_map(request.message) ->
-        # Legacy provider-free maps retain the display-only degraded path.
-        case MarketValidator.extract_fields(state.validator_agent, request.message) do
-          {:ok, validator} -> process_extraction(%{state | validator_agent: validator})
-          {:error, _} -> stage_failure(state, :validator, :invalid_input)
-        end
-
-      {:error, _} ->
-        stage_failure(state, :validator, :persistence_failed)
+    if Lifecycle.accepts_messages?(state.stage) do
+      admit_user_message(state, request)
+    else
+      # The stage moved past `:research` while the message was queued.
+      if rest != [], do: send(self(), :drain_queue)
+      {:noreply, store_chat_message(state, request)}
     end
   end
 
@@ -880,6 +855,79 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   @impl true
   def terminate(_reason, %{task: %Task{} = task}), do: Task.shutdown(task, :brutal_kill)
   def terminate(_reason, _state), do: :ok
+
+  defp admit_user_message(state, request) do
+    user_msg = %{
+      role: :user,
+      content: request.message,
+      timestamp: DateTime.utc_now(),
+      metadata: %{run_ref: request.run_ref, request_ref: request.request_ref}
+    }
+
+    state = %{
+      state
+      | messages: state.messages ++ [user_msg],
+        run_ref: request.run_ref,
+        request_ref: request.request_ref,
+        validation_provider_free: is_map(request.message),
+        status: :active,
+        mode: request.mode,
+        pending_stage: nil
+    }
+
+    # Only the owner writes. The transaction admits input plus correlation
+    # before any paid provider task exists.
+    admitted =
+      with {:ok, state} <- ensure_record(state),
+           do: persist_owned_boundary(state, %{}, :validating)
+
+    case admitted do
+      {:ok, state} ->
+        start_validation(state, request.message)
+
+      {:error, _} when is_nil(state.user_id) ->
+        start_validation(state, request.message)
+
+      {:error, _} when is_map(request.message) ->
+        # Legacy provider-free maps retain the display-only degraded path.
+        case MarketValidator.extract_fields(state.validator_agent, request.message) do
+          {:ok, validator} -> process_extraction(%{state | validator_agent: validator})
+          {:error, _} -> stage_failure(state, :validator, :invalid_input)
+        end
+
+      {:error, _} ->
+        stage_failure(state, :validator, :persistence_failed)
+    end
+  end
+
+  # Stores a user message as chat and nothing else: no validation, no status,
+  # `pending_stage`, result or stage change. The `chat_only` type keeps it out
+  # of every pipeline reader, which all select messages by their own type.
+  defp store_chat_message(state, request) do
+    message = %{
+      role: :user,
+      content: request.message,
+      timestamp: DateTime.utc_now(),
+      metadata: %{type: @chat_only_type}
+    }
+
+    state = %{state | messages: state.messages ++ [message]}
+
+    state =
+      case persist_owned_boundary(state, %{}) do
+        {:ok, persisted} ->
+          persisted
+
+        {:error, reason} ->
+          Logger.warning(
+            "Conversation #{state.id}: chat message not persisted (#{inspect(reason)})"
+          )
+
+          state
+      end
+
+    broadcast(state, :message_received, %{})
+  end
 
   defp start_validation(state, message) do
     {:noreply,
