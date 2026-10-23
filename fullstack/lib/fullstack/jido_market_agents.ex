@@ -19,13 +19,13 @@ defmodule Fullstack.JidoMarketAgents do
 
       # Receive results via PubSub (or poll with resume/list_messages)
       receive do
-        {:extraction_complete, %{status: :needs_data, messages: msgs}} ->
+        {:extraction_complete, %{status: :idle, lifecycle_stage: :validating, messages: msgs}} ->
           # Ask for more data
-        {:extraction_complete, %{status: :researching}} ->
+        {:extraction_complete, %{status: :running, lifecycle_stage: :ready}} ->
           # Research is in progress
-        {:research_complete, %{status: :analyzing}} ->
+        {:research_complete, %{status: :running, lifecycle_stage: :research}} ->
           # Analysis and strategy stages are in progress
-        {:tech_strategy_complete, %{status: :completed, messages: msgs}} ->
+        {:tech_strategy_complete, %{status: :idle, lifecycle_stage: :delivered, messages: msgs}} ->
           # Done!
         {:error, %{status: :error, reason: reason}} ->
           # Handle error
@@ -34,6 +34,15 @@ defmodule Fullstack.JidoMarketAgents do
       # Polling fallback (still works, returns current state)
       Fullstack.JidoMarketAgents.resume("my-analysis")
       Fullstack.JidoMarketAgents.list_messages("my-analysis")
+
+  ## Status and lifecycle stage
+
+  Every payload that carries `status:` is run health: `:idle` (nothing in
+  flight), `:running` (committed automatic work is in flight), or `:error`.
+  It also carries `lifecycle_stage:`, where the conversation is in its
+  forward-only lifecycle (`:inserted`, `:validating`, `:ready`, `:research`,
+  `:proposal`, `:strategy`, `:delivered`). The `stage:` key keeps naming the
+  pipeline stage that produced the event (`:validator`, `:research`, ...).
   """
 
   alias Fullstack.JidoMarketAgents.{Conversation, MessageBuffer, RateLimiter}
@@ -116,7 +125,8 @@ defmodule Fullstack.JidoMarketAgents do
   end
 
   @doc """
-  Resume a conversation by id. Returns current status and all messages.
+  Resume a conversation by id. Returns the current run health
+  (`:idle | :running | :error`) and all messages.
   Returns `{:error, :conversation_not_found}` if no conversation exists.
   """
   def resume(id) when is_binary(id) do

@@ -157,7 +157,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
       end)
 
     cond do
-      record.status == "error" and not is_nil(error) and
+      record.status == :error and not is_nil(error) and
           error.metadata["stage"] == to_string(stage) ->
         {:error, {:stage_failed, stage, failure_reason(error.metadata["reason"])}}
 
@@ -167,7 +167,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
           |> Map.put(:validated_data, record.validated_data)
 
         if control["pending_stage"] == nil do
-          {:waiting, Map.put(payload, :status, :needs_data)}
+          {:waiting, Map.merge(payload, %{status: record.status, lifecycle_stage: record.stage})}
         else
           {:ok, payload}
         end

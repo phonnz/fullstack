@@ -222,17 +222,6 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp uuid?(id) when is_binary(id), do: Regex.match?(@uuid_text_regex, id)
   defp uuid?(_), do: false
 
-  # Only these 6 known values are ever persisted (`Record`'s
-  # `@statuses`/changeset validation) — an explicit mapping, never
-  # `String.to_atom/1` on a value that came out of the database.
-  defp restored_status("active"), do: :active
-  defp restored_status("researching"), do: :researching
-  defp restored_status("analyzing"), do: :analyzing
-  defp restored_status("building_strategy"), do: :building_strategy
-  defp restored_status("completed"), do: :completed
-  defp restored_status("error"), do: :error
-  defp restored_status(_unknown), do: :active
-
   defp pipeline_control(record) do
     case record.validated_data do
       %{"_pipeline" => control} when is_map(control) -> control
@@ -240,18 +229,17 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
-  # Terminal outcomes precede manual idling; legacy completed reports remain
+  # Terminal outcomes precede manual idling; legacy delivered reports remain
   # display-only. Unknown control values fail closed without creating atoms.
-  defp restored_record_status(%{status: "error"}), do: :error
-  defp restored_record_status(%{status: "completed"}), do: :completed
+  defp restored_record_status(%{status: :error}), do: :error
 
   defp restored_record_status(record) do
     if restored_record_mode(record) == :manual,
-      do: :active,
-      else: restored_status(record.status)
+      do: :idle,
+      else: record.status
   end
 
-  defp restored_record_mode(%{status: "completed"} = record) do
+  defp restored_record_mode(%{stage: :delivered} = record) do
     if map_size(pipeline_control(record)) == 0,
       do: :legacy,
       else: restored_mode(pipeline_control(record)["mode"])
@@ -412,7 +400,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       messages: [],
       validator_agent: MarketValidator.new(id: "#{id}_validator"),
       researcher_agent: researcher,
-      status: :active,
+      status: :idle,
       mode: :automatic,
       pending_stage: nil,
       validated_data: nil,
@@ -870,7 +858,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         run_ref: request.run_ref,
         request_ref: request.request_ref,
         validation_provider_free: is_map(request.message),
-        status: :active,
+        status: :idle,
         mode: request.mode,
         pending_stage: nil
     }
@@ -1086,15 +1074,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp stage_success(state, stage, result) do
     next = Enum.at(@stages, Enum.find_index(@stages, &(&1 == stage)) + 1)
 
-    status =
-      case stage do
-        :research -> :analyzing
-        :analysis -> :building_strategy
-        :systems -> :building_strategy
-        :tech_strategy -> :completed
-      end
-
-    status = if state.mode == :manual and next, do: :active, else: status
+    # `running` only while the next stage is committed and will start by itself.
+    status = if is_nil(next) or state.mode == :manual, do: :idle, else: :running
     fingerprint = state.input_fingerprint
 
     transition = %{
@@ -1143,7 +1124,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             state,
             stage_event(stage),
             Map.put(
-              %{status: state.status, stage: stage},
+              Map.put(health(state), :stage, stage),
               result_key(stage),
               durable_result(state, stage)
             )
@@ -1407,6 +1388,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     state =
       broadcast(state, :error, %{
         status: :error,
+        lifecycle_stage: state.stage,
         stage: if(stage == :validator, do: :extraction, else: stage),
         reason: stage_error_reason(reason),
         durability: durability
@@ -1455,7 +1437,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           timestamp: DateTime.utc_now()
         }
 
-        status = if state.mode == :manual, do: :active, else: :researching
+        status = if state.mode == :manual, do: :idle, else: :running
 
         state = %{
           state
@@ -1472,12 +1454,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           stage_failure(last_durable, :validator, :persistence_failed)
         else
           state =
-            broadcast(state, :extraction_complete, %{
-              status: status,
-              stage: :validator,
-              validated_data: state.validated_data,
-              assessment: assessment
-            })
+            broadcast(
+              state,
+              :extraction_complete,
+              Map.merge(health(state), %{
+                stage: :validator,
+                validated_data: state.validated_data,
+                assessment: assessment
+              })
+            )
 
           if state.mode == :automatic, do: send(self(), {:run_stage, :research})
           send(self(), :drain_queue)
@@ -1507,7 +1492,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           | messages: state.messages ++ [assistant_msg],
             validated_data: data,
             boundary_version: state.boundary_version + 1,
-            status: :active,
+            status: :idle,
             pending_stage: nil
         }
 
@@ -1516,13 +1501,13 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         if state.last_commit_failed and not state.validation_provider_free do
           stage_failure(last_durable, :validator, :persistence_failed)
         else
-          payload = %{
-            status: :needs_data,
-            stage: :validator,
-            validated_data: state.validated_data,
-            missing_fields: fields,
-            assessment: assessment
-          }
+          payload =
+            Map.merge(health(state), %{
+              stage: :validator,
+              validated_data: state.validated_data,
+              missing_fields: fields,
+              assessment: assessment
+            })
 
           # Preserve the historical provider-free display fallback without
           # claiming that its undurable answer is a committed boundary.
@@ -1590,7 +1575,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           attrs =
             Map.merge(
               %{
-                status: persisted_status(state.status),
+                status: state.status,
                 validated_data: normalize_validated_data(state)
               },
               extra_attrs
@@ -1652,8 +1637,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end)
   end
 
+  # The two fields every status-carrying payload shares: where the conversation
+  # is (`lifecycle_stage`, not the pipeline `stage` the payload also names) and
+  # whether automatic work is idle, running, or failed.
+  defp health(state), do: %{status: state.status, lifecycle_stage: state.stage}
+
   defp broadcast(state, event, extra) do
     status = Map.get(extra, :status, state.status)
+    lifecycle_stage = Map.get(extra, :lifecycle_stage, state.stage)
 
     payload =
       extra
@@ -1673,7 +1664,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     AgentTelemetry.emit(
       [:fullstack, :jido_market_agents, :broadcast, :emitted],
       %{message_count: length(state.messages)},
-      %{conversation_id: state.id, event: event, status: status}
+      %{conversation_id: state.id, event: event, status: status, lifecycle_stage: lifecycle_stage}
     )
 
     Phoenix.PubSub.broadcast(@pubsub, topic(state.id), {event, payload})
@@ -1682,10 +1673,6 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   defp to_content_string(content) when is_binary(content), do: content
   defp to_content_string(content), do: inspect(content)
-
-  # Waiting is a UI event; the durable conversation remains active.
-  defp persisted_status(:needs_data), do: "active"
-  defp persisted_status(status), do: to_string(status)
 
   defp normalize_validated_data(%{validated_data: nil} = state),
     do: normalize_validated_data(%{state | validated_data: %{}})

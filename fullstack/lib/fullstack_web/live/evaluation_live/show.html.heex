@@ -13,7 +13,7 @@
 <.list>
   <:item title="Owner">{@evaluation.user.email}</:item>
   <:item title="Status">
-    <span class="badge badge-outline badge-sm">{@evaluation.status}</span>
+    <span class="badge badge-outline badge-sm">{@evaluation.stage} · {@evaluation.status}</span>
   </:item>
   <:item title="Messages">{length(@messages)}</:item>
   <:item title="Created">

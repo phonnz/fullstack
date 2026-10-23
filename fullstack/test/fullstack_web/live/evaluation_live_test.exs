@@ -50,12 +50,13 @@ defmodule FullstackWeb.EvaluationLiveTest do
 
     test "shows the status and message count", %{conn: conn} do
       user = user_fixture()
-      {:ok, record} = Conversations.create(user.id, %{status: "completed"})
+      {:ok, record} = Conversations.create(user.id, %{status: "running"})
       {:ok, _} = Conversations.append_message(record.id, %{role: "user", content: "hi"})
 
       {:ok, _lv, html} = live(conn, ~p"/evaluations")
 
-      assert html =~ "completed"
+      assert html =~ "inserted"
+      assert html =~ "running"
       assert html =~ "1"
     end
 
@@ -121,13 +122,14 @@ defmodule FullstackWeb.EvaluationLiveTest do
       user = user_fixture(email: "subject@example.com")
 
       {:ok, record} =
-        Conversations.create(user.id, %{title: "Spain fintech", status: "completed"})
+        Conversations.create(user.id, %{title: "Spain fintech", status: "error"})
 
       {:ok, _lv, html} = live(conn, ~p"/evaluations/#{record.id}")
 
       assert html =~ "subject@example.com"
       assert html =~ "Spain fintech"
-      assert html =~ "completed"
+      assert html =~ "inserted"
+      assert html =~ "error"
     end
 
     test "renders the full transcript in order", %{conn: conn} do

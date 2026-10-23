@@ -91,7 +91,11 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
 
   test "incomplete extraction publishes and persists a reusable assessment", %{id: id} do
     Conversation.send_message(id, %{country: "Spain"})
-    assert_receive {:extraction_complete, %{status: :needs_data, assessment: report}}, 1_000
+
+    assert_receive {:extraction_complete,
+                    %{status: :idle, lifecycle_stage: :validating, assessment: report}},
+                   1_000
+
     refute report.sufficient
     assert :team_size in report.missing_fields
     assert report.data.country == "Spain"
@@ -109,7 +113,9 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       assert_receive {:provider, worker, "validator", _}, 1_000
       send(worker, {:reply, {:ok, raw}})
 
-      assert_receive {:extraction_complete, %{status: :needs_data} = payload}, 1_000
+      assert_receive {:extraction_complete,
+                      %{status: :idle, lifecycle_stage: :validating} = payload},
+                     1_000
 
       message = List.last(Conversations.list_messages(id))
       assert message.role == "assistant"
@@ -143,10 +149,10 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       Conversation.send_message(id, "Paid text naming Spain")
       assert_receive {:provider, worker, "validator", _}, 1_000
       send(worker, {:reply, {:ok, raw}})
-      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert_receive {:extraction_complete, %{status: :idle, lifecycle_stage: :validating}}, 1_000
 
       Conversation.send_message(id, %{city: "Madrid"})
-      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert_receive {:extraction_complete, %{status: :idle, lifecycle_stage: :validating}}, 1_000
 
       assistants = id |> Conversations.list_messages() |> Enum.filter(&(&1.role == "assistant"))
       assert [first, second] = assistants
@@ -157,7 +163,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
 
     test "a map-input turn omits raw_response", %{id: id} do
       Conversation.send_message(id, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert_receive {:extraction_complete, %{status: :idle, lifecycle_stage: :validating}}, 1_000
 
       message = List.last(Conversations.list_messages(id))
       assert message.metadata["assessment"]["data"]["country"] == "Spain"
@@ -290,9 +296,9 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     Conversation.send_message(id, data())
     assert_receive {:provider, research_worker, "researcher", _}, 1_000
     reply(research_worker, research())
-    assert_receive {:research_complete, %{status: :analyzing}}, 1_000
+    assert_receive {:research_complete, %{status: :running, lifecycle_stage: :research}}, 1_000
     record = Conversations.get_for_user(id, user.id)
-    assert record.status == "analyzing"
+    assert record.status == :running
     assert Enum.any?(Conversations.list_messages(id), &(&1.metadata["type"] == "market_research"))
     assert_receive {:provider, analysis_worker, "analyzer", messages}, 1_000
     assert List.last(messages)["content"] =~ "No retrieval"
@@ -363,7 +369,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     reply(worker, research())
     assert_receive {:provider, worker, "analyzer", _}, 1_000
     reply(worker, analysis())
-    assert_receive {:analysis_complete, %{status: :building_strategy}}, 1_000
+    assert_receive {:analysis_complete, %{status: :running, lifecycle_stage: :proposal}}, 1_000
 
     assert Conversations.get_for_user(id, user.id).business_analysis["blocker"] ==
              "Demand unknown"
@@ -485,13 +491,13 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       reply(worker, output)
     end
 
-    assert_receive {:systems_complete, %{status: :building_strategy}}, 1_000
+    assert_receive {:systems_complete, %{status: :running, lifecycle_stage: :strategy}}, 1_000
     assert_receive {:provider, worker, "strategy", messages}, 1_000
     assert List.last(messages)["content"] =~ "Improve acquisition"
     reply(worker, tech())
-    assert_receive {:tech_strategy_complete, %{status: :completed}}, 1_000
+    assert_receive {:tech_strategy_complete, %{status: :idle, lifecycle_stage: :delivered}}, 1_000
     record = Conversations.get_for_user(id, user.id)
-    assert record.status == "completed"
+    assert record.status == :idle
     assert record.tech_strategy["budget_roi"]["roi"]["percentage"] != 9999
   end
 
@@ -502,11 +508,11 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     Conversation.send_message(id, data())
 
     expected = [
-      {:extraction_complete, :validator, :validated_data, :researching},
-      {:research_complete, :research, :market_research, :analyzing},
-      {:analysis_complete, :analysis, :business_analysis, :building_strategy},
-      {:systems_complete, :systems, :systems_strategy, :building_strategy},
-      {:tech_strategy_complete, :tech_strategy, :tech_strategy, :completed}
+      {:extraction_complete, :validator, :validated_data, :ready, :running},
+      {:research_complete, :research, :market_research, :research, :running},
+      {:analysis_complete, :analysis, :business_analysis, :proposal, :running},
+      {:systems_complete, :systems, :systems_strategy, :strategy, :running},
+      {:tech_strategy_complete, :tech_strategy, :tech_strategy, :delivered, :idle}
     ]
 
     outputs = [
@@ -517,18 +523,19 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     ]
 
     {run, request} =
-      Enum.reduce(Enum.with_index(expected, 1), {nil, nil}, fn {{event, stage, field, status},
-                                                                version},
+      Enum.reduce(Enum.with_index(expected, 1), {nil, nil}, fn {{event, stage, field, lifecycle,
+                                                                 status}, version},
                                                                {run, request} ->
         assert_receive {^event, payload}, 1_000
         assert payload.stage == stage
         assert payload.status == status
+        assert payload.lifecycle_stage == lifecycle
         assert payload.boundary_version == version
         assert payload.mode == :automatic
         assert is_binary(payload.run_ref) and is_binary(payload.request_ref)
         if run, do: assert(payload.run_ref == run and payload.request_ref == request)
         record = Conversations.get_for_user(id, user.id)
-        assert record.status == to_string(status)
+        assert record.status == status
         assert length(payload.messages) == length(Conversations.list_messages(id))
         assert record.validated_data["_pipeline"]["boundary_version"] == version
         assert Map.has_key?(payload, field)
@@ -567,30 +574,45 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       mode: :manual
     })
 
-    assert_receive {:extraction_complete, %{status: :active, mode: :manual}}, 1_000
+    assert_receive {:extraction_complete,
+                    %{status: :idle, lifecycle_stage: :ready, mode: :manual}},
+                   1_000
+
     refute_receive {:provider, _, _, _}, 30
     assert :accepted = GenServer.call(pid, {:run_stage, :research, run, request})
     assert :accepted = GenServer.call(pid, {:run_stage, :research, run, request})
     assert_receive {:provider, worker, "researcher", _}, 1_000
     reply(worker, research())
-    assert_receive {:research_complete, %{status: :active, mode: :manual}}, 1_000
+
+    assert_receive {:research_complete,
+                    %{status: :idle, lifecycle_stage: :research, mode: :manual}},
+                   1_000
+
     record = Conversations.get_for_user(id, user.id)
-    assert record.status == "active"
+    assert record.status == :idle
     assert record.validated_data["_pipeline"]["pending_stage"] == "analysis"
     refute_receive {:provider, _, _, _}, 30
     send(pid, {:run_stage, :research})
     refute_receive {:research_complete, _}, 30
   end
 
-  test "waiting validation is durably active with needs_data event only", %{id: id, user: user} do
+  test "waiting validation is durably idle at validating with an idle event", %{
+    id: id,
+    user: user
+  } do
     Conversation.send_message(id, %{country: "Spain"})
 
     assert_receive {:extraction_complete,
-                    %{status: :needs_data, stage: :validator, missing_fields: fields}},
+                    %{
+                      status: :idle,
+                      lifecycle_stage: :validating,
+                      stage: :validator,
+                      missing_fields: fields
+                    }},
                    1_000
 
     assert fields != []
-    assert Conversations.get_for_user(id, user.id).status == "active"
+    assert Conversations.get_for_user(id, user.id).status == :idle
   end
 
   test "a message after delivery that changes facts keeps results", %{
@@ -736,7 +758,13 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert_receive {:provider, worker, "validator", _}, 1_000
     send(worker, :crash)
 
-    assert_receive {:error, %{status: :error, reason: {:stage_failed, :worker_failed}} = payload},
+    assert_receive {:error,
+                    %{
+                      status: :error,
+                      lifecycle_stage: :validating,
+                      reason: {:stage_failed, :worker_failed}
+                    } =
+                      payload},
                    1_000
 
     # Exactly one terminal event: no retry, no second error, and no
@@ -756,7 +784,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert error_message.metadata["type"] == "error"
     assert error_message.metadata["stage"] == "validator"
     assert error_message.metadata["reason"] == "worker_failed"
-    assert Conversations.get_for_user(id, user.id).status == "error"
+    assert Conversations.get_for_user(id, user.id).status == :error
 
     # Sanitized: raw provider payloads, credentials and stacktraces never
     # reach the wire.
@@ -782,7 +810,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert_receive {:provider, validator, "validator", _}, 1_000
     assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "France"})
     reply(validator, data())
-    assert_receive {:extraction_complete, %{run_ref: ^run, mode: :manual, status: :active}}, 1_000
+    assert_receive {:extraction_complete, %{run_ref: ^run, mode: :manual, status: :idle}}, 1_000
     assert_receive {:extraction_complete, %{mode: :automatic, validated_data: facts}}, 1_000
     assert (facts[:country] || facts["country"]) == "France"
     assert Conversations.get_for_user(id, user.id).validated_data["country"] == "France"
@@ -813,7 +841,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       assert stage_of(id, user) == :validating
 
       reply(worker, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert_receive {:extraction_complete, %{status: :idle, lifecycle_stage: :validating}}, 1_000
       assert stage_of(id, user) == :validating
     end
 
@@ -823,7 +851,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       request = Ecto.UUID.generate()
 
       Conversation.send_message(id, manual_request(data(), run, request))
-      assert_receive {:extraction_complete, %{status: :active, mode: :manual}}, 1_000
+      assert_receive {:extraction_complete, %{status: :idle, mode: :manual}}, 1_000
       assert stage_of(id, user) == :ready
       assert :sys.get_state(pid).stage == :ready
 
@@ -853,7 +881,10 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
         end
 
       assert observed == [:research, :proposal, :strategy, :strategy]
-      assert_receive {:tech_strategy_complete, %{status: :completed}}, 1_000
+
+      assert_receive {:tech_strategy_complete, %{status: :idle, lifecycle_stage: :delivered}},
+                     1_000
+
       assert stage_of(id, user) == :delivered
     end
 
@@ -993,7 +1024,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       assert [_chat] = chat_messages(id)
       assert pipeline_snapshot(pid) == before_state
       assert record_snapshot(id, user) == before_record
-      assert before_record.stage == :delivered and before_record.status == "completed"
+      assert before_record.stage == :delivered and before_record.status == :idle
     end
 
     test "a message while research runs is stored, the stage completes and prompts exclude it",
@@ -1032,7 +1063,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       refute_pipeline_events()
 
       assert [_chat] = chat_messages(id)
-      assert Conversations.get_for_user(id, user.id).status == "error"
+      assert Conversations.get_for_user(id, user.id).status == :error
       assert stage_of(id, user) == :research
       assert pipeline_snapshot(pid) == before_state
     end
@@ -1041,12 +1072,12 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       Conversation.send_message(id, "Paid text naming Spain")
       assert_receive {:provider, worker, "validator", _}, 1_000
       reply(worker, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert_receive {:extraction_complete, %{status: :idle, lifecycle_stage: :validating}}, 1_000
 
       Conversation.send_message(id, "The market is fintech")
       assert_receive {:provider, worker, "validator", _}, 1_000
       reply(worker, %{business_market: "fintech"})
-      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert_receive {:extraction_complete, %{status: :idle, lifecycle_stage: :validating}}, 1_000
       assert stage_of(id, user) == :validating
       assert chat_messages(id) == []
     end
@@ -1056,13 +1087,13 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
       assert_receive {:provider, worker, "validator", _}, 1_000
       send(worker, :crash)
       assert_receive {:error, %{status: :error}}, 1_000
-      assert Conversations.get_for_user(id, user.id).status == "error"
+      assert Conversations.get_for_user(id, user.id).status == :error
 
       Conversation.send_message(id, "Second attempt naming Spain")
       assert_receive {:provider, worker, "validator", _}, 1_000
-      assert Conversations.get_for_user(id, user.id).status == "active"
+      assert Conversations.get_for_user(id, user.id).status == :idle
       reply(worker, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert_receive {:extraction_complete, %{status: :idle, lifecycle_stage: :validating}}, 1_000
       assert chat_messages(id) == []
     end
 

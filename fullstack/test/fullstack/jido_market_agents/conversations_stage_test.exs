@@ -220,24 +220,23 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStageTest do
       assert stage_of(record) == :inserted
     end
 
-    test "complete data with researching or error status is research", %{
-      user: user,
-      backfill: sql
-    } do
-      for status <- ["researching", "error"] do
-        record = insert_record(user, %{validated_data: complete_data(), status: status})
-        run_backfill_from_scratch(record, sql)
-        assert stage_of(record) == :research
-      end
+    # The backfill ran when `status` held the old vocabulary. The column now
+    # only holds `idle | running | error`, so only `error` can still be built.
+    test "complete data with error status is research", %{user: user, backfill: sql} do
+      record = insert_record(user, %{validated_data: complete_data(), status: :error})
+      run_backfill_from_scratch(record, sql)
+      assert stage_of(record) == :research
     end
 
-    test "complete data with analyzing status is ready, not research", %{
+    test "complete data with any other status is ready, not research", %{
       user: user,
       backfill: sql
     } do
-      record = insert_record(user, %{validated_data: complete_data(), status: "analyzing"})
-      run_backfill_from_scratch(record, sql)
-      assert stage_of(record) == :ready
+      for status <- [:idle, :running] do
+        record = insert_record(user, %{validated_data: complete_data(), status: status})
+        run_backfill_from_scratch(record, sql)
+        assert stage_of(record) == :ready
+      end
     end
 
     test "a market_research message makes it proposal", %{user: user, backfill: sql} do
@@ -262,19 +261,17 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStageTest do
       end
     end
 
-    test "tech_strategy or completed status makes it delivered", %{user: user, backfill: sql} do
-      for attrs <- [%{tech_strategy: %{"a" => 1}}, %{status: "completed"}] do
-        record = insert_record(user, attrs)
-        run_backfill_from_scratch(record, sql)
-        assert stage_of(record) == :delivered
-      end
+    test "tech_strategy makes it delivered", %{user: user, backfill: sql} do
+      record = insert_record(user, %{tech_strategy: %{"a" => 1}})
+      run_backfill_from_scratch(record, sql)
+      assert stage_of(record) == :delivered
     end
 
     test "first match wins", %{user: user, backfill: sql} do
       record =
         insert_record(user, %{
           validated_data: complete_data(),
-          status: "researching",
+          status: :running,
           business_analysis: %{"a" => 1},
           tech_strategy: %{"a" => 1}
         })
@@ -290,7 +287,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStageTest do
       run_backfill_from_scratch(strategy, sql)
       assert stage_of(strategy) == :strategy
 
-      proposal = insert_record(user, %{validated_data: complete_data(), status: "researching"})
+      proposal = insert_record(user, %{validated_data: complete_data(), status: :error})
       add_message(proposal, "assistant", %{"type" => "market_research"})
       run_backfill_from_scratch(proposal, sql)
       assert stage_of(proposal) == :proposal

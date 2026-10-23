@@ -52,7 +52,7 @@ defmodule Fullstack.JidoMarketAgents.TelemetryTest do
               conversation_id: "abc",
               run_ref: "run-1",
               mode: :manual,
-              status: :active,
+              status: :idle,
               result: :error,
               reason: {:parse_failed, "private customer facts"}
             },
@@ -62,7 +62,7 @@ defmodule Fullstack.JidoMarketAgents.TelemetryTest do
 
       assert log =~ "run=run-1"
       assert log =~ "mode=manual"
-      assert log =~ "status=active"
+      assert log =~ "status=idle"
       assert log =~ "parse_failed"
       refute log =~ "private customer facts"
     end

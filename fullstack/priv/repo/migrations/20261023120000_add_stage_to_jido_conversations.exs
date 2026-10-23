@@ -52,7 +52,9 @@ defmodule Fullstack.Repo.Migrations.AddStageToJidoConversations do
 
   @doc """
   Backfill SQL, first matching rule wins. Pure SQL so it never depends on
-  application modules. `where` narrows the rows (tests use it to scope one
+  application modules. `status` is compared as text so the SQL keeps running
+  after a later migration turned that column into the `conversation_status`
+  enum. `where` narrows the rows (tests use it to scope one
   record); the migration backfills every row.
   """
   def backfill_sql(where \\ "true") do
@@ -67,13 +69,13 @@ defmodule Fullstack.Repo.Migrations.AddStageToJidoConversations do
     """
     UPDATE jido_conversations c
     SET stage = (CASE
-      WHEN c.status = 'completed' OR c.tech_strategy IS NOT NULL THEN 'delivered'
+      WHEN c.status::text = 'completed' OR c.tech_strategy IS NOT NULL THEN 'delivered'
       WHEN c.systems_strategy IS NOT NULL OR c.business_analysis IS NOT NULL THEN 'strategy'
       WHEN EXISTS (
         SELECT 1 FROM jido_conversation_messages m
         WHERE m.conversation_id = c.id AND m.metadata ->> 'type' = 'market_research'
       ) THEN 'proposal'
-      WHEN (#{complete}) AND c.status IN ('researching', 'error') THEN 'research'
+      WHEN (#{complete}) AND c.status::text IN ('researching', 'error') THEN 'research'
       WHEN (#{complete}) THEN 'ready'
       WHEN EXISTS (
         SELECT 1 FROM jido_conversation_messages m

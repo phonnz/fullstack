@@ -625,13 +625,13 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       # First message: partial data
       p1 = send_and_await_extraction(id, %{country: "Spain"})
-      assert p1.status == :needs_data
+      assert p1.status == :idle
       last = List.last(p1.messages)
       assert last.content =~ "country" or last.content =~ "still need"
 
       # Second message: more data
       p2 = send_and_await_extraction(id, %{business_market: "fintech"})
-      assert p2.status == :needs_data
+      assert p2.status == :idle
       assert length(p2.messages) >= 4
     end
 
@@ -652,10 +652,10 @@ defmodule Fullstack.JidoMarketAgentsTest do
         )
 
       assert {:ok, :accepted, ^id} = JidoMarketAgents.send_message(id, data)
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :running}}, 2_000
 
       # Research may succeed or fail depending on MIMO availability
-      assert_receive {:research_complete, %{status: :analyzing}}, 2_000
+      assert_receive {:research_complete, %{status: :running}}, 2_000
     end
 
     test "multi-turn: accumulate fields then trigger research" do
@@ -682,7 +682,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
                  )
                )
 
-      assert_receive {:extraction_complete, %{status: :researching}}, 2_000
+      assert_receive {:extraction_complete, %{status: :running}}, 2_000
 
       # Research outcome depends on MIMO
       assert_receive msg, 60_000
@@ -707,7 +707,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       send_and_await_extraction(id, %{country: "Spain"})
 
-      assert {:ok, :active, messages} = JidoMarketAgents.resume(id)
+      assert {:ok, :idle, messages} = JidoMarketAgents.resume(id)
       assert is_list(messages)
     end
 
@@ -770,7 +770,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
       JidoMarketAgents.subscribe(id)
 
       p = send_and_await_extraction(id, %{country: "Spain"})
-      assert p.status == :needs_data
+      assert p.status == :idle
       assert is_list(p.messages)
       last = List.last(p.messages)
       assert last.role == :assistant
@@ -795,7 +795,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
                  )
                )
 
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :running}}, 2_000
     end
 
     test "payload always includes conversation_id matching the id" do
@@ -852,9 +852,9 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       p = send_and_await_extraction(id, %{country: "Spain"})
 
-      assert p.status == :needs_data
+      assert p.status == :idle
 
-      assert_receive {:sub2, {:extraction_complete, %{status: :needs_data}}}, 2_000
+      assert_receive {:sub2, {:extraction_complete, %{status: :idle}}}, 2_000
     end
   end
 
@@ -881,7 +881,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
                  )
                )
 
-      assert_receive {:extraction_complete, %{status: :researching}}, 2_000
+      assert_receive {:extraction_complete, %{status: :running}}, 2_000
 
       # Research may succeed or fail depending on MIMO; accept either
       msg =
@@ -892,7 +892,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
         end
 
       case msg do
-        {:research_complete, %{status: :analyzing}} ->
+        {:research_complete, %{status: :running}} ->
           # MIMO worked — test passes
           :ok
 
@@ -938,7 +938,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       p = send_and_await_extraction(id, %{country: "Spain"})
 
-      assert {:ok, :active, polled} = JidoMarketAgents.resume(id)
+      assert {:ok, :idle, polled} = JidoMarketAgents.resume(id)
       assert p.messages == polled
     end
 
@@ -969,7 +969,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
                  )
                )
 
-      assert_receive {:extraction_complete, %{status: :researching}}, 2_000
+      assert_receive {:extraction_complete, %{status: :running}}, 2_000
 
       msg =
         receive do
@@ -985,7 +985,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
             Registry.lookup(Fullstack.JidoMarketAgents.ConversationRegistry, id)
 
           assert_receive {:analyzer_blocked, ^conversation_owner, worker}, 2_000
-          assert {:ok, :analyzing, _} = JidoMarketAgents.resume(id)
+          assert {:ok, :running, _} = JidoMarketAgents.resume(id)
           send(worker, :finish)
           assert_receive {:error, %{stage: :analysis}}, 2_000
 
@@ -1023,11 +1023,11 @@ defmodule Fullstack.JidoMarketAgentsTest do
 
       # Turn 1
       p1 = send_and_await_extraction(id, %{country: "Spain", city: "Madrid"})
-      assert p1.status == :needs_data
+      assert p1.status == :idle
 
       # Turn 2
       p2 = send_and_await_extraction(id, %{business_market: "fintech"})
-      assert p2.status == :needs_data
+      assert p2.status == :idle
       assert length(p2.messages) > length(p1.messages)
 
       # Turn 3 — complete data
@@ -1044,7 +1044,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
                  )
                )
 
-      assert_receive {:extraction_complete, %{status: :researching}}, 2_000
+      assert_receive {:extraction_complete, %{status: :running}}, 2_000
     end
 
     test "two back-to-back sends both return :accepted and deliver two extractions" do

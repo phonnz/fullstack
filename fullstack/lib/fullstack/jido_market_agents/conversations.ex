@@ -282,12 +282,12 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   end
 
   @doc """
-  Updates a conversation's lifecycle state (`:status` and/or
-  `:validated_data`).
+  Updates a conversation's run health (`:status`) and/or `:validated_data`.
+  The lifecycle `:stage` is never written here; see `advance_stage/3`.
 
   ## Examples
 
-      iex> update_state(record, %{status: "researching"})
+      iex> update_state(record, %{status: :running})
       {:ok, %Record{}}
 
   """
@@ -570,9 +570,10 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
 
     data = Map.put(record.validated_data || %{}, "_pipeline", control)
 
+    # Manual stages park instead of running the next one automatically.
     status =
-      if transition["mode"] == "manual" and transition["status"] not in ["completed", "error"],
-        do: "active",
+      if transition["mode"] == "manual" and transition["status"] == "running",
+        do: "idle",
         else: transition["status"]
 
     descendants =

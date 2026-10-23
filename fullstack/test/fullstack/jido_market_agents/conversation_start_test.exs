@@ -78,7 +78,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationStartTest do
     test "rehydrates owned history after a runtime has stopped, for every persisted status" do
       user = user_fixture()
 
-      for status <- ~w(active researching completed error) do
+      for status <- ~w(idle running error) do
         {:ok, record} = Conversations.create(user.id, %{status: status})
         {:ok, message} = Conversations.append_message(record.id, %{role: "user", content: status})
         {:ok, old_pid} = Conversation.ensure_started(record.id, user.id)
