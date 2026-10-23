@@ -102,7 +102,7 @@ and left the five diagnosis fields `nil`.
   `raw_response` to the assistant message metadata in both the complete and incomplete
   branches when non-nil; broadcasts stay unchanged. Prove the persisted `Message`
   carries it for an LLM turn and omits it for a map-input turn.
-- [ ] T4 — Live verification with the sample message.
+- [x] T4 — Live verification with the sample message.
   (a) `MarketValidator.extract_fields/2` fills the six commercial fields and reports the
   five diagnosis fields missing. (b) `Conversations.start_or_resume/3` with the sample
   user persists an assistant message whose `metadata["raw_response"]` holds the reply and
@@ -115,8 +115,10 @@ and left the five diagnosis fields `nil`.
 - A `data`-envelope reply yields `{:error, {:parse_failed, :unrecognized_shape}}`; prior
   state is unchanged.
 - Validator assistant messages carry `metadata["raw_response"]` for LLM turns only.
-- `check_completeness/1`, `assessment/1` keys, the map fast path, and broadcast payloads
-  are unchanged.
+- `check_completeness/1`, `assessment/1` keys, the map fast path, and broadcast payload
+  keys are unchanged. Accepted deviation (T3): `payload.messages` carries the assistant
+  message with its `metadata.raw_response`, as it already carries `assessment`; it stays
+  server-side because the LiveViews render `content` only.
 - No log line includes prompt text, response values, or credentials.
 
 ## Checks
@@ -174,8 +176,22 @@ Format: `mix format --check-formatted` on changed files.
     key was added and the LiveViews render `content` only. Stripping it from the broadcast
     would require editing `broadcast/3`, outside the authorized files.
   - Commit: `feat(validator): persist the raw model reply on validator assistant messages`.
+- 2026-10-23 parent spot check: regression command re-run, 432 tests, 0 failures. Commits
+  `b78a175` and `f0fa061` contain only authorized files and no attribution trailer; the
+  unrelated dirty files are untouched.
+- 2026-10-23 T4 (parent, live MiMo `mimo-v2.6-pro`, sample message, PORT=4011).
+  - (a) `extract_fields/2` returned a flat top-level reply; the six commercial fields
+    were filled (country Mexico, city Mexico City, budget "300 euros", price "70 euros per
+    carpet of 1.5 m x 0.30 m") and `missing_fields` was exactly the five diagnosis fields.
+    `last_raw_response/1` returned the reply.
+  - (b) `Conversations.start_or_resume/3` for user `1eb26e40-…` created conversation
+    `e7b8e17b-73f7-44d9-b20c-db32d1659965`. The persisted assistant message has metadata
+    keys `assessment` and `raw_response` (flat JSON reply); the record is `active` and its
+    `validated_data` holds the six commercial fields with the diagnosis fields `nil`. The
+    pipeline stopped at the validator, as expected for incomplete data.
 
 ## Next step
 
-T2 is blocked on a decision about replies with zero field keys (see Progress and
-evidence). After that decision, T2, then T4 (parent live check).
+T2 is blocked on a decision about the rule for replies with zero field keys (see Progress
+and evidence). The live data-envelope failure no longer reproduces after T1, so T2 is now
+a defensive guard.
