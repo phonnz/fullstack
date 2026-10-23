@@ -56,6 +56,40 @@ defmodule Fullstack.JidoMarketAgents.Conversations.LifecycleTest do
     end
   end
 
+  describe "advance/2" do
+    test "returns the target only for the next adjacent stage" do
+      for {from, to} <- Enum.zip(@stages, tl(@stages)) do
+        assert Lifecycle.advance(from, to) == {:ok, to}
+      end
+    end
+
+    test "is a no-op for the same stage or any stage behind" do
+      for from <- @stages,
+          to <- @stages,
+          Enum.find_index(@stages, &(&1 == to)) <=
+            Enum.find_index(@stages, &(&1 == from)) do
+        assert Lifecycle.advance(from, to) == :noop
+      end
+    end
+
+    test "reports a skip instead of advancing" do
+      assert Lifecycle.advance(:inserted, :research) ==
+               {:error, {:invalid_transition, :inserted, :research}}
+
+      assert Lifecycle.advance(:research, :delivered) ==
+               {:error, {:invalid_transition, :research, :delivered}}
+    end
+  end
+
+  describe "before?/2" do
+    test "orders stages by lifecycle position" do
+      assert Lifecycle.before?(:research, :proposal)
+      assert Lifecycle.before?(:inserted, :delivered)
+      refute Lifecycle.before?(:proposal, :proposal)
+      refute Lifecycle.before?(:strategy, :research)
+    end
+  end
+
   describe "accepts_messages?/1" do
     test "is true only before research" do
       assert Enum.filter(@stages, &Lifecycle.accepts_messages?/1) ==

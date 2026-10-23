@@ -15,6 +15,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher, ExtractionOutput}
   alias Fullstack.JidoMarketAgents.Conversations
+  alias Fullstack.JidoMarketAgents.Conversations.Lifecycle
   alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, SystemsAgent, StrategyAgent}
 
   alias Fullstack.JidoMarketAgents.Agents.{
@@ -53,6 +54,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :pending_stage,
     :manual_lease,
     manual_release_pending: false,
+    stage: :inserted,
     validation_provider_free: false,
     last_commit_failed: false,
     task: nil,
@@ -190,6 +192,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
            %{
              record_id: record.id,
              status: restored_record_status(record),
+             stage: record.stage,
              mode: restored_record_mode(record),
              pending_stage: restored_stage(pipeline_control(record)["pending_stage"]),
              validated_data: record.validated_data,
@@ -388,11 +391,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   # stage (it is written atomically with the boundary), so inconsistent or
   # legacy evidence fails closed instead of scheduling work. Automatic
   # mode only: manual and legacy rows expose idle pending work without
-  # generating a successor, and error rows never auto-retry.
+  # generating a successor, and error rows never auto-retry. A stage whose
+  # lifecycle phase is behind the persisted `stage` is never resumed: the
+  # lifecycle only moves forward.
   defp maybe_enqueue_resume(state) do
     with {:run, stage} <- resume_point(state),
          true <- state.mode == :automatic,
-         true <- state.pending_stage == stage do
+         true <- state.pending_stage == stage,
+         true <- not Lifecycle.before?(stage_phase(stage), state.stage) do
       send(self(), {:run_stage, stage})
     end
 
@@ -430,6 +436,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       validator_agent: validator,
       researcher_agent: researcher,
       status: restored.status,
+      stage: restored.stage,
       mode: restored.mode,
       pending_stage: restored.pending_stage,
       run_ref: pipeline_control_from_data(restored.validated_data)["run_ref"],
@@ -788,7 +795,9 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
     # Only the owner writes. The transaction admits input plus correlation
     # before any paid provider task exists.
-    admitted = with {:ok, state} <- ensure_record(state), do: persist_owned_boundary(state, %{})
+    admitted =
+      with {:ok, state} <- ensure_record(state),
+           do: persist_owned_boundary(state, %{}, :validating)
 
     case admitted do
       {:ok, state} ->
@@ -941,7 +950,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp start_stage(state, stage, fun) do
     state = %{state | input_fingerprint: stage_input_fingerprint(state, stage)}
 
-    case persist_owned_boundary(state, %{}) do
+    case persist_owned_boundary(state, %{}, stage_phase(stage)) do
       {:ok, admitted} -> {:noreply, launch(admitted, stage, fun)}
       {:error, _} -> stage_failure(state, stage, :persistence_failed)
     end
@@ -1052,7 +1061,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       result: result,
       status: status,
       mode: state.mode,
-      pending_stage: next
+      pending_stage: next,
+      lifecycle_stage: if(stage == :tech_strategy, do: :delivered)
     }
 
     case commit_stage(state, transition) do
@@ -1147,6 +1157,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
            | messages: messages,
              persisted_count: length(messages),
              validated_data: snapshot.record.validated_data,
+             stage: snapshot.record.stage,
              boundary_version: pipeline_control(snapshot.record)["boundary_version"]
          }}
 
@@ -1154,6 +1165,12 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         error
     end
   end
+
+  # Lifecycle phase a pipeline stage runs in.
+  defp stage_phase(:research), do: :research
+  defp stage_phase(:analysis), do: :proposal
+  defp stage_phase(:systems), do: :strategy
+  defp stage_phase(:tech_strategy), do: :strategy
 
   defp result_key(:research), do: :market_research
   defp result_key(:analysis), do: :business_analysis
@@ -1376,7 +1393,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             pending_stage: :research
         }
 
-        state = commit_validation(state, changed)
+        state = commit_validation(state, changed, :ready)
 
         if state.last_commit_failed do
           stage_failure(last_durable, :validator, :persistence_failed)
@@ -1422,7 +1439,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             pending_stage: nil
         }
 
-        state = commit_validation(state, changed)
+        state = commit_validation(state, changed, nil)
 
         if state.last_commit_failed and not state.validation_provider_free do
           stage_failure(last_durable, :validator, :persistence_failed)
@@ -1464,13 +1481,13 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       digest(business_data(state)) != digest(data)
   end
 
-  defp commit_validation(state, changed) do
+  defp commit_validation(state, changed, target_stage) do
     attrs =
       if changed,
         do: %{business_analysis: nil, systems_strategy: nil, tech_strategy: nil},
         else: %{}
 
-    case persist_owned_boundary(state, attrs) do
+    case persist_owned_boundary(state, attrs, target_stage) do
       {:ok, state} ->
         state =
           if changed,
@@ -1492,9 +1509,15 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
-  defp persist_owned_boundary(%{user_id: nil} = state, _attrs), do: {:ok, state}
+  # `target_stage` is the lifecycle stage this boundary moves toward. It is
+  # applied in the same transaction, and only when it is the next adjacent
+  # stage (`Conversations.advance_stage/3`); at or behind the stored stage it
+  # is a no-op.
+  defp persist_owned_boundary(state, extra_attrs, target_stage \\ nil)
 
-  defp persist_owned_boundary(state, extra_attrs) do
+  defp persist_owned_boundary(%{user_id: nil} = state, _attrs, _target_stage), do: {:ok, state}
+
+  defp persist_owned_boundary(state, extra_attrs, target_stage) do
     result =
       safe_call(fn ->
         Fullstack.Repo.transaction(fn ->
@@ -1524,8 +1547,13 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             )
 
           case Conversations.update_state(record, attrs) do
-            {:ok, record} -> %{record: record, messages: Conversations.list_messages(record.id)}
+            {:ok, record} -> record
             {:error, _} -> Fullstack.Repo.rollback(:state_failed)
+          end
+          |> then(&Conversations.advance_stage(Fullstack.Repo, &1, target_stage))
+          |> case do
+            {:ok, record} -> %{record: record, messages: Conversations.list_messages(record.id)}
+            {:error, _} -> Fullstack.Repo.rollback(:stage_failed)
           end
         end)
       end)
@@ -1540,6 +1568,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
            | messages: messages,
              persisted_count: length(messages),
              validated_data: snapshot.record.validated_data,
+             stage: snapshot.record.stage,
              last_commit_failed: false
          }}
 

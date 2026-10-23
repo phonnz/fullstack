@@ -58,8 +58,8 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
 
 ## Open questions (ask one at a time)
 
-- Q1: Does `ready` wait for an explicit user action before research starts, or does
-  automatic mode keep moving straight to `research` as today? Blocks T2.
+- Q1 (resolved, user 2026-10-23): automatic. `ready` moves straight to `research` as
+  today; no user action gates research.
 - Q2: A user message at `research` or later: reject it (`{:error, :conversation_locked}`,
   nothing stored) or store it as chat only? Blocks T3.
 
@@ -81,10 +81,16 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
     present in `validated_data` and `status` is `researching` or `error` -> `research`;
     the ten required fields are all present -> `ready`; any user message exists ->
     `validating`; otherwise `inserted`.
-- [ ] T2 — Pipeline writes the stage (slice 2). Blocked on Q1. Intake moves `inserted` to
+- [x] T2 — Pipeline writes the stage (slice 2). Intake moves `inserted` to
   `validating`; a complete validation moves to `ready`; each stage start moves to its
   phase; tech strategy success moves to `delivered`. All writes go through the existing
   locked persistence paths. Rehydration restores `stage` and never resumes behind it.
+  Route: delegated direct (preparation trigger: `conversation.ex` and persistence paths).
+  - Advance-only writes: a stage write happens only when the target is the next adjacent
+    stage; a target at or behind the current stage is a no-op, never an error. Until T3
+    gates messages, a message at `research` or later still re-runs the old loop, but
+    `stage` stays where it is instead of hitting the trigger.
+  - No new broadcast contract and no UI change in this slice.
 - [ ] T3 — Message gating (slice 3). Blocked on Q2. `drain_queue` processes a user message
   only when `Lifecycle.accepts_messages?/1`; the `error`-reset retry applies only before
   `research`.
@@ -109,10 +115,16 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
   files by explicit path only.
 - Strict TDD: enabled (user global config). Runner: `mix test`.
 - RDD: off (decided by global).
-- Delivery: `ask-on-risk`. Forecast about 700-900 authored changed lines over four
-  slices, above the 400-line budget, so each task is one pull request slice. The chain
-  strategy (`stacked-to-main` or `feature-branch-chain`) is asked before the first pull
-  request; nothing is pushed without the user.
+- Delivery: `ask-on-risk`, chain strategy `feature-branch-chain` (user, 2026-10-23).
+  Each task is one child pull request slice; nothing is pushed without the user.
+  - Tracker (integration, draft/no-merge PR to `main`): `ft-conversation-lifecycle` at
+    `bf53cfd`. Its PR also carries the unpushed `ft-maestro-agents` validator commits
+    unless that branch lands on `main` first.
+  - Slice 1 (T1): `ft-conversation-lifecycle-01-stage-field`, base the tracker, commit
+    `4233ae1`.
+  - Slice 2 (T2): `ft-conversation-lifecycle-02-pipeline-stage`, base slice 1.
+  - Slice 3 (T3): `ft-conversation-lifecycle-03-message-gating`, base slice 2.
+  - Slice 4 (T4): `ft-conversation-lifecycle-04-status-health`, base slice 3.
 - Migrations run only against the test database. The dev database is migrated by the
   user (`mix ecto.migrate`), never by an agent.
 - Commits: Conventional Commits, no AI attribution trailer.
@@ -152,9 +164,35 @@ Format: `mix format --check-formatted` on changed files.
     'market_research'`, superseded ones included. Ten fields: five commercial
     (`country business_market initial_budget final_product_proposal product_price`) plus
     the five `ExtractionOutput.diagnosis_fields/0`.
-  - Native assessment: risk `medium`, RDD off, so writer self-verification plus parent
+  - Commit `4233ae1`. Native assessment: risk `medium`, RDD off, so writer self-verification plus parent
     spot check.
+- 2026-10-23: chain strategy `feature-branch-chain` chosen. T1 moved to its slice branch
+  (`ft-conversation-lifecycle-01-stage-field`); the tracker branch pointer reset to
+  `bf53cfd` (local only, nothing was pushed).
+- 2026-10-23: T2 implemented, verified, and committed on
+  `ft-conversation-lifecycle-02-pipeline-stage`. Route: delegated direct.
+  - Writes: `drain_queue` -> `:validating`; complete validation (`commit_validation`) ->
+    `:ready`; `start_stage` -> phase via `stage_phase/1`; `tech_strategy` success ->
+    `:delivered` inside `persist_stage_transition` (row lock plus `boundary_version`
+    check). Boundary writes ride `persist_owned_boundary`, which runs in a transaction
+    but does not take `FOR UPDATE`; single-owner GenServer writes keep it safe today.
+    All writes go through `Conversations.advance_stage/3` and `Lifecycle.advance/2`.
+  - Skip targets (only seen with fixtures created at `:inserted` that resume at
+    analysis) log a warning and write nothing; the boundary still commits.
+  - Rehydration copies `record.stage` and never resumes a pipeline stage whose phase is
+    behind it (`maybe_enqueue_resume`); `resume_point` only yields the four pipeline
+    stages, so `stage_phase/1` is total there (parent checked).
+  - User-less conversations (`user_id: nil`) keep `:inserted` in memory; nothing persists.
+  - TDD: RED observed per group (lifecycle 4 failing `UndefinedFunctionError`; pipeline
+    7/7 failing on stale `:inserted`; rehydration `KeyError :stage`), then GREEN.
+  - Checks: focused six files 126 tests, 0 failures (parent re-run); regression 677
+    tests, 7 failures, exactly the baseline set; format clean; no compile warning from
+    touched files.
+  - More flaky tests, pre-existing (failed 2 of 12 runs with T2 stashed):
+    `ConversationPipelineTest` "an incomplete LLM turn persists the raw reply..." and
+    "worker failure is contained and terminal"; both read `List.last(list_messages)`
+    and `inserted_at` has one-second resolution.
 
 ## Next step
 
-Q1 is asked (blocks T2). Commit identity for T1 is recorded in the next update.
+Ask Q2 (blocks T3).

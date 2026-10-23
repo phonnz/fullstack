@@ -981,4 +981,80 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       assert count_after_second_turn == count_before_kill + 2
     end
   end
+
+  describe "lifecycle stage" do
+    defp stage_record(user, stage, pending) do
+      control = %{
+        "mode" => "automatic",
+        "pending_stage" => pending,
+        "boundary_version" => 1,
+        "run_ref" => Ecto.UUID.generate(),
+        "request_ref" => Ecto.UUID.generate()
+      }
+
+      {:ok, created} = Conversations.create(user.id)
+
+      {:ok, record} =
+        Conversations.update_state(created, %{
+          validated_data: Map.put(complete_facts(), "_pipeline", control)
+        })
+
+      Repo.update_all(from(r in Conversations.Record, where: r.id == ^record.id),
+        set: [stage: stage]
+      )
+
+      record
+    end
+
+    defp probe_backends do
+      config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+      Application.put_env(
+        :fullstack,
+        Fullstack.JidoMarketAgents,
+        Enum.reduce([:researcher, :analyzer, :systems, :strategy], config, fn role, acc ->
+          Keyword.put(
+            acc,
+            :"#{role}_backend",
+            {BlockingProbeBackend, owner: self(), model: to_string(role)}
+          )
+        end)
+      )
+
+      on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    end
+
+    test "restoration carries the persisted stage" do
+      user = user_fixture()
+
+      for stage <- Fullstack.JidoMarketAgents.Conversations.Lifecycle.stages() do
+        record = stage_record(user, stage, nil)
+        {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+        assert :sys.get_state(pid).stage == stage
+      end
+    end
+
+    test "resuming a stage at or ahead of the persisted stage advances it" do
+      probe_backends()
+      user = user_fixture()
+      record = stage_record(user, :ready, "research")
+
+      {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+      assert_receive {:provider, "researcher", _}, 2_000
+      assert Conversations.get_for_user(record.id, user.id).stage == :research
+      assert :sys.get_state(pid).stage == :research
+    end
+
+    test "a pending stage behind the persisted stage is not resumed and the stage stays" do
+      user = user_fixture()
+      record = stage_record(user, :strategy, "research")
+
+      # init enqueues any resume before this call is served, so a launched
+      # stage would already hold a task here.
+      {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+      assert :sys.get_state(pid).stage == :strategy
+      assert :sys.get_state(pid).task == nil
+      assert Conversations.get_for_user(record.id, user.id).stage == :strategy
+    end
+  end
 end

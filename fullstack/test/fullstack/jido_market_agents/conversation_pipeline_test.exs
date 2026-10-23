@@ -739,4 +739,148 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     refute List.last(messages)["content"] =~ "Spain"
     reply(researcher, research())
   end
+
+  describe "lifecycle stage" do
+    defp stage_of(id, user), do: Conversations.get_for_user(id, user.id).stage
+
+    defp manual_request(message, run, request),
+      do: %{
+        __pipeline_request__: true,
+        message: message,
+        run_ref: run,
+        request_ref: request,
+        mode: :manual
+      }
+
+    test "the first processed user message persists validating and incomplete validation keeps it",
+         %{id: id, user: user} do
+      assert stage_of(id, user) == :inserted
+
+      Conversation.send_message(id, "Paid text naming Spain")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      assert stage_of(id, user) == :validating
+
+      reply(worker, %{country: "Spain"})
+      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+      assert stage_of(id, user) == :validating
+    end
+
+    test "a complete validation reaches ready, then research when research starts",
+         %{id: id, pid: pid, user: user} do
+      run = Ecto.UUID.generate()
+      request = Ecto.UUID.generate()
+
+      Conversation.send_message(id, manual_request(data(), run, request))
+      assert_receive {:extraction_complete, %{status: :active, mode: :manual}}, 1_000
+      assert stage_of(id, user) == :ready
+      assert :sys.get_state(pid).stage == :ready
+
+      assert :accepted = GenServer.call(pid, {:run_stage, :research, run, request})
+      assert_receive {:provider, worker, "researcher", _}, 1_000
+      assert stage_of(id, user) == :research
+      assert :sys.get_state(pid).stage == :research
+      reply(worker, research())
+      assert_receive {:research_complete, _}, 1_000
+    end
+
+    test "a full run passes through every stage in order and ends delivered",
+         %{id: id, user: user} do
+      Conversation.send_message(id, data())
+
+      observed =
+        for {role, output} <- [
+              {"researcher", research()},
+              {"analyzer", analysis()},
+              {"systems", systems()},
+              {"strategy", tech()}
+            ] do
+          assert_receive {:provider, worker, ^role, _}, 1_000
+          stage = stage_of(id, user)
+          reply(worker, output)
+          stage
+        end
+
+      assert observed == [:research, :proposal, :strategy, :strategy]
+      assert_receive {:tech_strategy_complete, %{status: :completed}}, 1_000
+      assert stage_of(id, user) == :delivered
+    end
+
+    test "a failing stage leaves the stage at its phase", %{id: id, user: user} do
+      Conversation.send_message(id, data())
+      assert_receive {:provider, worker, "researcher", _}, 1_000
+      reply(worker, research())
+      assert_receive {:provider, worker, "analyzer", _}, 1_000
+      assert stage_of(id, user) == :proposal
+      send(worker, :crash)
+
+      assert_receive {:error, %{stage: :analysis, durability: :committed}}, 1_000
+      assert stage_of(id, user) == :proposal
+    end
+
+    test "a failing research leaves the stage at research", %{id: id, user: user} do
+      Conversation.send_message(id, data())
+      assert_receive {:provider, worker, "researcher", _}, 1_000
+      send(worker, :crash)
+
+      assert_receive {:error, %{stage: :research, durability: :committed}}, 1_000
+      assert stage_of(id, user) == :research
+    end
+
+    test "a message after delivery re-runs the old loop without moving the stage",
+         %{id: id, user: user} do
+      Conversation.send_message(id, data())
+
+      for {role, output} <- [
+            {"researcher", research()},
+            {"analyzer", analysis()},
+            {"systems", systems()},
+            {"strategy", tech()}
+          ] do
+        assert_receive {:provider, worker, ^role, _}, 1_000
+        reply(worker, output)
+      end
+
+      assert_receive {:tech_strategy_complete, _}, 1_000
+      assert stage_of(id, user) == :delivered
+
+      Conversation.send_message(id, %{country: "France"})
+      assert_receive {:stage_invalidated, _}, 1_000
+      assert_receive {:provider, worker, "researcher", _}, 1_000
+      assert stage_of(id, user) == :delivered
+      reply(worker, research())
+      assert_receive {:provider, worker, "analyzer", _}, 1_000
+      assert stage_of(id, user) == :delivered
+      reply(worker, analysis())
+      refute_receive {:error, _}, 50
+      assert stage_of(id, user) == :delivered
+    end
+
+    test "a message at proposal re-runs validation and research without a backward move",
+         %{id: id, pid: pid, user: user} do
+      run = Ecto.UUID.generate()
+      request = Ecto.UUID.generate()
+      Conversation.send_message(id, manual_request(data(), run, request))
+      assert_receive {:extraction_complete, %{mode: :manual}}, 1_000
+
+      assert :accepted = GenServer.call(pid, {:run_stage, :research, run, request})
+      assert_receive {:provider, worker, "researcher", _}, 1_000
+      reply(worker, research())
+      assert_receive {:research_complete, _}, 1_000
+
+      assert :accepted = GenServer.call(pid, {:run_stage, :analysis, run, request})
+      assert_receive {:provider, worker, "analyzer", _}, 1_000
+      reply(worker, analysis())
+      assert_receive {:analysis_complete, _}, 1_000
+      assert stage_of(id, user) == :proposal
+
+      Conversation.send_message(id, %{country: "France"})
+      assert_receive {:stage_invalidated, _}, 1_000
+      assert_receive {:provider, worker, "researcher", _}, 1_000
+      assert stage_of(id, user) == :proposal
+      reply(worker, research())
+      assert_receive {:research_complete, _}, 1_000
+      refute_receive {:error, _}, 50
+      assert stage_of(id, user) == :proposal
+    end
+  end
 end
