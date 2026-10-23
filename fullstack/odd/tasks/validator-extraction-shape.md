@@ -95,7 +95,7 @@ and left the five diagnosis fields `nil`.
   `{:error, {:parse_failed, :unrecognized_shape}}` and leaves agent state unchanged. Emit
   one `Logger.warning` naming only the sorted top-level keys, never values. RED fixture:
   the exact `data`-envelope reply from the evidence above.
-- [ ] T3 — Persist the raw reply per turn.
+- [x] T3 — Persist the raw reply per turn.
   The LLM path of `extract_fields/2` records the raw content as `raw_response` in its new
   extraction history entry (the map path records `nil`). Add
   `MarketValidator.last_raw_response/1`. `Conversation.process_extraction/1` adds
@@ -144,7 +144,38 @@ Format: `mix format --check-formatted` on changed files.
   - Prior state is now `{"prior_facts": <known facts only>, "still_missing": [...]}`, labelled
     context only and not an output template; `sufficient` is not sent.
   - Commit: `fix(validator): state the extraction output shape and send prior state as context`.
+- 2026-10-23 T2 BLOCKED (decision gap, not changed). Applying the specified guard (no top-level
+  field key, so `{:error, :unrecognized_shape}`) as a scratch experiment, reverted before any
+  commit, made existing tests fail because they accept a reply with zero field keys as "no new
+  facts": `market_validator_test.exs` "output language capture" (the `explicit switch` fake
+  reply is only `output_language` plus `language_switch_requested`),
+  `facade_send_message_test.exs:92` (stub reply `{}`, expects `extraction_complete`), and
+  `jido_market_agents_test.exs:542` "empty JSON preserves previous fields" (reply `{}`; this is
+  a dirty file outside the authorized set). `conversation_pipeline_test.exs:614` also failed
+  once in that broad run but passes alone, so it is timing flakiness unrelated to the guard.
+  T2 needs a parent decision on the rule before any production edit.
+- 2026-10-23 T3 (delegated writer, independent of T2). Strict TDD, runner `mix test`.
+  - RED: after adding three validator tests and four pipeline tests, the focused set ran 61
+    tests, 4 failures: `MarketValidator.last_raw_response/1` undefined (2) and
+    `metadata["raw_response"]` absent from the persisted assistant message in the incomplete
+    and complete branches (2). The map-turn and no-leak guards passed already, as expected.
+  - GREEN: focused command 62 tests, 0 failures (one extra pipeline test, the map turn after
+    an LLM turn does not inherit the previous reply, was added after GREEN as a regression
+    guard and has no separate RED). Regression command
+    (`test/fullstack/jido_market_agents` plus `jido_market_agents_test.exs`): 432 tests,
+    0 failures (baseline 420 + 12 new). `mix format --check-formatted` on the four changed
+    files: clean.
+  - Stale-reply check: `process_extraction/1` has two callers (map input right after
+    `extract_fields/2`, and the validator task result), and every successful
+    `extract_fields/2` appends its own history entry last, so `last_raw_response/1` is the
+    current turn's reply or `nil`.
+  - Note: `broadcast/3` sends `state.messages`, so `payload.messages` now carries the assistant
+    message with `metadata.raw_response`, like `assessment` already does. No dedicated payload
+    key was added and the LiveViews render `content` only. Stripping it from the broadcast
+    would require editing `broadcast/3`, outside the authorized files.
+  - Commit: `feat(validator): persist the raw model reply on validator assistant messages`.
 
 ## Next step
 
-T2 (unrecognized-shape guard).
+T2 is blocked on a decision about replies with zero field keys (see Progress and
+evidence). After that decision, T2, then T4 (parent live check).

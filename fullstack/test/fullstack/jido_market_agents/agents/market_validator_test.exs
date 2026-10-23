@@ -54,6 +54,26 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     def validate_config(_opts), do: :ok
   end
 
+  # Fake validator backend replying with a fenced JSON document, so the
+  # stored raw reply can be told apart from the parsed one.
+  defmodule RawFakeBackend do
+    @moduledoc false
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+
+    @raw_reply "```json\n{\"country\": \"Spain\", \"justification\": \"Names Spain.\"}\n```"
+
+    def raw_reply, do: @raw_reply
+
+    @impl true
+    def chat_completion(_messages, _opts), do: {:ok, @raw_reply}
+
+    @impl true
+    def capabilities(_opts), do: [:json_object]
+
+    @impl true
+    def validate_config(_opts), do: :ok
+  end
+
   setup do
     original = Application.get_env(@app, @scope, [])
 
@@ -284,6 +304,45 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     assert prompt =~ "null"
     assert prompt =~ "explicitly says"
     refute prompt =~ "When the user does not provide a diagnosis answer, set"
+  end
+
+  describe "raw model reply capture" do
+    test "an LLM turn records the unparsed reply and last_raw_response/1 returns it" do
+      put_validator_backend(RawFakeBackend)
+
+      assert MarketValidator.last_raw_response(MarketValidator.new()) == nil
+
+      {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), "some text")
+
+      assert MarketValidator.last_raw_response(agent) == RawFakeBackend.raw_reply()
+      assert agent.state.country == "Spain"
+      assert [%{raw_response: raw}] = agent.state.extraction_history
+      assert raw == RawFakeBackend.raw_reply()
+    end
+
+    test "a map turn records nil and never inherits the previous LLM reply" do
+      put_validator_backend(RawFakeBackend)
+
+      {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), "some text")
+      assert MarketValidator.last_raw_response(agent) == RawFakeBackend.raw_reply()
+
+      {:ok, agent} = MarketValidator.extract_fields(agent, %{city: "Madrid"})
+
+      assert MarketValidator.last_raw_response(agent) == nil
+      assert [%{raw_response: raw}, %{raw_response: nil}] = agent.state.extraction_history
+      assert raw == RawFakeBackend.raw_reply()
+    end
+
+    test "raw reply never enters assessments or business data" do
+      put_validator_backend(RawFakeBackend)
+
+      {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), "some text")
+      report = MarketValidator.assessment(agent)
+
+      refute Map.has_key?(report, :raw_response)
+      refute Map.has_key?(report.data, :raw_response)
+      refute inspect(report) =~ "```json"
+    end
   end
 
   describe "prior state context message" do

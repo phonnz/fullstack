@@ -140,6 +140,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       {:ok, content} ->
         case parse_llm_json(content) do
           {:ok, extracted, meta} ->
+            meta = Map.put(meta, :raw_response, content)
             merge_extracted(agent, extracted, meta, meta.language_switch_requested, message)
 
           {:error, {:invalid_diagnosis, _field, _code}} = error ->
@@ -214,6 +215,20 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       model_justification: Map.get(agent.state, :model_justification),
       next_question: if(sufficient, do: nil, else: format_missing_prompt(missing))
     }
+  end
+
+  @doc """
+  Returns the raw model reply recorded by the latest successful extraction.
+
+  Only text turns record a reply; map input and an agent without history
+  return `nil`. The reply is untrusted diagnostic text, never business data.
+  """
+  @spec last_raw_response(Jido.Agent.t()) :: String.t() | nil
+  def last_raw_response(agent) do
+    case agent.state |> Map.get(:extraction_history, []) |> List.last() do
+      %{raw_response: raw_response} -> raw_response
+      _no_entry -> nil
+    end
   end
 
   @doc """
@@ -327,7 +342,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       source: source_message,
       extracted: updates,
       status: :ok,
-      assessment: assessment(%{agent | state: replacement})
+      assessment: assessment(%{agent | state: replacement}),
+      raw_response: Map.get(meta, :raw_response)
     }
 
     history = Map.get(agent.state, :extraction_history, []) ++ [history_entry]

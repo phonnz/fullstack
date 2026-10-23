@@ -101,6 +101,70 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
     assert message.metadata["assessment"]["sufficient"] == false
   end
 
+  describe "raw model reply persistence" do
+    test "an incomplete LLM turn persists the raw reply on the assistant message", %{id: id} do
+      raw = ~s({"country": "Spain", "justification": "Names Spain."})
+
+      Conversation.send_message(id, "Paid text naming Spain")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      send(worker, {:reply, {:ok, raw}})
+
+      assert_receive {:extraction_complete, %{status: :needs_data} = payload}, 1_000
+
+      message = List.last(Conversations.list_messages(id))
+      assert message.role == "assistant"
+      assert message.metadata["raw_response"] == raw
+      assert message.metadata["assessment"]["data"]["country"] == "Spain"
+
+      # broadcast payload keys and the broadcast assessment keep their shape
+      refute Map.has_key?(payload, :raw_response)
+      refute Map.has_key?(payload.assessment, :raw_response)
+    end
+
+    test "a complete LLM turn persists the raw reply on the assistant message", %{id: id} do
+      raw = Jason.encode!(Map.put(data(), :justification, "All answers were stated."))
+
+      Conversation.send_message(id, "Paid text with every answer")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      send(worker, {:reply, {:ok, raw}})
+
+      assert_receive {:extraction_complete, payload}, 1_000
+      assert payload.assessment.sufficient
+      refute Map.has_key?(payload, :raw_response)
+
+      message = Enum.find(Conversations.list_messages(id), &(&1.role == "assistant"))
+      assert message.metadata["raw_response"] == raw
+      assert message.metadata["assessment"]["sufficient"] == true
+    end
+
+    test "a map turn after an LLM turn does not inherit the previous raw reply", %{id: id} do
+      raw = ~s({"country": "Spain"})
+
+      Conversation.send_message(id, "Paid text naming Spain")
+      assert_receive {:provider, worker, "validator", _}, 1_000
+      send(worker, {:reply, {:ok, raw}})
+      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+
+      Conversation.send_message(id, %{city: "Madrid"})
+      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+
+      assistants = id |> Conversations.list_messages() |> Enum.filter(&(&1.role == "assistant"))
+      assert [first, second] = assistants
+      assert first.metadata["raw_response"] == raw
+      refute Map.has_key?(second.metadata, "raw_response")
+      assert second.metadata["assessment"]["data"]["city"] == "Madrid"
+    end
+
+    test "a map-input turn omits raw_response", %{id: id} do
+      Conversation.send_message(id, %{country: "Spain"})
+      assert_receive {:extraction_complete, %{status: :needs_data}}, 1_000
+
+      message = List.last(Conversations.list_messages(id))
+      assert message.metadata["assessment"]["data"]["country"] == "Spain"
+      refute Map.has_key?(message.metadata, "raw_response")
+    end
+  end
+
   test "blocked provider keeps reads admission and close responsive and preserves queued turns",
        %{id: id, pid: pid, user: user} do
     Conversation.send_message(id, data())

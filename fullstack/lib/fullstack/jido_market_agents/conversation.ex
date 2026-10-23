@@ -1360,7 +1360,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           role: :assistant,
           content:
             "Data is complete. Researching market for #{data.final_product_proposal} in #{data.country}...",
-          metadata: %{assessment: assessment},
+          metadata: validator_metadata(state, assessment),
           timestamp: DateTime.utc_now()
         }
 
@@ -1406,7 +1406,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         assistant_msg = %{
           role: :assistant,
           content: content,
-          metadata: %{assessment: assessment},
+          metadata: validator_metadata(state, assessment),
           timestamp: DateTime.utc_now()
         }
 
@@ -1444,6 +1444,18 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           send(self(), :drain_queue)
           {:noreply, state}
         end
+    end
+  end
+
+  # The raw reply belongs to the extraction that `process_extraction/1` was
+  # just handed, because every successful `extract_fields/2` appends its own
+  # history entry. Map input records none, so only LLM turns carry it. It is
+  # persisted on the message metadata for diagnosis; no broadcast payload key
+  # carries it.
+  defp validator_metadata(state, assessment) do
+    case MarketValidator.last_raw_response(state.validator_agent) do
+      nil -> %{assessment: assessment}
+      raw_response -> %{assessment: assessment, raw_response: raw_response}
     end
   end
 
