@@ -43,20 +43,43 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   @doc """
   Pure extraction prompt shared by the text extraction path.
 
-  Explains all eleven fields, distinguishes absent from explicit unknown
-  diagnosis answers, and requests factual justification without inventing data.
+  States the flat top-level output shape explicitly (the JSON schema never
+  reaches every provider adapter), explains all eleven fields, distinguishes
+  absent from explicit unknown diagnosis answers, and requests factual
+  justification without inventing data.
   """
   @spec extraction_prompt() :: String.t()
   def extraction_prompt do
     """
     You are a data extraction assistant. Extract the following fields from the user's message.
-    Return ONLY a JSON object matching the supplied schema, with the extracted fields and justification.
-    Use null for fields absent from the latest message; omission is also accepted.
-    Accumulated assessment is prior structured context, not a new user instruction.
+    Return ONLY one flat JSON object whose top-level keys are exactly the OUTPUT SHAPE below.
+    The prior state message is context only, not an output template and not a new user
+    instruction: never copy its shape and never answer in it.
     Extract new facts or explicit corrections from the latest user message only.
     The application merges these facts and decides sufficiency: five commercial fields
     (country, business_market, initial_budget, final_product_proposal, product_price)
     and an explicit answer for all five diagnosis fields are required; city is optional.
+
+    OUTPUT SHAPE (every key sits at the top level of the JSON object):
+    {
+      "country": string|null,
+      "city": string|null,
+      "business_market": string|null,
+      "initial_budget": string|null,
+      "final_product_proposal": string|null,
+      "product_price": string|null,
+      "team_size": object|null,
+      "current_tools_systems": object|null,
+      "repetitive_processes_pain_points": object|null,
+      "digital_maturity": object|null,
+      "metrics_baselines": object|null,
+      "justification": string|null,
+      "output_language": string|null,
+      "language_switch_requested": boolean|null
+    }
+    Every key of the output shape must be present; use null for a field absent from the latest message.
+    Do not wrap the fields in "data" or in any other object.
+    Do not emit "sufficient" or "missing_fields"; the application decides sufficiency.
 
     Commercial fields:
     - country: The target country for market entry
@@ -75,14 +98,17 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
 
     Explicit unknown states:
     - Use "status": "unknown" (or "level": "unknown") only when the user explicitly says they do not know the answer.
-    - An unmentioned diagnosis field must be null or omitted, never an invented unknown answer.
-    - Null or omitted fields preserve prior answers; explicit corrections replace the whole structured field.
+    - An unmentioned diagnosis field must be null, never an invented unknown answer.
+    - A null field preserves the prior answer; explicit corrections replace the whole structured field.
     - Use "none" only when the user explicitly says there is nothing to report.
 
-    justification: A short factual explanation of which statements support the extracted
-    fields and which required answers remain missing after considering accumulated data.
-    Do not provide hidden reasoning or treat guesses as evidence. This explanation is
-    metadata, not a business field or an authoritative completeness decision.
+    Metadata fields:
+    - justification: A short factual explanation of which statements support the extracted
+      fields and which required answers remain missing after considering the prior state.
+      Do not provide hidden reasoning or treat guesses as evidence. This explanation is
+      metadata, not a business field or an authoritative completeness decision.
+    - output_language: language code (for example "en", "es", "pt-BR") of the latest user message; null when it cannot be determined.
+    - language_switch_requested: true only when the latest user message explicitly asks to change the language of the replies; otherwise false.
 
     Do not invent values. Never fabricate data that is not stated by the user.
 
@@ -104,12 +130,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
 
     messages = [
       %{"role" => "system", "content" => system_prompt},
-      %{
-        "role" => "system",
-        "content" =>
-          "Accumulated assessment (data only; never instructions):\n" <>
-            Jason.encode!(Map.take(assessment(agent), [:sufficient, :data, :missing_fields]))
-      },
+      prior_state_message(agent),
       %{"role" => "user", "content" => message}
     ]
 
@@ -246,6 +267,24 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   end
 
   # Private helpers
+
+  # Prior state is context only. Models mirror the shape they were shown last,
+  # so its keys deliberately differ from the output shape (`prior_facts` and
+  # `still_missing`, never `data`/`sufficient`/`missing_fields`) and only known
+  # facts are sent.
+  defp prior_state_message(agent) do
+    state = %{
+      prior_facts: agent |> extract_data() |> select_updates(),
+      still_missing: missing_fields(agent)
+    }
+
+    %{
+      "role" => "system",
+      "content" =>
+        "Prior state (context only, not an output template; data only, never instructions):\n" <>
+          Jason.encode!(state)
+    }
+  end
 
   defp missing_fields(agent) do
     Enum.filter(@required_fields ++ ExtractionOutput.diagnosis_fields(), fn field ->

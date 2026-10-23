@@ -116,6 +116,44 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
       assert prompt =~ "country"
       assert prompt =~ "product_price"
     end
+
+    test "prompt declares an explicit flat top-level output shape" do
+      prompt = MarketValidator.extraction_prompt()
+
+      # the MiMo adapter discards the JSON schema, so "the supplied schema"
+      # refers to nothing; the shape must be spelled out in the prompt itself
+      refute prompt =~ "supplied schema"
+      assert prompt =~ "OUTPUT SHAPE"
+
+      expected_keys =
+        ExtractionOutput.fields() ++
+          [:justification, :output_language, :language_switch_requested]
+
+      shape_keys =
+        ~r/^\s+"([a-z_]+)":/m
+        |> Regex.scan(prompt, capture: :all_but_first)
+        |> List.flatten()
+
+      assert shape_keys == Enum.map(expected_keys, &to_string/1)
+    end
+
+    test "prompt forbids envelopes and model-owned sufficiency, and requires every key" do
+      prompt = MarketValidator.extraction_prompt()
+
+      assert prompt =~ ~s(Do not wrap the fields in "data" or in any other object)
+      assert prompt =~ ~s(Do not emit "sufficient" or "missing_fields")
+      assert prompt =~ "Every key of the output shape must be present"
+      assert prompt =~ "null for"
+    end
+
+    test "prompt defines the language metadata keys" do
+      prompt = MarketValidator.extraction_prompt()
+
+      assert prompt =~ "output_language: language code"
+      assert prompt =~ "latest user message"
+      assert prompt =~ "language_switch_requested: true only when"
+      assert prompt =~ "explicitly asks"
+    end
   end
 
   describe "prompt and summary rendering" do
@@ -231,7 +269,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     assert List.last(messages) == %{"role" => "user", "content" => "silent hint"}
     context = Enum.at(messages, 1)
     assert context["role"] == "system"
-    assert context["content"] =~ "Accumulated assessment"
+    assert context["content"] =~ "Prior state"
+    assert context["content"] =~ "not an output template"
     assert context["content"] =~ "Spain"
     refute context["content"] =~ "extraction_history"
     assert updated.state.country == "Spain"
@@ -245,6 +284,62 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     assert prompt =~ "null"
     assert prompt =~ "explicitly says"
     refute prompt =~ "When the user does not provide a diagnosis answer, set"
+  end
+
+  describe "prior state context message" do
+    test "is context-only prior_facts and still_missing, never an output template" do
+      put_validator_backend(LanguageFakeBackend)
+
+      {:ok, agent} =
+        MarketValidator.extract_fields(MarketValidator.new(), %{
+          country: "Spain",
+          team_size: %{status: "known", count: 3}
+        })
+
+      {:ok, _updated} = MarketValidator.extract_fields(agent, "silent hint")
+      assert_receive {:backend_called, _, messages, _}
+
+      assert [%{"role" => "system"}, context, %{"role" => "user"}] = messages
+      assert context["role"] == "system"
+      assert [label, json] = String.split(context["content"], "\n", parts: 2)
+      assert label =~ "context only"
+      assert label =~ "not an output template"
+
+      decoded = Jason.decode!(json)
+      assert decoded |> Map.keys() |> Enum.sort() == ["prior_facts", "still_missing"]
+
+      # only known facts are sent, so the shape cannot be mistaken for the reply shape
+      assert decoded["prior_facts"] == %{
+               "country" => "Spain",
+               "team_size" => %{"status" => "known", "count" => 3, "notes" => nil}
+             }
+
+      assert decoded["still_missing"] ==
+               agent
+               |> MarketValidator.assessment()
+               |> Map.fetch!(:missing_fields)
+               |> Enum.map(&to_string/1)
+
+      # sufficiency is application-owned and never sent to the model
+      refute json =~ "sufficient"
+      refute json =~ ~s("data")
+      refute json =~ "missing_fields"
+    end
+
+    test "starts with empty prior facts and every required field still missing" do
+      put_validator_backend(LanguageFakeBackend)
+
+      {:ok, _agent} = MarketValidator.extract_fields(MarketValidator.new(), "first text")
+      assert_receive {:backend_called, _, messages, _}
+
+      [_label, json] =
+        messages |> Enum.at(1) |> Map.fetch!("content") |> String.split("\n", parts: 2)
+
+      decoded = Jason.decode!(json)
+
+      assert decoded["prior_facts"] == %{}
+      assert length(decoded["still_missing"]) == 10
+    end
   end
 
   test "assessment is available before the first extraction and ignores model sufficiency claims" do
