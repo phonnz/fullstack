@@ -30,6 +30,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   alias Fullstack.JidoMarketAgents.LLM
   alias Fullstack.JidoMarketAgents.Agents.ExtractionOutput
 
+  require Logger
+
   @required_fields [
     :country,
     :business_market,
@@ -39,6 +41,12 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   ]
 
   @extractable_fields ExtractionOutput.fields()
+
+  # Top-level keys of an LLM reply: the eleven fields, plus the metadata keys
+  # the prompt asks for. A reply made only of metadata keys (or empty) is a
+  # valid "no new facts" reply.
+  @field_keys Enum.map(@extractable_fields, &Atom.to_string/1)
+  @metadata_keys ["justification", "output_language", "language_switch_requested"]
 
   @doc """
   Pure extraction prompt shared by the text extraction path.
@@ -387,9 +395,11 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
 
     case Jason.decode(json_str) do
       {:ok, map} when is_map(map) ->
-        case normalize_map(map) do
-          {:error, _reason} = error -> error
-          normalized -> {:ok, normalized, extraction_metadata(map)}
+        # `normalize_map/1` returns a map or an `{:error, _}` tuple, which
+        # falls through the `with` unchanged.
+        with :ok <- ensure_recognized_shape(map),
+             %{} = normalized <- normalize_map(map) do
+          {:ok, normalized, extraction_metadata(map)}
         end
 
       {:ok, _other} ->
@@ -401,6 +411,26 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
   end
 
   defp parse_llm_json(_content), do: {:error, :invalid_content}
+
+  # `ExtractionOutput.normalize_map/1` reads top-level keys only, so a reply
+  # that names none of the eleven fields but carries other keys (a wrapper
+  # such as `{"data": {...}}`) would merge nothing and look like "no new
+  # facts". Fail it loudly instead. Only key names are logged, bounded, never
+  # values, prompt text or raw content.
+  defp ensure_recognized_shape(map) do
+    keys = Map.keys(map)
+
+    if Enum.any?(keys, &(&1 in @field_keys)) or Enum.all?(keys, &(&1 in @metadata_keys)) do
+      :ok
+    else
+      Logger.warning(
+        "Validator reply rejected: :unrecognized_shape top_level_keys=" <>
+          inspect(Enum.sort(keys), limit: 20, printable_limit: 64)
+      )
+
+      {:error, :unrecognized_shape}
+    end
+  end
 
   defp normalize_map(map), do: ExtractionOutput.normalize_map(map)
 

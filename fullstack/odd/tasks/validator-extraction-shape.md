@@ -90,11 +90,16 @@ and left the five diagnosis fields `nil`.
   `language_switch_requested` (true only on an explicit request to change reply
   language). Send prior state as `{"prior_facts": ..., "still_missing": [...]}` labelled
   as context only and not an output template, without `sufficient`.
-- [ ] T2 — Unrecognized-shape guard (`market_validator.ex`).
-  A decoded reply with none of the eleven field keys at top level returns
-  `{:error, {:parse_failed, :unrecognized_shape}}` and leaves agent state unchanged. Emit
-  one `Logger.warning` naming only the sorted top-level keys, never values. RED fixture:
-  the exact `data`-envelope reply from the evidence above.
+- [x] T2 — Unrecognized-shape guard (`market_validator.ex`, LLM parse path only).
+  Decided by the user on 2026-10-23 (option 3 of 3, generalized). A decoded reply with no
+  top-level key from the eleven fields AND at least one top-level key outside the metadata
+  set `justification`, `output_language`, `language_switch_requested` returns
+  `{:error, {:parse_failed, :unrecognized_shape}}` and leaves agent state unchanged. `{}`,
+  a justification-only reply, a language-only reply, and field keys plus unknown extras
+  stay valid "no new facts" or normal replies. Emit one `Logger.warning` naming only the
+  sorted top-level keys, never values, prompt text or raw content. RED fixture: the exact
+  `data`-envelope reply from the evidence above. `ExtractionOutput.normalize_map/1` and the
+  map fast path are unchanged.
 - [x] T3 — Persist the raw reply per turn.
   The LLM path of `extract_fields/2` records the raw content as `raw_response` in its new
   extraction history entry (the map path records `nil`). Add
@@ -112,8 +117,10 @@ and left the five diagnosis fields `nil`.
 
 - With the sample message, the commercial fields are populated and only the five
   diagnosis fields are missing.
-- A `data`-envelope reply yields `{:error, {:parse_failed, :unrecognized_shape}}`; prior
-  state is unchanged.
+- An LLM reply wrapped in any unrecognized shape (for example a `data` envelope or a
+  `result` wrapper: no field key at top level, plus at least one non-metadata key) yields
+  `{:error, {:parse_failed, :unrecognized_shape}}`; prior state is unchanged. `{}`,
+  metadata-only replies, and field keys plus unknown extras stay valid.
 - Validator assistant messages carry `metadata["raw_response"]` for LLM turns only.
 - `check_completeness/1`, `assessment/1` keys, the map fast path, and broadcast payload
   keys are unchanged. Accepted deviation (T3): `payload.messages` carries the assistant
@@ -189,9 +196,27 @@ Format: `mix format --check-formatted` on changed files.
     keys `assessment` and `raw_response` (flat JSON reply); the record is `active` and its
     `validated_data` holds the six commercial fields with the diagnosis fields `nil`. The
     pipeline stopped at the validator, as expected for incomplete data.
+- 2026-10-23 T2 (delegated writer). Decision source: the user chose option 3 of 3 (reject only
+  a reply that has no field key and some non-metadata key), relayed by the coordinator. Strict
+  TDD, runner `mix test`.
+  - RED: after adding five tests in `market_validator_test.exs` (observed `data`-envelope
+    reply, a `result` wrapper, a bounded-key-list check, the stay-valid metadata-only replies,
+    and field keys plus extras), the file ran 26 tests, 3 failures. The three rejection tests
+    got `{:ok, _}` back with every field silently `nil`, instead of
+    `{:error, {:parse_failed, :unrecognized_shape}}`. The two stay-valid guards passed already.
+    (A first run showed a fourth failure that was a bug in the new test, now fixed: a fresh
+    agent has no `:country` key.)
+  - GREEN: focused command 67 tests, 0 failures. Regression command
+    (`test/fullstack/jido_market_agents` plus `jido_market_agents_test.exs`): 437 tests,
+    0 failures (432 + 5). `conversation_pipeline_test.exs:614` did not fail in this run.
+    `mix format --check-formatted` on the two changed files: clean.
+  - The warning is `Validator reply rejected: :unrecognized_shape top_level_keys=[...]` with
+    sorted keys; the list is bounded (`limit: 20`, `printable_limit: 64`) so a hostile or
+    malformed reply cannot flood the log. The three tests that conflicted with the first
+    version of the rule (`{}` and language-only replies) pass unchanged.
+  - Commit: `fix(validator): reject extraction replies wrapped in an unrecognized shape`.
 
 ## Next step
 
-T2 is blocked on a decision about the rule for replies with zero field keys (see Progress
-and evidence). The live data-envelope failure no longer reproduces after T1, so T2 is now
-a defensive guard.
+All tasks (T1-T4) are done. The next step is a delivery decision for the user: push the
+branch and open a pull request, or hold. Nothing has been pushed.

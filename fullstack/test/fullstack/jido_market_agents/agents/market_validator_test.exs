@@ -5,6 +5,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
   # the same application env key (see llm_test.exs for the same rule).
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Fullstack.JidoMarketAgents.Agents.{ExtractionOutput, MarketValidator}
 
   @app :fullstack
@@ -66,6 +68,43 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
 
     @impl true
     def chat_completion(_messages, _opts), do: {:ok, @raw_reply}
+
+    @impl true
+    def capabilities(_opts), do: [:json_object]
+
+    @impl true
+    def validate_config(_opts), do: :ok
+  end
+
+  # Fake validator backend for reply-shape tests. `data_envelope` is the exact
+  # reply observed live from MiMo on 2026-10-23: every field nested under
+  # "data", plus model-owned "sufficient" and "missing_fields".
+  defmodule ShapeFakeBackend do
+    @moduledoc false
+    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+
+    @data_envelope ~S|{"data": {"country": "Mexico", "city": "Mexico City", "business_market": "Custom carpets (for main saloon)", "initial_budget": "300 euros", "final_product_proposal": "Custom carpets for the main saloon, e.g. 1.5 m x 0.30 m carpet with delivery in 2 weeks", "product_price": "70 euros per carpet (1.5 m x 0.30 m)", "team_size": null, "current_tools_systems": null, "repetitive_processes_pain_points": null, "digital_maturity": null, "metrics_baselines": null}, "sufficient": false, "missing_fields": ["team_size", "current_tools_systems", "repetitive_processes_pain_points", "digital_maturity", "metrics_baselines"], "justification": "The user stated Mexico City, Mexico as location..."}|
+
+    @impl true
+    def chat_completion(messages, _opts) do
+      user = messages |> List.last() |> Map.fetch!("content")
+      {:ok, reply(user)}
+    end
+
+    defp reply("data envelope" <> _), do: @data_envelope
+    defp reply("result wrapper" <> _), do: ~s({"result": {"country": "Mexico"}})
+    defp reply("many long keys" <> _), do: Jason.encode!(long_keys())
+    defp reply("empty object" <> _), do: "{}"
+    defp reply("justification only" <> _), do: ~s({"justification": "Nothing new was stated."})
+
+    defp reply("language only" <> _),
+      do: ~s({"output_language": "es", "language_switch_requested": false})
+
+    defp reply("fields with extras" <> _),
+      do: ~s({"country": "Mexico", "sufficient": false, "missing_fields": ["team_size"]})
+
+    defp long_keys,
+      do: Map.new(1..30, fn n -> {String.duplicate("k", 200) <> "#{n}", "SECRET#{n}"} end)
 
     @impl true
     def capabilities(_opts), do: [:json_object]
@@ -342,6 +381,101 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
       refute Map.has_key?(report, :raw_response)
       refute Map.has_key?(report.data, :raw_response)
       refute inspect(report) =~ "```json"
+    end
+  end
+
+  describe "unrecognized reply shape" do
+    test "the observed data-envelope reply is rejected without touching state or leaking values" do
+      put_validator_backend(ShapeFakeBackend)
+      {:ok, agent} = MarketValidator.extract_fields(MarketValidator.new(), %{country: "Spain"})
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:parse_failed, :unrecognized_shape}} =
+                   MarketValidator.extract_fields(agent, "data envelope")
+        end)
+
+      assert log =~
+               ~s(Validator reply rejected: :unrecognized_shape top_level_keys=["data", "justification", "missing_fields", "sufficient"])
+
+      assert Regex.scan(~r/Validator reply rejected/, log) |> length() == 1
+
+      # only key names are logged: no field value, justification text or prompt text
+      refute log =~ "Mexico"
+      refute log =~ "300 euros"
+      refute log =~ "The user stated"
+      refute log =~ "data envelope"
+
+      assert agent.state.country == "Spain"
+      assert length(agent.state.extraction_history) == 1
+      assert MarketValidator.last_raw_response(agent) == nil
+    end
+
+    test "any other wrapper around the fields is rejected too" do
+      put_validator_backend(ShapeFakeBackend)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:parse_failed, :unrecognized_shape}} =
+                   MarketValidator.extract_fields(MarketValidator.new(), "result wrapper")
+        end)
+
+      assert log =~ ~s(top_level_keys=["result"])
+      refute log =~ "Mexico"
+    end
+
+    test "the logged key list is bounded and never carries values" do
+      put_validator_backend(ShapeFakeBackend)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:parse_failed, :unrecognized_shape}} =
+                   MarketValidator.extract_fields(MarketValidator.new(), "many long keys")
+        end)
+
+      assert log =~ "Validator reply rejected: :unrecognized_shape top_level_keys="
+      refute log =~ "SECRET"
+      refute log =~ String.duplicate("k", 100)
+    end
+
+    test "replies with no field keys and only known metadata stay valid no-new-facts replies" do
+      put_validator_backend(ShapeFakeBackend)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, empty} =
+                   MarketValidator.extract_fields(MarketValidator.new(), "empty object")
+
+          assert Map.get(empty.state, :country) == nil
+
+          assert {:ok, justified} =
+                   MarketValidator.extract_fields(MarketValidator.new(), "justification only")
+
+          assert justified.state.model_justification == "Nothing new was stated."
+
+          assert {:ok, language} =
+                   MarketValidator.extract_fields(MarketValidator.new(), "language only")
+
+          assert language.state.output_language == "es"
+        end)
+
+      refute log =~ "Validator reply rejected"
+    end
+
+    test "field keys plus unknown extras stay valid and the extras are ignored" do
+      put_validator_backend(ShapeFakeBackend)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, agent} =
+                   MarketValidator.extract_fields(MarketValidator.new(), "fields with extras")
+
+          assert agent.state.country == "Mexico"
+          refute :sufficient in Map.keys(agent.state)
+          assert :team_size in MarketValidator.assessment(agent).missing_fields
+        end)
+
+      refute log =~ "Validator reply rejected"
     end
   end
 
