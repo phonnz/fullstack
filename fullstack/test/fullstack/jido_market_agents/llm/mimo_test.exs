@@ -4,6 +4,8 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
   # must not run concurrently with other tests touching the same state.
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Fullstack.JidoMarketAgents.LLM
   alias Fullstack.JidoMarketAgents.LLM.Mimo
 
@@ -17,12 +19,23 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       request = Jason.decode!(body)
       message = request["messages"] |> List.last() |> Map.fetch!("content")
-      owner = Agent.get(responses, &Map.get(&1, message))
-      if owner, do: send(owner, {:mimo_request, request})
+      registered = Agent.get(responses, &Map.get(&1, message))
 
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.send_resp(200, Jason.encode!(%{choices: [%{message: %{content: "ok"}}]}))
+      case registered do
+        {owner, {status, response_body}} ->
+          send(owner, {:mimo_request, request})
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(status, response_body)
+
+        owner ->
+          if owner, do: send(owner, {:mimo_request, request})
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(200, Jason.encode!(%{choices: [%{message: %{content: "ok"}}]}))
+      end
     end
 
     server = start_supervised!({Bandit, plug: plug, ip: {127, 0, 0, 1}, port: 0})
@@ -50,6 +63,12 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
   defp stub_and_messages(responses, content) do
     owner = self()
     Agent.update(responses, &Map.put(&1, content, owner))
+    [%{"role" => "user", "content" => content}]
+  end
+
+  defp stub_reply(responses, content, status, response_body) do
+    owner = self()
+    Agent.update(responses, &Map.put(&1, content, {owner, {status, response_body}}))
     [%{"role" => "user", "content" => content}]
   end
 
@@ -153,6 +172,17 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
       assert request["model"] == "custom-model-x"
     end
 
+    test "default model is a live MiMo chat model when none is configured", %{
+      mimo_responses: responses
+    } do
+      messages = stub_and_messages(responses, "model-default")
+
+      assert {:ok, "ok"} = Mimo.chat_completion(messages, response_format: :text)
+
+      assert_receive {:mimo_request, request}
+      assert request["model"] == "mimo-v2.6-pro"
+    end
+
     test "validator-style config (temperature present) and researcher-style config (temperature absent) produce different bodies",
          %{mimo_responses: responses} do
       validator_messages = stub_and_messages(responses, "validator-role-config")
@@ -201,6 +231,112 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoTest do
                Mimo.chat_completion([%{"role" => "user", "content" => "boom"}],
                  response_format: :text
                )
+    end
+  end
+
+  # -- chat_completion/2: failure logging --------------------------------------
+
+  describe "chat_completion/2 failure logging" do
+    test ":api_error logs the status and a bounded body excerpt without secrets", %{
+      mimo_responses: responses
+    } do
+      response_body = Jason.encode!(%{error: String.duplicate("e", 500) <> "SENSITIVE_TAIL"})
+      messages = stub_reply(responses, "log-api-error", 400, response_body)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:api_error, 400, _body}} =
+                   Mimo.chat_completion(messages, response_format: :text)
+        end)
+
+      assert log =~ ":api_error"
+      assert log =~ "400"
+      assert log =~ "eeee"
+      refute log =~ "SENSITIVE_TAIL"
+      refute log =~ "local-test-key"
+      refute log =~ "log-api-error"
+    end
+
+    test ":request_failed logs the transport reason", %{mimo_responses: responses} do
+      previous = System.get_env("MIMO_BASE_URL")
+      System.put_env("MIMO_BASE_URL", "http://127.0.0.1:1/v1")
+
+      on_exit(fn ->
+        if previous, do: System.put_env("MIMO_BASE_URL", previous)
+      end)
+
+      messages = stub_and_messages(responses, "log-transport")
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:request_failed, _reason}} =
+                   Mimo.chat_completion(messages, response_format: :text)
+        end)
+
+      assert log =~ ":request_failed"
+      assert log =~ "reason="
+    end
+
+    test ":invalid_response logs :truncated with the finish reason and no content", %{
+      mimo_responses: responses
+    } do
+      response_body =
+        Jason.encode!(%{
+          choices: [%{"finish_reason" => "length", "message" => %{"content" => "partial SECRET"}}],
+          usage: %{completion_tokens: 1024, total_tokens: 1200}
+        })
+
+      messages = stub_reply(responses, "log-truncated", 200, response_body)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:invalid_response, :truncated, _metadata}} =
+                   Mimo.chat_completion(messages, response_format: :text)
+        end)
+
+      assert log =~ ":truncated"
+      assert log =~ "length"
+      refute log =~ "SECRET"
+    end
+
+    test ":invalid_response logs :empty_content with the finish reason", %{
+      mimo_responses: responses
+    } do
+      response_body =
+        Jason.encode!(%{
+          choices: [%{"finish_reason" => "stop", "message" => %{"content" => "   "}}]
+        })
+
+      messages = stub_reply(responses, "log-empty", 200, response_body)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:invalid_response, :empty_content, _metadata}} =
+                   Mimo.chat_completion(messages, response_format: :text)
+        end)
+
+      assert log =~ ":empty_content"
+      assert log =~ "stop"
+    end
+
+    test ":invalid_response logs :invalid_content with the finish reason", %{
+      mimo_responses: responses
+    } do
+      response_body =
+        Jason.encode!(%{
+          choices: [%{"finish_reason" => "stop", "message" => %{"content" => 42}}]
+        })
+
+      messages = stub_reply(responses, "log-invalid", 200, response_body)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:invalid_response, :invalid_content, _metadata}} =
+                   Mimo.chat_completion(messages, response_format: :text)
+        end)
+
+      assert log =~ ":invalid_content"
+      assert log =~ "stop"
     end
   end
 

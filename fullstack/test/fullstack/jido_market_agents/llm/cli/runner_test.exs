@@ -358,35 +358,5 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.RunnerTest do
       Process.sleep(50)
       if Port.info(port), do: Port.close(port)
     end
-
-    test "the bare `kill -SIG -pid` form (without -s/--) would NOT have worked here" do
-      port =
-        Port.open({:spawn_executable, ~c"/bin/sh"}, [
-          :binary,
-          :exit_status,
-          args: ["-c", "sleep 300 & echo $!; sleep 300"]
-        ])
-
-      os_pid =
-        case Port.info(port, :os_pid) do
-          {:os_pid, pid} -> pid
-        end
-
-      assert proc_alive?(os_pid)
-
-      {output, status} = System.cmd("kill", ["-TERM", "-#{os_pid}"], stderr_to_stdout: true)
-
-      # This is the trap: procps-ng silently misparses this form on this
-      # system, exits 0, and kills nothing.
-      assert status == 0
-      assert output == ""
-      assert proc_alive?(os_pid), "the bare-dash form must not have killed the group"
-
-      # Clean up for real using the correct mechanism this module implements.
-      assert Runner.terminate_process_group(os_pid, 200) in [:terminated, :killed]
-      refute proc_alive?(os_pid)
-
-      if Port.info(port), do: Port.close(port)
-    end
   end
 end

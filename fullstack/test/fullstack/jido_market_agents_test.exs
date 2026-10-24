@@ -511,6 +511,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
         assert data.product_price == "70 euros"
         assert_receive {:mimo_request, request}
         assert List.last(request["messages"])["content"] == message
+        assert request["model"] == "mimo-v2.6-pro"
         assert request["thinking"] == %{"type" => "disabled"}
         assert request["max_completion_tokens"] == 1024
         refute Map.has_key?(request, "max_tokens")

@@ -35,15 +35,15 @@ config :fullstack, Fullstack.JidoMarketAgents,
   strategy_knowledge_max_chars: 24_000,
   validator_backend:
     {Fullstack.JidoMarketAgents.LLM.Mimo,
-     model: "mimo-v2.5-pro", temperature: 0.3, max_tokens: 1024, thinking: :disabled},
+     model: "mimo-v2.6-pro", temperature: 0.3, max_tokens: 1024, thinking: :disabled},
   researcher_backend:
-    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 4096},
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.6-pro", max_tokens: 4096},
   analyzer_backend:
-    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 6144},
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.6-pro", max_tokens: 6144},
   systems_backend:
-    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 8192},
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.6-pro", max_tokens: 8192},
   strategy_backend:
-    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.5-pro", max_tokens: 8192}
+    {Fullstack.JidoMarketAgents.LLM.Mimo, model: "mimo-v2.6-pro", max_tokens: 8192}
 
 # Configures the endpoint
 config :fullstack, FullstackWeb.Endpoint,
