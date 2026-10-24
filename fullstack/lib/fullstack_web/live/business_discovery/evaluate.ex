@@ -130,15 +130,15 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
     {:noreply, assign(socket, :phase, :buffering)}
   end
 
-  def handle_info({:extraction_complete, %{status: :researching} = payload}, socket) do
+  def handle_info({:extraction_complete, %{status: :running} = payload}, socket) do
     {:noreply,
      socket
      |> assign(:phase, :researching)
      |> replace_messages(payload)
-     |> handled(:extraction_complete_researching)}
+     |> handled(:extraction_complete_running)}
   end
 
-  def handle_info({:extraction_complete, %{status: :needs_data} = payload}, socket) do
+  def handle_info({:extraction_complete, %{status: :idle} = payload}, socket) do
     # S17.2: the agent is WAITING ON THE USER, not working — :idle, not a
     # spinner state.
     {:noreply,
@@ -146,7 +146,7 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
      |> assign(:phase, :idle)
      |> replace_messages(payload)
      |> refresh_sidebar()
-     |> handled(:extraction_complete_needs_data)}
+     |> handled(:extraction_complete_idle)}
   end
 
   def handle_info({:research_complete, payload}, socket) do
@@ -156,6 +156,16 @@ defmodule FullstackWeb.BusinessDiscoveryLive.Evaluate do
      |> replace_messages(payload)
      |> refresh_sidebar()
      |> handled(:research_complete)}
+  end
+
+  # From `:research` onward a message is stored as chat only and no pipeline
+  # event follows it, so this is its terminal event.
+  def handle_info({:message_received, payload}, socket) do
+    {:noreply,
+     socket
+     |> assign(:phase, :idle)
+     |> replace_messages(payload)
+     |> handled(:message_received)}
   end
 
   def handle_info({:error, payload}, socket) do

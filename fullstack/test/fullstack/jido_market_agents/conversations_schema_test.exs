@@ -25,17 +25,46 @@ defmodule Fullstack.JidoMarketAgents.ConversationsSchemaTest do
       for field <- Map.keys(results), do: assert(is_nil(Map.get(empty, field)))
     end
 
-    test "changeset accepts analyzing and building_strategy" do
+    test "changeset accepts every run health value" do
       user = user_fixture()
 
-      for status <- ["analyzing", "building_strategy"] do
+      for status <- [:idle, :running, :error] do
         changeset = Record.changeset(%Record{}, %{user_id: user.id, status: status})
         assert changeset.valid?
         assert {:ok, record} = Repo.insert(changeset)
         assert Repo.get!(Record, record.id).status == status
       end
 
-      refute Record.changeset(%Record{}, %{user_id: user.id, status: "needs_data"}).valid?
+      assert Record.changeset(%Record{}, %{user_id: user.id, status: "running"}).changes.status ==
+               :running
+    end
+
+    test "changeset rejects the retired lifecycle-shaped status values" do
+      user = user_fixture()
+
+      for status <- ~w(active researching analyzing building_strategy completed needs_data) do
+        changeset = Record.changeset(%Record{}, %{user_id: user.id, status: status})
+        refute changeset.valid?
+        assert %{status: ["is invalid"]} = errors_on(changeset)
+      end
+    end
+
+    test "a new record defaults to idle and the column is a native enum" do
+      user = user_fixture()
+      {:ok, record} = Repo.insert(Record.changeset(%Record{}, %{user_id: user.id}))
+
+      assert record.status == :idle
+
+      assert %{rows: [["conversation_status"]]} =
+               Repo.query!(
+                 "SELECT udt_name FROM information_schema.columns " <>
+                   "WHERE table_name = 'jido_conversations' AND column_name = 'status'"
+               )
+
+      assert %{rows: [[["idle", "running", "error"]]]} =
+               Repo.query!(
+                 "SELECT array_agg(e::text ORDER BY e) FROM unnest(enum_range(NULL::conversation_status)) e"
+               )
     end
 
     # S1.1
@@ -44,7 +73,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsSchemaTest do
 
       {:ok, record} =
         %Record{}
-        |> Record.changeset(%{user_id: user.id, status: "active"})
+        |> Record.changeset(%{user_id: user.id, status: "idle"})
         |> Repo.insert()
 
       assert record.user_id == user.id
@@ -57,7 +86,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsSchemaTest do
 
       {:ok, record} =
         %Record{}
-        |> Record.changeset(%{user_id: user.id, status: "active"})
+        |> Record.changeset(%{user_id: user.id, status: "idle"})
         |> Repo.insert()
 
       {:ok, message} =
@@ -77,19 +106,19 @@ defmodule Fullstack.JidoMarketAgents.ConversationsSchemaTest do
 
       {:ok, record1} =
         %Record{}
-        |> Record.changeset(%{user_id: user.id, status: "active"})
+        |> Record.changeset(%{user_id: user.id, status: "idle"})
         |> Repo.insert()
 
       {:ok, record2} =
         %Record{}
-        |> Record.changeset(%{user_id: user.id, status: "active"})
+        |> Record.changeset(%{user_id: user.id, status: "idle"})
         |> Repo.insert()
 
       assert record1.id != record2.id
     end
 
     test "changeset rejects a missing user_id" do
-      changeset = Record.changeset(%Record{}, %{status: "active"})
+      changeset = Record.changeset(%Record{}, %{status: "idle"})
 
       refute changeset.valid?
       assert %{user_id: ["can't be blank"]} = errors_on(changeset)

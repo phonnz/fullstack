@@ -22,8 +22,10 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   """
 
   import Ecto.Query, warn: false
+  require Logger
   alias Fullstack.Repo
 
+  alias Fullstack.JidoMarketAgents.Conversations.Lifecycle
   alias Fullstack.JidoMarketAgents.Conversations.Message
   alias Fullstack.JidoMarketAgents.Conversations.Record
 
@@ -280,12 +282,12 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   end
 
   @doc """
-  Updates a conversation's lifecycle state (`:status` and/or
-  `:validated_data`).
+  Updates a conversation's run health (`:status`) and/or `:validated_data`.
+  The lifecycle `:stage` is never written here; see `advance_stage/3`.
 
   ## Examples
 
-      iex> update_state(record, %{status: "researching"})
+      iex> update_state(record, %{status: :running})
       {:ok, %Record{}}
 
   """
@@ -293,6 +295,37 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
     record
     |> Record.changeset(normalize(attrs))
     |> Repo.update()
+  end
+
+  @doc """
+  Moves `record` toward the lifecycle stage `target`, advance-only.
+
+  Meant to run inside the transaction of a persistence path that already owns
+  the record, so the stage write shares that path's lock and boundary check.
+  A `nil` target, the same stage, or a stage behind the stored one writes
+  nothing and returns the record unchanged. Only the next adjacent stage is
+  written. A target that would skip a stage is logged and not written, so a
+  lagging row never blocks the boundary it belongs to.
+  """
+  @spec advance_stage(module(), Record.t(), Lifecycle.stage() | nil) ::
+          {:ok, Record.t()} | {:error, Ecto.Changeset.t()}
+  def advance_stage(_repo, %Record{} = record, nil), do: {:ok, record}
+
+  def advance_stage(repo, %Record{} = record, target) do
+    case Lifecycle.advance(record.stage, target) do
+      :noop ->
+        {:ok, record}
+
+      {:ok, next} ->
+        repo.update(Record.stage_changeset(record, next))
+
+      {:error, {:invalid_transition, from, to}} ->
+        Logger.warning(
+          "Conversation #{record.id}: stage #{from} cannot skip to #{to}; stage left unchanged"
+        )
+
+        {:ok, record}
+    end
   end
 
   @result_stages %{
@@ -369,6 +402,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
          true <-
            is_nil(data["pending_stage"]) or
              data["pending_stage"] in ~w(validator research analysis systems tech_strategy),
+         true <- is_nil(data["lifecycle_stage"]) or lifecycle_stage(data) != nil,
          {:ok, _} <- Ecto.UUID.cast(data["run_ref"]),
          {:ok, _} <- Ecto.UUID.cast(data["request_ref"]),
          true <- is_map(data["result"]),
@@ -536,9 +570,10 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
 
     data = Map.put(record.validated_data || %{}, "_pipeline", control)
 
+    # Manual stages park instead of running the next one automatically.
     status =
-      if transition["mode"] == "manual" and transition["status"] not in ["completed", "error"],
-        do: "active",
+      if transition["mode"] == "manual" and transition["status"] == "running",
+        do: "idle",
         else: transition["status"]
 
     descendants =
@@ -554,8 +589,17 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
     attrs =
       if field, do: Map.put(attrs, field, transition_result(version, transition)), else: attrs
 
-    repo.update(Record.changeset(record, attrs))
+    with {:ok, record} <- repo.update(Record.changeset(record, attrs)) do
+      advance_stage(repo, record, lifecycle_stage(transition))
+    end
   end
+
+  # The transition crosses a JSON roundtrip, so the stage arrives as text.
+  # Match it against the closed stage list instead of creating atoms.
+  defp lifecycle_stage(%{"lifecycle_stage" => name}) when is_binary(name),
+    do: Enum.find(Lifecycle.stages(), &(Atom.to_string(&1) == name))
+
+  defp lifecycle_stage(_transition), do: nil
 
   defp ordered_messages(repo, record_id) do
     messages =

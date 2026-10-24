@@ -17,7 +17,7 @@ defmodule Fullstack.JidoMarketAgents.Telemetry.Reporter do
       [agents abc12345] validation.start
       [agents abc12345] validation.stop       ok 1284ms
       [agents abc12345] validation.incomplete missing=initial_budget,product_price
-      [agents abc12345] broadcast.emitted     extraction_complete status=needs_data msgs=2
+      [agents abc12345] broadcast.emitted     extraction_complete stage=validating status=idle msgs=2
       [agents abc12345] liveview.handled      extraction_complete phase=idle
 
   Reading a trace: each stage should appear once per turn, in that order.
@@ -123,6 +123,8 @@ defmodule Fullstack.JidoMarketAgents.Telemetry.Reporter do
   defp details("broadcast.emitted", _measurements, metadata) do
     [
       to_text(metadata[:event]),
+      " stage=",
+      to_text(metadata[:lifecycle_stage]),
       " status=",
       to_text(metadata[:status]),
       " msgs=",

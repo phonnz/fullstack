@@ -1,10 +1,14 @@
 defmodule Fullstack.JidoMarketAgents.LLM.MimoClient do
   @moduledoc "Client for MIMO LLM API (OpenAI-compatible chat completions)"
 
+  require Logger
+
+  @log_excerpt_chars 200
+
   def chat_completion(messages, opts \\ []) do
     api_key = System.get_env("MIMO_API_KEY")
     base_url = System.get_env("MIMO_BASE_URL") || "https://token-plan-sgp.xiaomimimo.com/v1"
-    model = Keyword.get(opts, :model, "mimo-v2.5-pro")
+    model = Keyword.get(opts, :model, "mimo-v2.6-pro")
 
     url = "#{base_url}/chat/completions"
 
@@ -42,9 +46,14 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoClient do
         read_final_content(choice, body)
 
       {:ok, %{status: status, body: body}} ->
+        Logger.warning(
+          "MiMo request failed: :api_error status=#{status} body_excerpt=#{excerpt(body)}"
+        )
+
         {:error, {:api_error, status, body}}
 
       {:error, reason} ->
+        Logger.warning("MiMo request failed: :request_failed reason=#{excerpt(reason)}")
         {:error, {:request_failed, reason}}
     end
   end
@@ -54,18 +63,33 @@ defmodule Fullstack.JidoMarketAgents.LLM.MimoClient do
 
     case choice do
       %{"finish_reason" => "length"} ->
+        log_invalid_response(:truncated, metadata)
         {:error, {:invalid_response, :truncated, metadata}}
 
       %{"message" => %{"content" => content}} when is_binary(content) ->
         if String.trim(content) == "" do
+          log_invalid_response(:empty_content, metadata)
           {:error, {:invalid_response, :empty_content, metadata}}
         else
           {:ok, content}
         end
 
       _ ->
+        log_invalid_response(:invalid_content, metadata)
         {:error, {:invalid_response, :invalid_content, metadata}}
     end
+  end
+
+  defp log_invalid_response(code, metadata) do
+    Logger.warning(
+      "MiMo response rejected: :invalid_response code=#{inspect(code)} finish_reason=#{metadata.finish_reason || "none"} usage=#{inspect(metadata.usage)}"
+    )
+  end
+
+  defp excerpt(value) do
+    value
+    |> inspect(printable_limit: @log_excerpt_chars, limit: 5)
+    |> String.slice(0, @log_excerpt_chars)
   end
 
   defp response_metadata(choice, body) do

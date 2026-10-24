@@ -15,6 +15,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher, ExtractionOutput}
   alias Fullstack.JidoMarketAgents.Conversations
+  alias Fullstack.JidoMarketAgents.Conversations.Lifecycle
   alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, SystemsAgent, StrategyAgent}
 
   alias Fullstack.JidoMarketAgents.Agents.{
@@ -30,6 +31,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   @pubsub Fullstack.PubSub
   @default_timeout 15_000
   @stages [:research, :analysis, :systems, :tech_strategy]
+  @chat_only_type :chat_only
 
   # Rehydration/persistence field allow-list, sourced from
   # `ExtractionOutput.fields/0` (six commercial scalars + five diagnosis
@@ -53,6 +55,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     :pending_stage,
     :manual_lease,
     manual_release_pending: false,
+    stage: :inserted,
     validation_provider_free: false,
     last_commit_failed: false,
     task: nil,
@@ -190,6 +193,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
            %{
              record_id: record.id,
              status: restored_record_status(record),
+             stage: record.stage,
              mode: restored_record_mode(record),
              pending_stage: restored_stage(pipeline_control(record)["pending_stage"]),
              validated_data: record.validated_data,
@@ -218,17 +222,6 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp uuid?(id) when is_binary(id), do: Regex.match?(@uuid_text_regex, id)
   defp uuid?(_), do: false
 
-  # Only these 6 known values are ever persisted (`Record`'s
-  # `@statuses`/changeset validation) — an explicit mapping, never
-  # `String.to_atom/1` on a value that came out of the database.
-  defp restored_status("active"), do: :active
-  defp restored_status("researching"), do: :researching
-  defp restored_status("analyzing"), do: :analyzing
-  defp restored_status("building_strategy"), do: :building_strategy
-  defp restored_status("completed"), do: :completed
-  defp restored_status("error"), do: :error
-  defp restored_status(_unknown), do: :active
-
   defp pipeline_control(record) do
     case record.validated_data do
       %{"_pipeline" => control} when is_map(control) -> control
@@ -236,18 +229,17 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
-  # Terminal outcomes precede manual idling; legacy completed reports remain
+  # Terminal outcomes precede manual idling; legacy delivered reports remain
   # display-only. Unknown control values fail closed without creating atoms.
-  defp restored_record_status(%{status: "error"}), do: :error
-  defp restored_record_status(%{status: "completed"}), do: :completed
+  defp restored_record_status(%{status: :error}), do: :error
 
   defp restored_record_status(record) do
     if restored_record_mode(record) == :manual,
-      do: :active,
-      else: restored_status(record.status)
+      do: :idle,
+      else: record.status
   end
 
-  defp restored_record_mode(%{status: "completed"} = record) do
+  defp restored_record_mode(%{stage: :delivered} = record) do
     if map_size(pipeline_control(record)) == 0,
       do: :legacy,
       else: restored_mode(pipeline_control(record)["mode"])
@@ -388,11 +380,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   # stage (it is written atomically with the boundary), so inconsistent or
   # legacy evidence fails closed instead of scheduling work. Automatic
   # mode only: manual and legacy rows expose idle pending work without
-  # generating a successor, and error rows never auto-retry.
+  # generating a successor, and error rows never auto-retry. A stage whose
+  # lifecycle phase is behind the persisted `stage` is never resumed: the
+  # lifecycle only moves forward.
   defp maybe_enqueue_resume(state) do
     with {:run, stage} <- resume_point(state),
          true <- state.mode == :automatic,
-         true <- state.pending_stage == stage do
+         true <- state.pending_stage == stage,
+         true <- not Lifecycle.before?(stage_phase(stage), state.stage) do
       send(self(), {:run_stage, stage})
     end
 
@@ -405,7 +400,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       messages: [],
       validator_agent: MarketValidator.new(id: "#{id}_validator"),
       researcher_agent: researcher,
-      status: :active,
+      status: :idle,
       mode: :automatic,
       pending_stage: nil,
       validated_data: nil,
@@ -430,6 +425,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       validator_agent: validator,
       researcher_agent: researcher,
       status: restored.status,
+      stage: restored.stage,
       mode: restored.mode,
       pending_stage: restored.pending_stage,
       run_ref: pipeline_control_from_data(restored.validated_data)["run_ref"],
@@ -698,9 +694,16 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       {:reply, {:error, :already_running}, state}
     else
       request = request_envelope(message)
-      state = %{state | queue: state.queue ++ [request]}
-      send(self(), :drain_queue)
-      {:reply, {:ok, :accepted, state.id}, state}
+
+      if Lifecycle.accepts_messages?(state.stage) do
+        state = %{state | queue: state.queue ++ [request]}
+        send(self(), :drain_queue)
+        {:reply, {:ok, :accepted, state.id}, state}
+      else
+        # Past `:research` a message is chat only. It is stored at once, even
+        # while a stage task runs, because it never waits on the pipeline.
+        {:reply, {:ok, :accepted, state.id}, store_chat_message(state, request)}
+      end
     end
   end
 
@@ -767,45 +770,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   @impl true
   def handle_info(:drain_queue, %{task: nil, queue: [request | rest]} = state) do
-    user_msg = %{
-      role: :user,
-      content: request.message,
-      timestamp: DateTime.utc_now(),
-      metadata: %{run_ref: request.run_ref, request_ref: request.request_ref}
-    }
+    state = %{state | queue: rest}
 
-    state = %{
-      state
-      | messages: state.messages ++ [user_msg],
-        queue: rest,
-        run_ref: request.run_ref,
-        request_ref: request.request_ref,
-        validation_provider_free: is_map(request.message),
-        status: :active,
-        mode: request.mode,
-        pending_stage: nil
-    }
-
-    # Only the owner writes. The transaction admits input plus correlation
-    # before any paid provider task exists.
-    admitted = with {:ok, state} <- ensure_record(state), do: persist_owned_boundary(state, %{})
-
-    case admitted do
-      {:ok, state} ->
-        start_validation(state, request.message)
-
-      {:error, _} when is_nil(state.user_id) ->
-        start_validation(state, request.message)
-
-      {:error, _} when is_map(request.message) ->
-        # Legacy provider-free maps retain the display-only degraded path.
-        case MarketValidator.extract_fields(state.validator_agent, request.message) do
-          {:ok, validator} -> process_extraction(%{state | validator_agent: validator})
-          {:error, _} -> stage_failure(state, :validator, :invalid_input)
-        end
-
-      {:error, _} ->
-        stage_failure(state, :validator, :persistence_failed)
+    if Lifecycle.accepts_messages?(state.stage) do
+      admit_user_message(state, request)
+    else
+      # The stage moved past `:research` while the message was queued.
+      if rest != [], do: send(self(), :drain_queue)
+      {:noreply, store_chat_message(state, request)}
     end
   end
 
@@ -871,6 +843,79 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   @impl true
   def terminate(_reason, %{task: %Task{} = task}), do: Task.shutdown(task, :brutal_kill)
   def terminate(_reason, _state), do: :ok
+
+  defp admit_user_message(state, request) do
+    user_msg = %{
+      role: :user,
+      content: request.message,
+      timestamp: DateTime.utc_now(),
+      metadata: %{run_ref: request.run_ref, request_ref: request.request_ref}
+    }
+
+    state = %{
+      state
+      | messages: state.messages ++ [user_msg],
+        run_ref: request.run_ref,
+        request_ref: request.request_ref,
+        validation_provider_free: is_map(request.message),
+        status: :idle,
+        mode: request.mode,
+        pending_stage: nil
+    }
+
+    # Only the owner writes. The transaction admits input plus correlation
+    # before any paid provider task exists.
+    admitted =
+      with {:ok, state} <- ensure_record(state),
+           do: persist_owned_boundary(state, %{}, :validating)
+
+    case admitted do
+      {:ok, state} ->
+        start_validation(state, request.message)
+
+      {:error, _} when is_nil(state.user_id) ->
+        start_validation(advance_memory_stage(state, :validating), request.message)
+
+      {:error, _} when is_map(request.message) ->
+        # Legacy provider-free maps retain the display-only degraded path.
+        case MarketValidator.extract_fields(state.validator_agent, request.message) do
+          {:ok, validator} -> process_extraction(%{state | validator_agent: validator})
+          {:error, _} -> stage_failure(state, :validator, :invalid_input)
+        end
+
+      {:error, _} ->
+        stage_failure(state, :validator, :persistence_failed)
+    end
+  end
+
+  # Stores a user message as chat and nothing else: no validation, no status,
+  # `pending_stage`, result or stage change. The `chat_only` type keeps it out
+  # of every pipeline reader, which all select messages by their own type.
+  defp store_chat_message(state, request) do
+    message = %{
+      role: :user,
+      content: request.message,
+      timestamp: DateTime.utc_now(),
+      metadata: %{type: @chat_only_type}
+    }
+
+    state = %{state | messages: state.messages ++ [message]}
+
+    state =
+      case persist_owned_boundary(state, %{}) do
+        {:ok, persisted} ->
+          persisted
+
+        {:error, reason} ->
+          Logger.warning(
+            "Conversation #{state.id}: chat message not persisted (#{inspect(reason)})"
+          )
+
+          state
+      end
+
+    broadcast(state, :message_received, %{})
+  end
 
   defp start_validation(state, message) do
     {:noreply,
@@ -941,7 +986,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp start_stage(state, stage, fun) do
     state = %{state | input_fingerprint: stage_input_fingerprint(state, stage)}
 
-    case persist_owned_boundary(state, %{}) do
+    case persist_owned_boundary(state, %{}, stage_phase(stage)) do
       {:ok, admitted} -> {:noreply, launch(admitted, stage, fun)}
       {:error, _} -> stage_failure(state, stage, :persistence_failed)
     end
@@ -1029,15 +1074,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
   defp stage_success(state, stage, result) do
     next = Enum.at(@stages, Enum.find_index(@stages, &(&1 == stage)) + 1)
 
-    status =
-      case stage do
-        :research -> :analyzing
-        :analysis -> :building_strategy
-        :systems -> :building_strategy
-        :tech_strategy -> :completed
-      end
-
-    status = if state.mode == :manual and next, do: :active, else: status
+    # `running` only while the next stage is committed and will start by itself.
+    status = if is_nil(next) or state.mode == :manual, do: :idle, else: :running
     fingerprint = state.input_fingerprint
 
     transition = %{
@@ -1052,7 +1090,8 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       result: result,
       status: status,
       mode: state.mode,
-      pending_stage: next
+      pending_stage: next,
+      lifecycle_stage: if(stage == :tech_strategy, do: :delivered)
     }
 
     case commit_stage(state, transition) do
@@ -1085,7 +1124,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             state,
             stage_event(stage),
             Map.put(
-              %{status: state.status, stage: stage},
+              Map.put(health(state), :stage, stage),
               result_key(stage),
               durable_result(state, stage)
             )
@@ -1097,6 +1136,27 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
     send(self(), :drain_queue)
     {:noreply, state}
+  end
+
+  # A conversation without a user has no row, so its stage lives in memory and
+  # follows the same advance-only rules as `Conversations.advance_stage/3`.
+  defp advance_memory_stage(state, nil), do: state
+
+  defp advance_memory_stage(state, target) do
+    case Lifecycle.advance(state.stage, target) do
+      {:ok, next} ->
+        %{state | stage: next}
+
+      :noop ->
+        state
+
+      {:error, {:invalid_transition, from, to}} ->
+        Logger.warning(
+          "Conversation #{state.id}: stage #{from} cannot skip to #{to}; stage left unchanged"
+        )
+
+        state
+    end
   end
 
   defp commit_stage(%{user_id: nil} = state, transition) do
@@ -1123,12 +1183,17 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
       metadata: %{type: result_key(transition.stage), result: result, _meta: meta}
     }
 
-    {:ok, :committed,
-     %{
-       state
-       | messages: state.messages ++ [message],
-         boundary_version: state.boundary_version + 1
-     }}
+    state =
+      advance_memory_stage(
+        %{
+          state
+          | messages: state.messages ++ [message],
+            boundary_version: state.boundary_version + 1
+        },
+        transition.lifecycle_stage
+      )
+
+    {:ok, :committed, state}
   end
 
   defp commit_stage(state, transition) do
@@ -1147,6 +1212,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
            | messages: messages,
              persisted_count: length(messages),
              validated_data: snapshot.record.validated_data,
+             stage: snapshot.record.stage,
              boundary_version: pipeline_control(snapshot.record)["boundary_version"]
          }}
 
@@ -1154,6 +1220,12 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         error
     end
   end
+
+  # Lifecycle phase a pipeline stage runs in.
+  defp stage_phase(:research), do: :research
+  defp stage_phase(:analysis), do: :proposal
+  defp stage_phase(:systems), do: :strategy
+  defp stage_phase(:tech_strategy), do: :strategy
 
   defp result_key(:research), do: :market_research
   defp result_key(:analysis), do: :business_analysis
@@ -1316,6 +1388,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     state =
       broadcast(state, :error, %{
         status: :error,
+        lifecycle_stage: state.stage,
         stage: if(stage == :validator, do: :extraction, else: stage),
         reason: stage_error_reason(reason),
         durability: durability
@@ -1360,12 +1433,11 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           role: :assistant,
           content:
             "Data is complete. Researching market for #{data.final_product_proposal} in #{data.country}...",
-          metadata: %{assessment: assessment},
+          metadata: validator_metadata(state, assessment),
           timestamp: DateTime.utc_now()
         }
 
-        changed = facts_changed?(state, data)
-        status = if state.mode == :manual, do: :active, else: :researching
+        status = if state.mode == :manual, do: :idle, else: :running
 
         state = %{
           state
@@ -1376,18 +1448,21 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
             pending_stage: :research
         }
 
-        state = commit_validation(state, changed)
+        state = commit_validation(state, :ready)
 
         if state.last_commit_failed do
           stage_failure(last_durable, :validator, :persistence_failed)
         else
           state =
-            broadcast(state, :extraction_complete, %{
-              status: status,
-              stage: :validator,
-              validated_data: state.validated_data,
-              assessment: assessment
-            })
+            broadcast(
+              state,
+              :extraction_complete,
+              Map.merge(health(state), %{
+                stage: :validator,
+                validated_data: state.validated_data,
+                assessment: assessment
+              })
+            )
 
           if state.mode == :automatic, do: send(self(), {:run_stage, :research})
           send(self(), :drain_queue)
@@ -1406,34 +1481,33 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
         assistant_msg = %{
           role: :assistant,
           content: content,
-          metadata: %{assessment: assessment},
+          metadata: validator_metadata(state, assessment),
           timestamp: DateTime.utc_now()
         }
 
         data = partial_validated_data(state.validator_agent)
-        changed = facts_changed?(state, data)
 
         state = %{
           state
           | messages: state.messages ++ [assistant_msg],
             validated_data: data,
             boundary_version: state.boundary_version + 1,
-            status: :active,
+            status: :idle,
             pending_stage: nil
         }
 
-        state = commit_validation(state, changed)
+        state = commit_validation(state, nil)
 
         if state.last_commit_failed and not state.validation_provider_free do
           stage_failure(last_durable, :validator, :persistence_failed)
         else
-          payload = %{
-            status: :needs_data,
-            stage: :validator,
-            validated_data: state.validated_data,
-            missing_fields: fields,
-            assessment: assessment
-          }
+          payload =
+            Map.merge(health(state), %{
+              stage: :validator,
+              validated_data: state.validated_data,
+              missing_fields: fields,
+              assessment: assessment
+            })
 
           # Preserve the historical provider-free display fallback without
           # claiming that its undurable answer is a committed boundary.
@@ -1447,42 +1521,38 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end
   end
 
-  defp facts_changed?(state, data) do
-    map_size(state.results) > 0 and
-      digest(business_data(state)) != digest(data)
+  # The raw reply belongs to the extraction that `process_extraction/1` was
+  # just handed, because every successful `extract_fields/2` appends its own
+  # history entry. Map input records none, so only LLM turns carry it. It is
+  # persisted on the message metadata for diagnosis; no broadcast payload key
+  # carries it.
+  defp validator_metadata(state, assessment) do
+    case MarketValidator.last_raw_response(state.validator_agent) do
+      nil -> %{assessment: assessment}
+      raw_response -> %{assessment: assessment, raw_response: raw_response}
+    end
   end
 
-  defp commit_validation(state, changed) do
-    attrs =
-      if changed,
-        do: %{business_analysis: nil, systems_strategy: nil, tech_strategy: nil},
-        else: %{}
-
-    case persist_owned_boundary(state, attrs) do
+  defp commit_validation(state, target_stage) do
+    case persist_owned_boundary(state, %{}, target_stage) do
       {:ok, state} ->
-        state =
-          if changed,
-            do: rebuild_analysis_agents(%{state | results: %{}}),
-            else: state
-
-        if changed and state.record_id do
-          broadcast(state, :stage_invalidated, %{
-            invalidated: @stages,
-            stage: :validator,
-            record: Conversations.get_for_user(state.record_id, state.user_id)
-          })
-        else
-          state
-        end
+        state
 
       {:error, _} ->
         %{state | last_commit_failed: true, boundary_version: max(state.boundary_version - 1, 0)}
     end
   end
 
-  defp persist_owned_boundary(%{user_id: nil} = state, _attrs), do: {:ok, state}
+  # `target_stage` is the lifecycle stage this boundary moves toward. It is
+  # applied in the same transaction, and only when it is the next adjacent
+  # stage (`Conversations.advance_stage/3`); at or behind the stored stage it
+  # is a no-op.
+  defp persist_owned_boundary(state, extra_attrs, target_stage \\ nil)
 
-  defp persist_owned_boundary(state, extra_attrs) do
+  defp persist_owned_boundary(%{user_id: nil} = state, _attrs, target_stage),
+    do: {:ok, advance_memory_stage(state, target_stage)}
+
+  defp persist_owned_boundary(state, extra_attrs, target_stage) do
     result =
       safe_call(fn ->
         Fullstack.Repo.transaction(fn ->
@@ -1505,15 +1575,20 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
           attrs =
             Map.merge(
               %{
-                status: persisted_status(state.status),
+                status: state.status,
                 validated_data: normalize_validated_data(state)
               },
               extra_attrs
             )
 
           case Conversations.update_state(record, attrs) do
-            {:ok, record} -> %{record: record, messages: Conversations.list_messages(record.id)}
+            {:ok, record} -> record
             {:error, _} -> Fullstack.Repo.rollback(:state_failed)
+          end
+          |> then(&Conversations.advance_stage(Fullstack.Repo, &1, target_stage))
+          |> case do
+            {:ok, record} -> %{record: record, messages: Conversations.list_messages(record.id)}
+            {:error, _} -> Fullstack.Repo.rollback(:stage_failed)
           end
         end)
       end)
@@ -1528,6 +1603,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
            | messages: messages,
              persisted_count: length(messages),
              validated_data: snapshot.record.validated_data,
+             stage: snapshot.record.stage,
              last_commit_failed: false
          }}
 
@@ -1561,8 +1637,14 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     end)
   end
 
+  # The two fields every status-carrying payload shares: where the conversation
+  # is (`lifecycle_stage`, not the pipeline `stage` the payload also names) and
+  # whether automatic work is idle, running, or failed.
+  defp health(state), do: %{status: state.status, lifecycle_stage: state.stage}
+
   defp broadcast(state, event, extra) do
     status = Map.get(extra, :status, state.status)
+    lifecycle_stage = Map.get(extra, :lifecycle_stage, state.stage)
 
     payload =
       extra
@@ -1582,7 +1664,7 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
     AgentTelemetry.emit(
       [:fullstack, :jido_market_agents, :broadcast, :emitted],
       %{message_count: length(state.messages)},
-      %{conversation_id: state.id, event: event, status: status}
+      %{conversation_id: state.id, event: event, status: status, lifecycle_stage: lifecycle_stage}
     )
 
     Phoenix.PubSub.broadcast(@pubsub, topic(state.id), {event, payload})
@@ -1591,10 +1673,6 @@ defmodule Fullstack.JidoMarketAgents.Conversation do
 
   defp to_content_string(content) when is_binary(content), do: content
   defp to_content_string(content), do: inspect(content)
-
-  # Waiting is a UI event; the durable conversation remains active.
-  defp persisted_status(:needs_data), do: "active"
-  defp persisted_status(status), do: to_string(status)
 
   defp normalize_validated_data(%{validated_data: nil} = state),
     do: normalize_validated_data(%{state | validated_data: %{}})

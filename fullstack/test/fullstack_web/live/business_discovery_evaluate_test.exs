@@ -110,6 +110,16 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
     end
   end
 
+  describe "sidebar conversation health" do
+    test "each conversation shows its lifecycle stage and run health", %{conn: conn, user: user} do
+      {:ok, _running} = Conversations.create(user.id, %{status: "running"})
+
+      {:ok, _view, html} = live(conn, @evaluate_path)
+
+      assert html =~ "inserted · running"
+    end
+  end
+
   describe "S14.3 empty state still allows starting a conversation" do
     test "renders an empty state and a new conversation can be started", %{conn: conn, user: user} do
       {:ok, view, html} = live(conn, @evaluate_path)
@@ -331,7 +341,7 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
         Fullstack.PubSub,
         JidoMarketAgents.topic(record_a.id),
         {:research_complete,
-         %{status: :completed, messages: [%{role: "assistant", content: "from A"}]}}
+         %{status: :idle, messages: [%{role: "assistant", content: "from A"}]}}
       )
 
       assert render(view) =~ "from A"
@@ -345,7 +355,7 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
         Fullstack.PubSub,
         JidoMarketAgents.topic(record_a.id),
         {:research_complete,
-         %{status: :completed, messages: [%{role: "assistant", content: "stale from A"}]}}
+         %{status: :idle, messages: [%{role: "assistant", content: "stale from A"}]}}
       )
 
       refute render(view) =~ "stale from A"
@@ -355,7 +365,7 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
         Fullstack.PubSub,
         JidoMarketAgents.topic(record_b.id),
         {:research_complete,
-         %{status: :completed, messages: [%{role: "assistant", content: "from B"}]}}
+         %{status: :idle, messages: [%{role: "assistant", content: "from B"}]}}
       )
 
       assert render(view) =~ "from B"
@@ -403,7 +413,7 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
         JidoMarketAgents.topic(record.id),
         {:research_complete,
          %{
-           status: :completed,
+           status: :idle,
            messages: [
              %{role: "user", content: "authoritative user msg"},
              %{role: "assistant", content: "authoritative reply"}
@@ -438,7 +448,7 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
         JidoMarketAgents.topic(record.id),
         {:research_complete,
          %{
-           status: :completed,
+           status: :idle,
            messages: [
              %{role: :user, content: "atom user msg"},
              %{role: :assistant, content: "atom assistant msg"}
@@ -477,8 +487,8 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
     end
   end
 
-  describe "S17.2 :needs_data clears the indicator" do
-    test "extraction_complete with needs_data status clears the phase", %{conn: conn, user: user} do
+  describe "S17.2 an idle extraction clears the indicator" do
+    test "extraction_complete with idle status clears the phase", %{conn: conn, user: user} do
       record = start_conversation!(user)
       {:ok, view, _html} = live(conn, @evaluate_path <> "/" <> record.id)
 
@@ -490,13 +500,68 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
         Fullstack.PubSub,
         JidoMarketAgents.topic(record.id),
         {:extraction_complete,
-         %{status: :needs_data, messages: [%{role: "assistant", content: "what is your budget?"}]}}
+         %{
+           status: :idle,
+           lifecycle_stage: :validating,
+           messages: [%{role: "assistant", content: "what is your budget?"}]
+         }}
       )
 
       html = render(view)
       refute html =~ "phase-buffering"
       refute html =~ "phase-researching"
       assert html =~ "what is your budget?"
+    end
+
+    test "extraction_complete with running status shows the researching indicator", %{
+      conn: conn,
+      user: user
+    } do
+      record = start_conversation!(user)
+      {:ok, view, _html} = live(conn, @evaluate_path <> "/" <> record.id)
+
+      Phoenix.PubSub.broadcast(
+        Fullstack.PubSub,
+        JidoMarketAgents.topic(record.id),
+        {:extraction_complete,
+         %{
+           status: :running,
+           lifecycle_stage: :ready,
+           messages: [%{role: "assistant", content: "Data is complete."}]
+         }}
+      )
+
+      html = render(view)
+      assert html =~ "phase-researching"
+      assert html =~ "Data is complete."
+    end
+  end
+
+  describe ":message_received clears the indicator" do
+    test "a chat-only message after research replaces the transcript and clears the phase",
+         %{conn: conn, user: user} do
+      record = start_conversation!(user)
+      {:ok, view, _html} = live(conn, @evaluate_path <> "/" <> record.id)
+
+      view
+      |> form("#message-form", %{"message" => "one more detail"})
+      |> render_submit()
+
+      Phoenix.PubSub.broadcast(
+        Fullstack.PubSub,
+        JidoMarketAgents.topic(record.id),
+        {:message_received,
+         %{
+           messages: [
+             %{role: "user", content: "stored after research", metadata: %{"type" => "chat_only"}}
+           ]
+         }}
+      )
+
+      html = render(view)
+      refute html =~ "phase-buffering"
+      refute html =~ "phase-researching"
+      assert html =~ "stored after research"
     end
   end
 
@@ -512,7 +577,7 @@ defmodule FullstackWeb.BusinessDiscoveryEvaluateTest do
       Phoenix.PubSub.broadcast(
         Fullstack.PubSub,
         JidoMarketAgents.topic(record.id),
-        {:research_complete, %{status: :completed, messages: []}}
+        {:research_complete, %{status: :idle, messages: []}}
       )
 
       html = render(view)

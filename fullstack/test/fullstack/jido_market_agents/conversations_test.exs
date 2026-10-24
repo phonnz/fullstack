@@ -316,7 +316,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
         result_digest: "result-sha256",
         completed_at: "2026-10-14T17:00:00Z",
         result: %{"summary" => "Normalized result"},
-        status: "building_strategy",
+        status: :running,
         mode: :automatic,
         pending_stage: :systems,
         content: "Business analysis complete"
@@ -325,7 +325,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
 
     defp stage_record(user, transition) do
       Conversations.create(user.id, %{
-        status: "analyzing",
+        status: :running,
         validated_data: %{
           "country" => "Spain",
           "_pipeline" => %{
@@ -349,7 +349,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
       assert {:ok, :committed, snapshot} =
                Conversations.persist_stage_transition(user.id, record.id, 0, transition)
 
-      assert snapshot.record.status == "building_strategy"
+      assert snapshot.record.status == :running
       assert snapshot.record.business_analysis["summary"] == "Normalized result"
       assert snapshot.record.business_analysis["_meta"]["stage"] == "analysis"
       assert snapshot.record.validated_data["country"] == "Spain"
@@ -509,7 +509,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
                Conversations.persist_stage_transition(user.id, record.id, 0, transition)
     end
 
-    test "manual nonfinal boundaries stay active and typed messages use durable sequence" do
+    test "manual nonfinal boundaries stay idle and typed messages use durable sequence" do
       user = user_fixture()
       transition = %{stage_transition() | mode: :manual}
       {:ok, record} = stage_record(user, transition)
@@ -522,7 +522,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
       assert {:ok, :committed, first} =
                Conversations.persist_stage_transition(user.id, record.id, 0, transition)
 
-      assert first.record.status == "active"
+      assert first.record.status == :idle
       second_transition = %{transition | stage: :systems, pending_stage: :tech_strategy}
 
       assert {:ok, :committed, second} =
@@ -629,14 +629,14 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
       user = user_fixture()
       {:ok, record} = Conversations.create(user.id)
 
-      attrs = %{status: "researching", validated_data: %{"industry" => "coffee"}}
+      attrs = %{status: :running, validated_data: %{"industry" => "coffee"}}
 
       assert {:ok, updated} = Conversations.update_state(record, attrs)
-      assert updated.status == "researching"
+      assert updated.status == :running
       assert updated.validated_data == %{"industry" => "coffee"}
 
       reloaded = Conversations.get_for_user(record.id, user.id)
-      assert reloaded.status == "researching"
+      assert reloaded.status == :running
       assert reloaded.validated_data == %{"industry" => "coffee"}
     end
 

@@ -114,7 +114,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
       id = start_conversation_for(user)
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}}, 2_000
 
       record = find_record(user)
       messages = Conversations.list_messages(record.id)
@@ -142,10 +142,10 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
     end
   end
 
-  # ── S4.1: transition to researching persists status before broadcast ──────
+  # ── S4.1: transition to research persists run health before broadcast ─────
 
-  describe "S4.1: researching status persistence" do
-    test "a transition to researching persists status before broadcast" do
+  describe "S4.1: running status persistence" do
+    test "a transition to research persists status running before broadcast" do
       user = user_fixture()
       id = start_conversation_for(user)
 
@@ -164,11 +164,12 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, complete_data)
 
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}},
+      assert_receive {:extraction_complete,
+                      %{conversation_id: ^id, status: :running, lifecycle_stage: :ready}},
                      2_000
 
       record = find_record(user)
-      assert record.status == "researching"
+      assert record.status == :running
     end
   end
 
@@ -189,7 +190,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
                      2_000
 
       record = find_record(user)
-      assert record.status == "error"
+      assert record.status == :error
     end
   end
 
@@ -205,7 +206,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
 
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}},
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}},
                      2_000
     end
 
@@ -227,7 +228,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
 
       # The write fails, but the user still receives their answer (design D2).
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}},
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}},
                      2_000
 
       # The conversation survives the failed write rather than crashing.
@@ -246,10 +247,10 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
       id = start_conversation_for(user)
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}}, 2_000
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{business_market: "fintech"})
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}}, 2_000
 
       assert {:ok, :accepted, ^id} =
                Conversation.send_message(id, %{
@@ -263,10 +264,10 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
                  metrics_baselines: %{status: "unknown", items: []}
                })
 
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}},
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :running}},
                      2_000
 
-      # Research runs asynchronously after the :researching transition and
+      # Research runs asynchronously after the :running transition and
       # appends one more message; wait for its terminal event (success or
       # failure) before comparing counts, otherwise this race is inherent to
       # the async pipeline, not to persistence idempotency.
@@ -561,7 +562,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
       result_digest: "same-result",
       completed_at: "2026-10-14T12:00:00Z",
       result: %{viable_offer: nil, evidence: [], blocker: "Unknown", experiment: "Interview"},
-      status: :active,
+      status: :idle,
       mode: :manual,
       pending_stage: :systems
     }
@@ -683,7 +684,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
       result_digest: "result",
       completed_at: "2026-10-14T12:00:00Z",
       result: %{viable_offer: nil, evidence: [], blocker: "Unknown", experiment: "Interview"},
-      status: :active,
+      status: :idle,
       mode: :manual,
       pending_stage: :systems
     }

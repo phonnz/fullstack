@@ -33,7 +33,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
     assert session.stage_versions == %{}
     assert [record] = Conversations.list_for_user(user.id)
     assert record.id == session.conversation_id
-    assert record.status == "active"
+    assert record.status == :idle
     assert record.validated_data["_pipeline"]["run_ref"] == session.run_ref
     refute inspect(record.validated_data) =~ "#Reference"
     state = :sys.get_state(session.pid)
@@ -278,7 +278,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
       request_ref: session.request_ref,
       stage: :analysis,
       boundary_version: 1,
-      status: :active
+      status: :running
     }
 
     parent = self()
@@ -349,7 +349,8 @@ defmodule Fullstack.JidoMarketAgents.ConversationsStepTest do
 
     assert {:ok, :accepted, _} = Conversation.send_message(session.conversation_id, envelope)
 
-    assert {:waiting, %{status: :needs_data, validated_data: data}, updated} =
+    assert {:waiting, %{status: :idle, lifecycle_stage: :validating, validated_data: data},
+            updated} =
              Step.wait(session, :validator)
 
     assert data["country"] == "Spain"

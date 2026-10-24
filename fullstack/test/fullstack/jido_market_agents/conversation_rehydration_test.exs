@@ -57,13 +57,10 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
     {:ok, mimo_responses: responses}
   end
 
-  test "restoration maps new statuses without dynamic atoms" do
+  test "restoration reads run health straight from the enum column" do
     user = user_fixture()
 
-    for {status, expected} <- [
-          {"analyzing", :analyzing},
-          {"building_strategy", :building_strategy}
-        ] do
+    for status <- [:idle, :running, :error] do
       {:ok, record} = Conversations.create(user.id)
 
       Repo.update_all(from(r in Conversations.Record, where: r.id == ^record.id),
@@ -71,36 +68,24 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       )
 
       {:ok, pid} = Conversation.ensure_started(record.id, user.id)
-      assert :sys.get_state(pid).status == expected
+      assert :sys.get_state(pid).status == status
     end
-
-    unknown = "unknown_" <> Ecto.UUID.generate()
-    {:ok, record} = Conversations.create(user.id)
-
-    Repo.update_all(from(r in Conversations.Record, where: r.id == ^record.id),
-      set: [status: unknown]
-    )
-
-    assert_raise ArgumentError, fn -> String.to_existing_atom(unknown) end
-    {:ok, pid} = Conversation.ensure_started(record.id, user.id)
-    assert :sys.get_state(pid).status == :active
-    assert_raise ArgumentError, fn -> String.to_existing_atom(unknown) end
   end
 
   test "restoration keeps terminal error manual and legacy precedence with closed control mappings" do
     user = user_fixture()
 
-    for {status, control, expected_status, mode, stage} <- [
-          {"error", %{"mode" => "manual", "pending_stage" => "analysis"}, :error, :manual,
-           :analysis},
-          {"analyzing", %{"mode" => "manual", "pending_stage" => "systems"}, :active, :manual,
-           :systems},
-          {"completed", nil, :completed, :legacy, nil},
-          {"completed", %{"mode" => "manual", "pending_stage" => nil}, :completed, :manual, nil},
-          {"building_strategy", %{"mode" => "automatic", "pending_stage" => "tech_strategy"},
-           :building_strategy, :automatic, :tech_strategy},
-          {"researching", %{"mode" => "unknown-mode", "pending_stage" => "unknown-stage"},
-           :active, :manual, nil}
+    for {status, stage, control, expected_status, mode, pending} <- [
+          {:error, :research, %{"mode" => "manual", "pending_stage" => "analysis"}, :error,
+           :manual, :analysis},
+          {:running, :research, %{"mode" => "manual", "pending_stage" => "systems"}, :idle,
+           :manual, :systems},
+          {:idle, :delivered, nil, :idle, :legacy, nil},
+          {:idle, :delivered, %{"mode" => "manual", "pending_stage" => nil}, :idle, :manual, nil},
+          {:running, :strategy, %{"mode" => "automatic", "pending_stage" => "tech_strategy"},
+           :running, :automatic, :tech_strategy},
+          {:running, :research, %{"mode" => "unknown-mode", "pending_stage" => "unknown-stage"},
+           :idle, :manual, nil}
         ] do
       {:ok, record} =
         Conversations.create(user.id, %{
@@ -108,11 +93,16 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
           validated_data: if(control, do: %{"_pipeline" => control}, else: nil)
         })
 
+      Repo.update_all(from(r in Conversations.Record, where: r.id == ^record.id),
+        set: [stage: stage]
+      )
+
       {:ok, pid} = Conversation.ensure_started(record.id, user.id)
       state = :sys.get_state(pid)
       assert state.status == expected_status
+      assert state.stage == stage
       assert state.mode == mode
-      assert state.pending_stage == stage
+      assert state.pending_stage == pending
       refute_received {:mimo_request, _}
     end
   end
@@ -186,7 +176,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       Conversation.subscribe(id)
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}}, 2_000
 
       {:ok, pid2} = kill_and_await_restart(id, pid)
       Conversation.subscribe(id)
@@ -236,11 +226,11 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
 
       # Turn 1: give country only.
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}}, 2_000
 
       # Turn 2: give business_market only.
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{business_market: "fintech"})
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}}, 2_000
 
       {:ok, _pid2} = kill_and_await_restart(id, pid)
       Conversation.subscribe(id)
@@ -248,7 +238,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       # Turn 3, post-rehydration: give ONLY the remaining required fields
       # (the diagnosis contract now requires explicit diagnosis answers
       # too). If country/business_market had been lost, completeness would
-      # fail and this would come back as :needs_data instead of :researching.
+      # fail and this would come back as :idle instead of :running.
       assert {:ok, :accepted, ^id} =
                Conversation.send_message(id, %{
                  initial_budget: "50000 EUR",
@@ -261,7 +251,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
                  metrics_baselines: %{status: "unknown", items: []}
                })
 
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}},
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :running}},
                      2_000
     end
   end
@@ -302,10 +292,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       }
 
       {:ok, record} =
-        Conversations.update_state(created, %{
-          status: "completed",
-          validated_data: legacy
-        })
+        Conversations.update_state(created, %{validated_data: legacy})
 
       assert record.validated_data == legacy
 
@@ -316,7 +303,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       Conversation.subscribe(id)
 
       assert {:ok, _messages} = Conversation.list_messages(id)
-      assert {:ok, :completed, _messages} = Conversation.resume(id)
+      assert {:ok, :idle, _messages} = Conversation.resume(id)
       refute_received {:mimo_request, _}
 
       # Explicit execution requalifies the diagnosis contract: the legacy
@@ -324,8 +311,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       # waits for the missing diagnosis answers.
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
 
-      assert_receive {:extraction_complete,
-                      %{conversation_id: ^id, status: :needs_data} = payload},
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle} = payload},
                      2_000
 
       follow_up = List.last(payload.messages)
@@ -346,17 +332,22 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, diagnosis)
 
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :running}}, 2_000
+      assert_receive {:research_complete, %{conversation_id: ^id}}, 2_000
 
-      # The requalified diagnosis answers survive another process death:
-      # the next turn must not re-ask for them.
+      # The requalified diagnosis answers survive another process death, and
+      # a later message is chat only: it never re-opens validation.
       {:ok, pid2} = kill_and_await_restart(id, pid)
       assert Process.alive?(pid2)
       Conversation.subscribe(id)
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
 
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :researching}}, 2_000
+      assert_receive {:message_received, %{conversation_id: ^id}}, 2_000
+      refute_receive {:extraction_complete, %{conversation_id: ^id}}, 200
+
+      persisted = Conversations.get_for_user(id, user.id).validated_data
+      assert persisted["team_size"] == %{"status" => "unknown", "count" => nil, "notes" => nil}
     end
   end
 
@@ -507,7 +498,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
 
       {:ok, record} =
         Conversations.update_state(created, %{
-          status: "building_strategy",
+          status: :running,
           validated_data: facts,
           business_analysis: persisted_analysis(),
           systems_strategy: persisted_systems()
@@ -726,6 +717,15 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
   defp resume_state(user, attrs, research) do
     {:ok, created} = Conversations.create(user.id)
 
+    # `stage` is not castable; a fresh row moves forward through the schema only.
+    {stage, attrs} = Map.pop(attrs, :stage)
+
+    if stage do
+      Repo.update_all(from(r in Conversations.Record, where: r.id == ^created.id),
+        set: [stage: stage]
+      )
+    end
+
     {:ok, record} = Conversations.update_state(created, attrs)
 
     if research do
@@ -807,7 +807,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
 
       # Error rows never auto-retry.
       assert Conversation.resume_point(
-               resume_state(user, %{validated_data: facts, status: "error"}, research)
+               resume_state(user, %{validated_data: facts, status: :error}, research)
              ) ==
                :halt
 
@@ -815,7 +815,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       manual_facts = Map.put(facts, "_pipeline", %{"mode" => "manual"})
 
       assert Conversation.resume_point(
-               resume_state(user, %{validated_data: manual_facts, status: "active"}, research)
+               resume_state(user, %{validated_data: manual_facts, status: :idle}, research)
              ) == :idle
 
       # Read-only attachment of legacy completed rows schedules no LLM work.
@@ -830,7 +830,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
         ])
 
       assert Conversation.resume_point(
-               resume_state(user, %{validated_data: legacy, status: "completed"}, nil)
+               resume_state(user, %{validated_data: legacy, stage: :delivered}, nil)
              ) ==
                :idle
 
@@ -964,7 +964,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       Conversation.subscribe(id)
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{country: "Spain"})
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}}, 2_000
 
       count_before_kill = length(Conversations.list_messages(id))
 
@@ -972,13 +972,89 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
       Conversation.subscribe(id)
 
       assert {:ok, :accepted, ^id} = Conversation.send_message(id, %{business_market: "fintech"})
-      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :needs_data}}, 2_000
+      assert_receive {:extraction_complete, %{conversation_id: ^id, status: :idle}}, 2_000
 
       count_after_second_turn = length(Conversations.list_messages(id))
 
       # Turn 2 adds exactly a user message + an assistant reply (2 rows);
       # nothing from turn 1 is duplicated.
       assert count_after_second_turn == count_before_kill + 2
+    end
+  end
+
+  describe "lifecycle stage" do
+    defp stage_record(user, stage, pending) do
+      control = %{
+        "mode" => "automatic",
+        "pending_stage" => pending,
+        "boundary_version" => 1,
+        "run_ref" => Ecto.UUID.generate(),
+        "request_ref" => Ecto.UUID.generate()
+      }
+
+      {:ok, created} = Conversations.create(user.id)
+
+      {:ok, record} =
+        Conversations.update_state(created, %{
+          validated_data: Map.put(complete_facts(), "_pipeline", control)
+        })
+
+      Repo.update_all(from(r in Conversations.Record, where: r.id == ^record.id),
+        set: [stage: stage]
+      )
+
+      record
+    end
+
+    defp probe_backends do
+      config = Application.get_env(:fullstack, Fullstack.JidoMarketAgents, [])
+
+      Application.put_env(
+        :fullstack,
+        Fullstack.JidoMarketAgents,
+        Enum.reduce([:researcher, :analyzer, :systems, :strategy], config, fn role, acc ->
+          Keyword.put(
+            acc,
+            :"#{role}_backend",
+            {BlockingProbeBackend, owner: self(), model: to_string(role)}
+          )
+        end)
+      )
+
+      on_exit(fn -> Application.put_env(:fullstack, Fullstack.JidoMarketAgents, config) end)
+    end
+
+    test "restoration carries the persisted stage" do
+      user = user_fixture()
+
+      for stage <- Fullstack.JidoMarketAgents.Conversations.Lifecycle.stages() do
+        record = stage_record(user, stage, nil)
+        {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+        assert :sys.get_state(pid).stage == stage
+      end
+    end
+
+    test "resuming a stage at or ahead of the persisted stage advances it" do
+      probe_backends()
+      user = user_fixture()
+      record = stage_record(user, :ready, "research")
+
+      {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+      assert_receive {:provider, "researcher", _}, 2_000
+      assert Conversations.get_for_user(record.id, user.id).stage == :research
+      assert :sys.get_state(pid).stage == :research
+    end
+
+    test "a pending stage behind the persisted stage is not resumed and the stage stays" do
+      user = user_fixture()
+      record = stage_record(user, :strategy, "research")
+
+      # init enqueues any resume before this call is served, so a launched
+      # stage would already hold a task here.
+      {:ok, pid} = Conversation.ensure_started(record.id, user.id)
+      assert :sys.get_state(pid).stage == :strategy
+      assert :sys.get_state(pid).task == nil
+      assert Conversations.get_for_user(record.id, user.id).stage == :strategy
     end
   end
 end
