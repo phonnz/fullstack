@@ -112,8 +112,35 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
     `stage` in memory with the same advance-only rules, so the message gate applies to
     every conversation; then the whole wipe branch is dead and removed. Behavior change
     for non-UI callers of `send_message/3`.
-- [ ] T4 — Narrow `status` to run health (slice 5). Planned later; needs its own mapping
-  review of every reader before starting.
+- [x] T4 — Narrow `status` to run health (slice 5). Route: delegated direct.
+  - Map (2026-10-23, read-only): three things share the name. A: column (varchar, no
+    index, no query filters on it; writers `persist_owned_boundary`,
+    `persist_transition_record`; readers rehydration, `step.ex` `"error"`, sidebar and
+    admin badge display). B: in-memory `state.status` (gates only `resume_point` via
+    `:error`; returned by public `resume/1`). C: broadcast `status:` atoms
+    (`evaluate.ex` matches `:researching` and `:needs_data`; `step.ex` synthesizes
+    `:needs_data`; telemetry metadata; moduledoc in `jido_market_agents.ex`).
+  - Meaning: `completed` equals stage `delivered`; `researching`, `analyzing`,
+    `building_strategy` mean automatic work in flight (`pending_stage` set), not a task
+    running; `active` means idle; `error` is the only value `stage` cannot express. The
+    running-task fact (`state.task`) is memory only.
+  - Proposed design: column becomes native enum `conversation_status` with `idle |
+    running | error`; data migration `active, completed -> idle`, `researching,
+    analyzing, building_strategy -> running`, `error -> error`; reversible `down`
+    rebuilds old values from `stage`. `running` = automatic work committed and in flight
+    (same window the three old values cover); rehydration keeps re-deriving from
+    `pending_stage`, so a stale `running` after a crash behaves as today. `completed`
+    readers move to `stage == :delivered`.
+  - About 90 tight test lines in 12 files assert status values; fixtures that set
+    `status` without `stage` need a matching stage.
+  - Decision (user 2026-10-24, "move to the stage plus"): broadcasts move too in T4.
+    Payloads that carried a `status:` atom now carry `stage:` (lifecycle stage) plus
+    `status:` (health `idle | running | error`), same key name as the column. Old to new:
+    `:needs_data` -> stage before `:ready`, `:idle`; `:researching`, `:analyzing`,
+    `:building_strategy` -> the matching phase stage, `:running`; `:completed` ->
+    `:delivered`, `:idle`; `:error` -> `:error`. Consumers updated: `evaluate.ex`,
+    `step.ex` (stops synthesizing `:needs_data`), telemetry metadata, moduledoc in
+    `jido_market_agents.ex`. Dead persisted `:needs_data` clause removed.
 
 ## Acceptance criteria
 
@@ -142,8 +169,8 @@ Mapped 2026-10-23 (read-only exploration, verified in code):
     `4233ae1`.
   - Slice 2 (T2): `ft-conversation-lifecycle-02-pipeline-stage`, base slice 1, commit `4fd46c5`.
   - Slice 3 (T3): `ft-conversation-lifecycle-03-message-gating`, base slice 2, commit `92c0be6`.
-  - Slice 4 (T5): `ft-conversation-lifecycle-04-unreachable-cleanup`, base slice 3.
-  - Slice 5 (T4): `ft-conversation-lifecycle-05-status-health`, base slice 4.
+  - Slice 4 (T5): `ft-conversation-lifecycle-04-unreachable-cleanup`, base slice 3, commit `b87ec47`.
+  - Slice 5 (T4): `ft-conversation-lifecycle-05-status-health`, base slice 4, commit `b2de805`.
 - Migrations run only against the test database. The dev database is migrated by the
   user (`mix ecto.migrate`), never by an agent.
 - Commits: Conventional Commits, no AI attribution trailer.
@@ -250,7 +277,7 @@ Format: `mix format --check-formatted` on changed files.
     "successful pipeline emits the five adopted events..." and "a map turn after an LLM
     turn does not inherit the previous raw reply".
 
-- 2026-10-23: T5 done on `ft-conversation-lifecycle-04-unreachable-cleanup`. Route:
+- 2026-10-23: T5 done on `ft-conversation-lifecycle-04-unreachable-cleanup` as `b87ec47`. Route:
   delegated direct; first pass blocked with evidence (wipe reachable for user-less
   conversations), resumed with option A.
   - Option A: private `advance_memory_stage/2` (same `Lifecycle.advance/2` rules and skip
@@ -270,6 +297,36 @@ Format: `mix format --check-formatted` on changed files.
     `LLM.Cli.RunnerTest` "caller death ... OS process tree is reaped" (file has unrelated
     dirty changes).
 
+- 2026-10-24: T4 done on `ft-conversation-lifecycle-05-status-health` as `b2de805`. Route:
+  delegated direct (writer trigger: 25 files).
+  - Broadcast key: payloads keep `stage:` as the pipeline stage (`Step.correlated?` and
+    the five-events contract depend on it), so the lifecycle stage travels as
+    `lifecycle_stage:` next to `status:` (`:idle | :running | :error`), centralized in
+    `health/1` and `broadcast/3`. The value is the persisted stage, which advances when
+    the next stage starts: `research_complete` carries `:research` + `:running`;
+    `tech_strategy_complete` carries `:delivered` + `:idle`.
+  - Contract changes: `resume/1` returns the three health values; `Record.status` is an
+    `Ecto.Enum` atom (old values rejected); legacy "completed" is read as stage
+    `delivered`; manual mode forces `:idle`; `Step.reconcile` no longer synthesizes
+    `:needs_data`; sidebar and admin badges render `stage · status`; telemetry
+    `broadcast.emitted` logs `stage=… status=…`.
+  - Migration `20261024120000_narrow_jido_conversation_status_to_health.exs`; the T1
+    backfill now compares `status::text` so its tests run against the enum column. T1
+    backfill cases built on legacy statuses were rewritten with `error`, `idle`,
+    `running`, and `tech_strategy` variants.
+  - `jido_market_agents_test.exs` (has an unrelated dirty line): the 18 status edits
+    were applied by the parent and staged against `HEAD` only; the unrelated line stays
+    unstaged.
+  - TDD: new `conversations_status_test.exs` RED 2/2 with the migration absent, then
+    GREEN; the rest was a broad, non-granular RED (DB migrated while code was old),
+    recorded as such.
+  - Native assessment on the commit: risk `medium` (`slice_budget_reached`), RDD off.
+  - Checks: focused 241 tests, 0 failures (writer); regression 691 tests, 7 failures,
+    exactly the baseline set (parent run); format clean on all touched files; no compile
+    warning from touched files; test-DB migration round trip clean.
+  - Size: 493 insertions, 256 deletions; over the heuristic because status assertions
+    are spread across many test files.
+
 ## Next step
 
-T4: map every reader of `status` before narrowing it to run health.
+All tasks done. The user migrates the dev database (`mix ecto.migrate`); pull requests (feature branch chain) only when the user asks.
