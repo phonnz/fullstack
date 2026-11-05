@@ -32,18 +32,4 @@ defmodule Fullstack.Services.Fibonacci.Server do
     new_state = [element | state]
     {:noreply, new_state}
   end
-
-  defp get_randon_feature do
-    features =
-      [
-        "HTTP server",
-        "Request processing",
-        "Long-running requests",
-        "Server-wide state",
-        "Persistable data",
-        "Background jobs",
-        "Service crash recovery"
-      ]
-      |> Enum.random()
-  end
 end

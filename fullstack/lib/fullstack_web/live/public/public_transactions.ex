@@ -96,32 +96,6 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
     |> Plot.to_svg()
   end
 
-  defp make_point_plot(data, bar_options, selected_bar) do
-    series_cols = ["Count", "$ k"]
-    test_data = Dataset.new(data, ["Day" | series_cols])
-
-    options = [
-      type: :line,
-      orientation: :vertical,
-      show_data_labels: "yes",
-      show_selected: "no",
-      show_axislabels: "yes",
-      # custom_value_scale: "no",
-      title: "Sales",
-      subtitle: "Month",
-      colour_scheme: :default,
-      legend_setting: :legend_right,
-      mapping: %{category_col: "Day", value_cols: series_cols},
-      data_labels: true,
-      phx_event_handler: "chart1_bar_clicked",
-      colour_palette: :default
-    ]
-
-    Plot.new(test_data, PointPlot, 500, 300, options)
-    |> Plot.axis_labels("Day", "Count / Amount")
-    |> Plot.to_svg()
-  end
-
   defp make_red_plot(data) do
     Sparkline.new(data)
     |> Sparkline.colours("#fad48e", "#ff9838")
@@ -189,14 +163,6 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
     Plot.to_svg(plot)
   end
 
-  @date_min ~N{2019-10-01 10:00:00}
-  @interval_seconds 600
-  defp calc_x(x, _, false), do: x
-
-  defp calc_x(_, i, _) do
-    NaiveDateTime.add(@date_min, i * @interval_seconds)
-  end
-
   defp make_point_data(socket) do
     options =
       %{
@@ -242,10 +208,5 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
       prev_points: points,
       prev_time_series: time_series
     )
-  end
-
-  defp random_within_range(min, max) do
-    diff = max - min
-    :rand.uniform() * diff + min
   end
 end

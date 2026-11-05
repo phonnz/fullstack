@@ -58,9 +58,4 @@ defmodule FullstackWeb.Live.Graph do
   defp start_timer(interval \\ 1000) do
     :timer.send_interval(interval, self(), :clock_tick)
   end
-
-  defp local_date(format) do
-    NaiveDateTime.local_now()
-    |> Calendar.strftime(format)
-  end
 end

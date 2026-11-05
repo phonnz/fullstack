@@ -88,16 +88,6 @@ defmodule Fullstack.Financial.Transactions do
 
   defp maybe_select_fields(query, _params), do: query
 
-  defp maybe_from_created_range(query, params) do
-    date_range = Map.merge(Dates.default_date_range(), params)
-
-    where(
-      query,
-      [c],
-      c.inserted_at >= ^date_range["from"] and c.inserted_at <= ^date_range["until"]
-    )
-  end
-
   @doc """
   Returns the list of transactions.
 

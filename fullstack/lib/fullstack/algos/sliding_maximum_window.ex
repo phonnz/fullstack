@@ -45,11 +45,6 @@ defmodule Fullstack.Algos.SlidingMaximumWindow do
     result
   end
 
-  defp emove_smaller(deque, ns, current) do
-    deque
-    |> Enum.drop_while(fn idx -> Enum.at(ns, idx) > current end)
-  end
-
   defp initialize_deque(nums, window_size) do
     {deque, _} =
       Enum.reduce(0..(window_size - 1), {[], -1}, fn i, {dq, _} ->
