@@ -77,8 +77,8 @@
   <div class="p-1 w-3/4">
     <.table id="devices" rows={@devices}>
       <:col :let={device} label="Identifier"><%= device.id %></:col>
-      <:col :let={device} label="AVG speed">1 Mb</:col>
-      <:col :let={device} label="">
+      <:col label="AVG speed">1 Mb</:col>
+      <:col label="">
         <%= make_red_plot(@test_data) %>
       </:col>
     </.table>

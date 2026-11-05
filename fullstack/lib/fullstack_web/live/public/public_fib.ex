@@ -115,7 +115,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
   end
 
   @impl true
-  def handle_params(params, _uri, socket) do
+  def handle_params(_params, _uri, socket) do
     {:noreply, socket}
   end
 
@@ -134,7 +134,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
   end
 
   @impl true
-  def handle_event("compute", %{"option" => option, "value" => value} = params, socket)
+  def handle_event("compute", %{"option" => option, "value" => value} = _params, socket)
       when option in ["simple", "both", "memoized", "fast"] and
              value not in [nil, ""] do
     pid_from = self()

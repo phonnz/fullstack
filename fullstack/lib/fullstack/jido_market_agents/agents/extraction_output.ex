@@ -379,7 +379,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   defp normalize_items(field, [], _item_fun),
     do: {:error, {:invalid_diagnosis, field, :items_required}}
 
-  defp normalize_items(field, items, item_fun) when is_list(items) do
+  defp normalize_items(_field, items, item_fun) when is_list(items) do
     Enum.reduce_while(items, {:ok, []}, fn item, {:ok, acc} ->
       case item_fun.(item) do
         {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}

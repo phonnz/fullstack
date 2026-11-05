@@ -40,7 +40,7 @@ defmodule Fullstack.Servers.Generators.Phrases do
   end
 
   @impl true
-  def handle_info(:work, state) do
+  def handle_info(:work, _state) do
     schedule_work()
     new_phrase = Enum.random(@phrases)
     notify_subscribers(new_phrase)

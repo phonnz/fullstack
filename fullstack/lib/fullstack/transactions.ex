@@ -1,6 +1,5 @@
 defmodule Fullstack.Public.Transactions do
   import Ecto.Query, warn: false
-  alias Fullstack.Public.Transactions
   alias Fullstack.Repo
 
   alias Fullstack.Financial.Transaction

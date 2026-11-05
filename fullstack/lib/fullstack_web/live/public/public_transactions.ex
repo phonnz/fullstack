@@ -70,7 +70,7 @@ defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
     {:noreply, socket}
   end
 
-  defp make_plot(data, bar_options, selected_bar) do
+  defp make_plot(data, _bar_options, _selected_bar) do
     series_cols = ["customers"]
     test_data = Dataset.new(data, ["Month" | series_cols])
 

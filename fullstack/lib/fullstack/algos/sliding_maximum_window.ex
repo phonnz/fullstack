@@ -1,5 +1,5 @@
 defmodule Fullstack.Algos.SlidingMaximumWindow do
-  """
+  @moduledoc """
   - Find the maximumelement by window
   - k size window
   - use deque

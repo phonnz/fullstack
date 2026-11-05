@@ -27,7 +27,7 @@ defmodule Fullstack.Algos.SlidingWindow do
     {ns, res, [Enum.at(ns, idx)]}
   end
 
-  defp filter_lt(ns, idx, {________res, dq}) do
+  defp filter_lt(_ns, idx, {________res, dq}) do
     List.last(dq) < idx
   end
 end

@@ -1,5 +1,4 @@
 defmodule Fullstack.Servers.NumberGenerator do
-  alias Hex.API.Key
   use GenServer
 
   def start_link(max) when is_integer(max) do

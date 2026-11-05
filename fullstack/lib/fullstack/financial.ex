@@ -33,7 +33,7 @@ defmodule Fullstack.Financial do
     |> Map.drop([:transactions, :monthly_transactions, :daily_transactions])
   end
 
-  def build_customers_analytics(params \\ %{}) do
+  def build_customers_analytics(_params \\ %{}) do
     Customers.list_customers(%{"only" => [:id, :inserted_at]})
     |> ChartsDates.parse_chart_data()
   end
