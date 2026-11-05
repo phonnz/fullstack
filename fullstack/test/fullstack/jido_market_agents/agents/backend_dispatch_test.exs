@@ -5,10 +5,10 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
   use ExUnit.Case, async: false
 
   alias Fullstack.JidoMarketAgents.Agents.{
-    MarketValidator,
-    MarketResearcher,
     ExtractionOutput,
-    MarketResearchOutput
+    MarketResearcher,
+    MarketResearchOutput,
+    MarketValidator
   }
 
   @app :fullstack

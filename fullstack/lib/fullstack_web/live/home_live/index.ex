@@ -1,11 +1,11 @@
 defmodule FullstackWeb.HomeLive.Index do
   use FullstackWeb, :live_view
-  alias Phoenix.LiveView.AsyncResult
   alias Fullstack.Financial
+  alias Phoenix.LiveView.AsyncResult
 
   alias Fullstack.{Customers, Financial}
-  alias Fullstack.Services.Counters
   alias Fullstack.Servers.Generators.Phrases
+  alias Fullstack.Services.Counters
   import FullstackWeb.CustomComponents
 
   @impl true

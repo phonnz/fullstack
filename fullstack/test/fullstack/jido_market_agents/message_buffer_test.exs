@@ -16,9 +16,9 @@ defmodule Fullstack.JidoMarketAgents.MessageBufferTest do
   # `unique_user/0` / `unique_conversation/0`.
   use ExUnit.Case, async: false
 
+  alias Fullstack.JidoMarketAgents.Conversation
   alias Fullstack.JidoMarketAgents.MessageBuffer
   alias Fullstack.JidoMarketAgents.MessageBufferSupervisor
-  alias Fullstack.JidoMarketAgents.Conversation
 
   @debounce_ms Application.compile_env!(:fullstack, Fullstack.JidoMarketAgents)[:debounce_ms]
   @registry Fullstack.JidoMarketAgents.ConversationRegistry

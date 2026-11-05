@@ -2,9 +2,9 @@ defmodule Fullstack.Financial do
   import Ecto.Query, warn: false
   alias Fullstack.Repo
 
-  alias Fullstack.Financial.{Transaction, Transactions}
   alias Fullstack.Customers
   alias Fullstack.Customers.Customer
+  alias Fullstack.Financial.{Transaction, Transactions}
   alias Fullstack.Utils.Charts.ChartsDates
 
   defdelegate count_transactions, to: Transactions

@@ -15,8 +15,8 @@ defmodule Fullstack.Financial.Transactions do
   """
 
   import Ecto.Query, warn: false
-  alias Fullstack.Repo
   alias Fullstack.Financial.Transaction
+  alias Fullstack.Repo
 
   def count_transactions(transactions) do
     Enum.count(transactions)

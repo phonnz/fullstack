@@ -1,6 +1,6 @@
 defmodule Fullstack.JidoMarketAgents.Agents.BusinessAnalyzerTest do
   use ExUnit.Case, async: false
-  alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalyzer, BusinessAnalysisOutput}
+  alias Fullstack.JidoMarketAgents.Agents.{BusinessAnalysisOutput, BusinessAnalyzer}
 
   defmodule Backend do
     @behaviour Fullstack.JidoMarketAgents.LLM.Backend

@@ -27,8 +27,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidator do
       extraction_history: [type: :list, required: false, default: []]
     ]
 
-  alias Fullstack.JidoMarketAgents.LLM
   alias Fullstack.JidoMarketAgents.Agents.ExtractionOutput
+  alias Fullstack.JidoMarketAgents.LLM
 
   require Logger
 

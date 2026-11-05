@@ -12,8 +12,8 @@ defmodule Fullstack.JidoMarketAgents.RateLimiterTest do
   # limiter's ETS table or cooldown maps.
   use ExUnit.Case, async: false
 
-  alias Fullstack.JidoMarketAgents.RateLimiter
   alias Fullstack.JidoMarketAgents.Conversation
+  alias Fullstack.JidoMarketAgents.RateLimiter
 
   @window_ms Application.compile_env!(:fullstack, Fullstack.JidoMarketAgents)[
                :rate_limit_window_ms

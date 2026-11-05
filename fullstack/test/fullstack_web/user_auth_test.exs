@@ -1,9 +1,9 @@
 defmodule FullstackWeb.UserAuthTest do
   use FullstackWeb.ConnCase, async: true
 
-  alias Phoenix.LiveView
   alias Fullstack.Accounts
   alias FullstackWeb.UserAuth
+  alias Phoenix.LiveView
   import Fullstack.AccountsFixtures
 
   @remember_me_cookie "_fullstack_web_user_remember_me"

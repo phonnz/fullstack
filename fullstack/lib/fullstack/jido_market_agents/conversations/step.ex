@@ -3,8 +3,8 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
   Caller-owned, non-serializable observer tokens for manual conversation stages.
   A dedicated observer owns the PubSub subscription; opening never submits input.
   """
-  alias Fullstack.JidoMarketAgents.{Conversation, Conversations}
   alias __MODULE__.Observer
+  alias Fullstack.JidoMarketAgents.{Conversation, Conversations}
 
   @stage_fields %{
     research: :market_research,

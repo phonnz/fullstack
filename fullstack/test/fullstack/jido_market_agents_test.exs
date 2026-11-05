@@ -2,7 +2,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
   use ExUnit.Case, async: false
 
   alias Fullstack.JidoMarketAgents
-  alias Fullstack.JidoMarketAgents.Agents.{MarketValidator, MarketResearcher}
+  alias Fullstack.JidoMarketAgents.Agents.{MarketResearcher, MarketValidator}
 
   alias Fullstack.JidoMarketAgents.LLM.MimoClient
 

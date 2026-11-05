@@ -1,10 +1,10 @@
 defmodule FullstackWeb.Public.TransactionsLive.PublicTransactions do
   use FullstackWeb, :live_view
 
+  alias Contex
+  alias Contex.{BarChart, Dataset, LinePlot, Plot, Sparkline}
   alias Fullstack.Devices
   alias Fullstack.Financial
-  alias Contex.{BarChart, Plot, Dataset, Sparkline, LinePlot}
-  alias Contex
 
   @impl true
   def mount(_params, _session, socket) do
