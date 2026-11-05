@@ -62,7 +62,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketValidatorTest do
     @moduledoc false
     @behaviour Fullstack.JidoMarketAgents.LLM.Backend
 
-    @raw_reply "```json\n{\"country\": \"Spain\", \"justification\": \"Names Spain.\"}\n```"
+    @raw_reply ~s|```json\n{"country": "Spain", "justification": "Names Spain."}\n```|
 
     def raw_reply, do: @raw_reply
 

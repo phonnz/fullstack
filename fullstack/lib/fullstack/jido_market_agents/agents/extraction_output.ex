@@ -283,7 +283,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   @spec default_language() :: String.t()
   def default_language, do: @default_language
 
-  @doc "Whether a value is a well-formed language hint (e.g. `\"es\"`, `\"pt-BR\"`)."
+  @doc ~s|Whether a value is a well-formed language hint (e.g. `"es"`, `"pt-BR"`).|
   @spec valid_language?(term()) :: boolean()
   def valid_language?(value) when is_binary(value), do: Regex.match?(@language_format, value)
   def valid_language?(_value), do: false
