@@ -119,7 +119,7 @@ defmodule Fullstack.Financial do
     |> Enum.map(&to_transaction/1)
   end
 
-  def stream_trx() do
+  def stream_trx do
     query =
       from(t in Transaction,
         join: c in assoc(t, :customer),
@@ -150,7 +150,7 @@ defmodule Fullstack.Financial do
     Map.put(trx, :description, "customer #{trx.customer} made a purchase at #{trx.pos}")
   end
 
-  def trx_gen() do
+  def trx_gen do
     new_trx =
       %{
         customer_id: Customers.random_customer_id(),
@@ -216,7 +216,7 @@ defmodule Fullstack.Financial do
   """
   def get_pos!(id), do: Repo.get!(Pos, id)
 
-  def random_pos_id() do
+  def random_pos_id do
     case Repo.all(from p in Pos, select: p.id) do
       [] ->
         {:ok, pos} = create_pos(%{name: "Main central point of sales"})

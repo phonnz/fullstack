@@ -12,7 +12,7 @@ defmodule Fullstack.Servers.Generators.Phrases do
     "quickly"
   ]
 
-  def get_state() do
+  def get_state do
     GenServer.call(__MODULE__, :get_state)
   end
 

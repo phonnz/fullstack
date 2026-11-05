@@ -176,7 +176,7 @@ defmodule FullstackWeb.ChatLive do
     FullstackWeb.Endpoint.broadcast("chat", "new_message", message)
   end
 
-  def load_messages() do
+  def load_messages do
     case Cachex.get(@cache, "chat") do
       {:ok, messages} when is_list(messages) ->
         Enum.reverse(messages)

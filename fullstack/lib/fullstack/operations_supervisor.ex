@@ -20,7 +20,7 @@ defmodule Fullstack.Servers.OperationsSupervisor do
     Supervisor.init(children, strategy: :one_for_all)
   end
 
-  def rand() do
+  def rand do
     __MODULE__
     |> Supervisor.which_children()
     |> Enum.map(&elem(&1, 1))

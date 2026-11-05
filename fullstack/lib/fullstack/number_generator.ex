@@ -16,7 +16,7 @@ defmodule Fullstack.Servers.NumberGenerator do
     GenServer.call(pid, :rand, 30_000)
   end
 
-  def rand() do
+  def rand do
     GenServer.call(__MODULE__, :rand)
   end
 

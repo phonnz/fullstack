@@ -15,7 +15,7 @@ defmodule Fullstack.Services.MainService do
     GenServer.call(pid, :pop)
   end
 
-  def get() do
+  def get do
     GenServer.call(__MODULE__, :get)
   end
 

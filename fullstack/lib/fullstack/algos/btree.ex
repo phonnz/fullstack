@@ -12,7 +12,7 @@ defmodule Fullstack.Algos.Btree do
   #     / \   /  \
   #    1   5  -   9
 
-  def init() do
+  def init do
     node_b = %Node{value: 1}
     node_c = %Node{value: 5}
 

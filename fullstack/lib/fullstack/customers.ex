@@ -63,7 +63,7 @@ defmodule Fullstack.Customers do
     |> Enum.random()
   end
 
-  def gen() do
+  def gen do
     new_id =
       Repo.aggregate(Customer, :count, :id) + 1
 
