@@ -50,26 +50,21 @@ defmodule Fullstack.Servers.Generators.Phrases do
 
   @impl true
   def handle_info(:finish, state) do
-    dbg("finishing after doing work")
     {:stop, :shutdown, state}
   end
 
   @impl true
   def handle_info(:connected, state) do
-    dbg("renewing....")
     {:noreply, Map.put(state, :idle?, false)}
   end
 
   @impl true
-  def handle_info(happened, state) do
-    dbg(happened)
+  def handle_info(_happened, state) do
     {:noreply, state}
   end
 
   @impl true
   def handle_cast(:idle_or_connected, %{idle?: idle?} = state) do
-    dbg(idle?)
-
     if idle? do
       {:stop, :shutdown, %{}}
     else

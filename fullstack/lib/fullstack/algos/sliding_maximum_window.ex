@@ -49,7 +49,7 @@ defmodule Fullstack.Algos.SlidingMaximumWindow do
     {deque, _} =
       Enum.reduce(0..(window_size - 1), {[], -1}, fn i, {dq, _} ->
         dq = remove_smaller(dq, nums, Enum.at(nums, i))
-        IO.inspect({[i | dq], i})
+        {[i | dq], i}
       end)
 
     # Enum.reduce(0..window_size-1, {[], -1}, fn i, {deque, _} ->
@@ -60,7 +60,6 @@ defmodule Fullstack.Algos.SlidingMaximumWindow do
     #   {deque ++ [i], i}
     #   |> IO.inspect()
     # end)
-    IO.inspect(deque)
     # Return the deque and the first window's maximum
     {deque, nums |> Enum.at(hd(deque))}
   end
