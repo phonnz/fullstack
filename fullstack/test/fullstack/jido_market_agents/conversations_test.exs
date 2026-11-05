@@ -5,6 +5,8 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
 
   alias Fullstack.JidoMarketAgents.Conversations
   alias Fullstack.JidoMarketAgents.Conversations.Record
+  alias Ecto.Adapters.SQL.Sandbox
+  alias Ecto.Adapters.SQL
 
   # `timestamps()` on these schemas has second granularity, so rows created
   # back-to-back in the same test can share an `inserted_at`. Force distinct,
@@ -438,13 +440,13 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
     defp fail_stage_write(table, operation, id_column, id) do
       # Transaction-local trigger state rolls back with the sandbox. Run this
       # module synchronously so table DDL cannot block other async DB tests.
-      Ecto.Adapters.SQL.query!(Repo, """
+      SQL.query!(Repo, """
       CREATE FUNCTION pg_temp.fail_b4_stage_write() RETURNS trigger AS $$
       BEGIN RAISE EXCEPTION 'injected private persistence failure'; END;
       $$ LANGUAGE plpgsql
       """)
 
-      Ecto.Adapters.SQL.query!(Repo, """
+      SQL.query!(Repo, """
       CREATE TRIGGER fail_b4_stage_write BEFORE #{operation} ON #{table}
       FOR EACH ROW WHEN (NEW.#{id_column} = '#{id}'::uuid)
       EXECUTE FUNCTION pg_temp.fail_b4_stage_write()
@@ -566,13 +568,13 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
     test "concurrent identical transitions commit once and replay without duplicates" do
       # DataCase shares synchronous tests by default. Disable automatic sharing
       # here so each fresh task really checks out its own database connection.
-      Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)
+      Sandbox.mode(Repo, :manual)
 
       # Separate non-sandbox transactions exercise the actual Postgres row lock,
       # rather than serializing both tasks on one shared sandbox connection.
       {user, record, transition} =
         Task.async(fn ->
-          Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+          Sandbox.unboxed_run(Repo, fn ->
             user = user_fixture()
             transition = stage_transition()
             {:ok, record} = stage_record(user, transition)
@@ -582,7 +584,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
         |> Task.await()
 
       on_exit(fn ->
-        Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+        Sandbox.unboxed_run(Repo, fn ->
           Repo.delete!(Repo.get!(Fullstack.Accounts.User, user.id))
         end)
       end)
@@ -592,7 +594,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
       tasks =
         for _ <- 1..2 do
           Task.async(fn ->
-            Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+            Sandbox.unboxed_run(Repo, fn ->
               send(parent, {:ready, self()})
 
               receive do
@@ -614,7 +616,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationsTest do
       outcomes = Enum.map(tasks, &Task.await/1)
       assert Enum.sort(Enum.map(outcomes, &elem(&1, 1))) == [:committed, :replayed]
 
-      Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+      Sandbox.unboxed_run(Repo, fn ->
         assert length(Conversations.list_messages(record.id)) == 1
 
         assert Conversations.get_for_user(record.id, user.id).validated_data["_pipeline"][

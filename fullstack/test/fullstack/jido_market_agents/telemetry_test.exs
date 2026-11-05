@@ -10,6 +10,7 @@ defmodule Fullstack.JidoMarketAgents.TelemetryTest do
   use ExUnit.Case, async: false
 
   alias Fullstack.JidoMarketAgents.Telemetry, as: AgentTelemetry
+  alias Fullstack.JidoMarketAgents.Telemetry.Reporter
 
   setup do
     # Each test attaches its own handler under a unique id and detaches on
@@ -45,7 +46,7 @@ defmodule Fullstack.JidoMarketAgents.TelemetryTest do
 
       log =
         ExUnit.CaptureLog.capture_log([level: :info], fn ->
-          Fullstack.JidoMarketAgents.Telemetry.Reporter.handle_event(
+          Reporter.handle_event(
             [:fullstack, :jido_market_agents, :analysis, :stop],
             %{duration: 1_000_000},
             %{
@@ -206,10 +207,10 @@ defmodule Fullstack.JidoMarketAgents.TelemetryTest do
 
   describe "Reporter.attach/0" do
     test "is idempotent — attaching twice does not error" do
-      assert :ok = Fullstack.JidoMarketAgents.Telemetry.Reporter.attach()
-      assert :ok = Fullstack.JidoMarketAgents.Telemetry.Reporter.attach()
+      assert :ok = Reporter.attach()
+      assert :ok = Reporter.attach()
 
-      on_exit(fn -> Fullstack.JidoMarketAgents.Telemetry.Reporter.detach() end)
+      on_exit(fn -> Reporter.detach() end)
     end
   end
 end

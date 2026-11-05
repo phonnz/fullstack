@@ -8,6 +8,7 @@ defmodule Fullstack.JidoMarketAgents.FacadeSendMessageTest do
 
   alias Fullstack.JidoMarketAgents
   alias Fullstack.JidoMarketAgents.Conversation
+  alias Fullstack.JidoMarketAgents.RateLimiter
 
   @debounce_ms Application.compile_env!(:fullstack, Fullstack.JidoMarketAgents)[:debounce_ms]
 
@@ -125,7 +126,7 @@ defmodule Fullstack.JidoMarketAgents.FacadeSendMessageTest do
         Application.get_env(:fullstack, Fullstack.JidoMarketAgents)[:rate_limit_count]
 
       for _ <- 1..count_limit do
-        Fullstack.JidoMarketAgents.RateLimiter.check_and_process(
+        RateLimiter.check_and_process(
           user_id,
           unique_conversation(),
           "msg"
@@ -134,7 +135,7 @@ defmodule Fullstack.JidoMarketAgents.FacadeSendMessageTest do
 
       assert JidoMarketAgents.user_status(user_id) == :active
 
-      Fullstack.JidoMarketAgents.RateLimiter.check_and_process(
+      RateLimiter.check_and_process(
         user_id,
         unique_conversation(),
         "over"

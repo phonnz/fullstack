@@ -4,6 +4,8 @@ defmodule FullstackWeb.UserAuthTest do
   alias Fullstack.Accounts
   alias FullstackWeb.UserAuth
   alias Phoenix.LiveView
+  alias Fullstack.Accounts.User
+  alias Fullstack.Repo
   import Fullstack.AccountsFixtures
 
   @remember_me_cookie "_fullstack_web_user_remember_me"
@@ -213,7 +215,7 @@ defmodule FullstackWeb.UserAuthTest do
 
     test "raises for a :staff user", %{conn: conn, user: user} do
       {:ok, staff} =
-        user |> Fullstack.Accounts.User.role_changeset(%{role: :staff}) |> Fullstack.Repo.update()
+        user |> User.role_changeset(%{role: :staff}) |> Repo.update()
 
       user_token = Accounts.generate_user_session_token(staff)
       session = conn |> put_session(:user_token, user_token) |> get_session()

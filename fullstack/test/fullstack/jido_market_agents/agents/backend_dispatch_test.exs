@@ -11,6 +11,10 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
     MarketValidator
   }
 
+  alias Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer
+  alias Fullstack.JidoMarketAgents.Agents.BusinessAnalysisOutput
+  alias Fullstack.JidoMarketAgents.LLM
+
   @app :fullstack
   @scope Fullstack.JidoMarketAgents
 
@@ -18,7 +22,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
 
   defmodule FakeBackend do
     @moduledoc false
-    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    @behaviour LLM.Backend
 
     @impl true
     def chat_completion(_messages, opts) do
@@ -43,7 +47,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
   # opts on a shared one.
   defmodule FakeValidatorBackend do
     @moduledoc false
-    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    @behaviour LLM.Backend
 
     @impl true
     def chat_completion(_messages, opts) do
@@ -60,7 +64,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
 
   defmodule FakeResearcherBackend do
     @moduledoc false
-    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    @behaviour LLM.Backend
 
     @impl true
     def chat_completion(_messages, opts) do
@@ -78,7 +82,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
   end
 
   defmodule FakeAnalyzerBackend do
-    @behaviour Fullstack.JidoMarketAgents.LLM.Backend
+    @behaviour LLM.Backend
     def capabilities(_), do: [:json_object]
     def validate_config(_), do: :ok
 
@@ -288,11 +292,11 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
       Application.put_env(@app, @scope, Keyword.put(config, key, :invalid))
 
       assert {:error, {^role, {:invalid_backend_config, ^role, :invalid}}} =
-               Fullstack.JidoMarketAgents.LLM.validate_config()
+               LLM.validate_config()
     end
 
     Application.put_env(@app, @scope, config)
-    assert :ok = Fullstack.JidoMarketAgents.LLM.validate_config()
+    assert :ok = LLM.validate_config()
 
     # Approved B3 deployment defaults: bounded JSON output, not measured token sufficiency.
     assert config[:default_output_language] == "en"
@@ -304,7 +308,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
           systems_backend: 8192,
           strategy_backend: 8192
         ] do
-      assert {Fullstack.JidoMarketAgents.LLM.Mimo, opts} = config[key]
+      assert {LLM.Mimo, opts} = config[key]
       assert opts[:max_tokens] == budget
     end
 
@@ -315,12 +319,12 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
     )
 
     assert {:error, {:invalid_pipeline_config, :default_output_language}} =
-             Fullstack.JidoMarketAgents.LLM.validate_config()
+             LLM.validate_config()
 
     Application.put_env(@app, @scope, Keyword.put(config, :stage_timeout_ms, :infinity))
 
     assert {:error, {:invalid_pipeline_config, :stage_timeout_ms}} =
-             Fullstack.JidoMarketAgents.LLM.validate_config()
+             LLM.validate_config()
 
     overrides =
       for {role, key} <- roles,
@@ -332,7 +336,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
     Application.put_env(@app, @scope, Keyword.merge(config, overrides))
 
     for {role, _key} <- roles do
-      assert {:ok, {FakeBackend, opts}} = Fullstack.JidoMarketAgents.LLM.backend(role)
+      assert {:ok, {FakeBackend, opts}} = LLM.backend(role)
       assert opts[:model] == Atom.to_string(role)
       assert opts[:max_tokens] == byte_size(Atom.to_string(role))
     end
@@ -352,16 +356,14 @@ defmodule Fullstack.JidoMarketAgents.Agents.BackendDispatchTest do
     )
 
     assert {:ok, %{viable_offer: nil}} =
-             Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer.analyze(
-               Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer.new()
-             )
+             BusinessAnalyzer.analyze(BusinessAnalyzer.new())
 
     assert_received {:backend_called, FakeAnalyzerBackend, opts}
     assert opts[:model] == "only-analyzer"
     assert opts[:max_tokens] == 2345
 
     assert opts[:response_format] ==
-             {:json_object, Fullstack.JidoMarketAgents.Agents.BusinessAnalysisOutput.schema()}
+             {:json_object, BusinessAnalysisOutput.schema()}
 
     refute_received {:backend_called, FakeValidatorBackend, _}
     refute_received {:backend_called, FakeResearcherBackend, _}

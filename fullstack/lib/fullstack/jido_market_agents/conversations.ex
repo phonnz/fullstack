@@ -28,6 +28,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   alias Fullstack.JidoMarketAgents.Conversations.Lifecycle
   alias Fullstack.JidoMarketAgents.Conversations.Message
   alias Fullstack.JidoMarketAgents.Conversations.Record
+  alias Fullstack.JidoMarketAgents.Conversation
 
   defp validate_conversation_id(nil), do: {:ok, nil}
   defp validate_conversation_id(id), do: validate_start_id(id, :invalid_conversation_id)
@@ -108,7 +109,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   end
 
   defp ensure_conversation_started(record, user_id) do
-    case Fullstack.JidoMarketAgents.Conversation.ensure_started(record.id, user_id) do
+    case Conversation.ensure_started(record.id, user_id) do
       {:ok, pid} -> {:ok, pid}
       {:error, {:already_started, pid}} when is_pid(pid) -> {:ok, pid}
       {:error, reason} -> {:error, {:conversation_start_failed, reason}}
