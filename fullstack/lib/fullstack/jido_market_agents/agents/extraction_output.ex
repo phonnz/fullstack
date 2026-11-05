@@ -499,9 +499,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   defp normalize_baseline_item(_item),
     do: {:error, {:invalid_diagnosis, :metrics_baselines, :invalid_item}}
 
-  defp finite_number(value) when is_number(value) do
-    if value * 0 == 0, do: {:ok, value}, else: {:error, :not_finite}
-  end
+  # BEAM numbers are always finite: floats cannot be NaN or infinity.
+  defp finite_number(value) when is_number(value), do: {:ok, value}
 
   defp finite_number(_value), do: {:error, :not_number}
 

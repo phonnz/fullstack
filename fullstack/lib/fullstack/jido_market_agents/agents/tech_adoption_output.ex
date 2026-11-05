@@ -138,7 +138,6 @@ defmodule Fullstack.JidoMarketAgents.Agents.TechAdoptionOutput do
     cond do
       not is_number(raw) -> error(field, :invalid_number)
       type == "integer" and not is_integer(raw) -> error(field, :invalid_integer)
-      raw * 0 != 0 -> error(field, :invalid_number)
       Map.has_key?(schema, "minimum") and raw < schema["minimum"] -> error(field, :out_of_range)
       Map.has_key?(schema, "maximum") and raw > schema["maximum"] -> error(field, :out_of_range)
       true -> {:ok, raw}
