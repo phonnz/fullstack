@@ -313,7 +313,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
         "country" => "Spain",
         "city" => "Madrid",
         "business_market" => "fintech",
-        "initial_budget" => 50000,
+        "initial_budget" => 50_000,
         "final_product_proposal" => "Payment app",
         "product_price" => 9.99,
         "unknown_field" => "ignored",
@@ -362,7 +362,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
                  country: :Spain,
                  city: ["Madrid"],
                  business_market: false,
-                 initial_budget: 50000,
+                 initial_budget: 50_000,
                  final_product_proposal: %{name: "App"},
                  product_price: 9.99
                })
@@ -473,7 +473,7 @@ defmodule Fullstack.JidoMarketAgentsTest do
             "country" => "Spain",
             "city" => "Madrid",
             "business_market" => "fintech",
-            "initial_budget" => 50000,
+            "initial_budget" => 50_000,
             "final_product_proposal" => "Payment app",
             "product_price" => 9.99,
             "unexpected_model_field" => "ignored"

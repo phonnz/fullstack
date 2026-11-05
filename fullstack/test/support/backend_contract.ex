@@ -169,9 +169,9 @@ defmodule Fullstack.Support.BackendContract do
       defp contract_validate_config_shapes do
         wrong_typed =
           if Keyword.has_key?(@contract_valid_config, :command) do
-            Keyword.put(@contract_valid_config, :command, 12345)
+            Keyword.put(@contract_valid_config, :command, 12_345)
           else
-            [garbage_typed_value: 12345, another: %{not: :a_keyword_value}]
+            [garbage_typed_value: 12_345, another: %{not: :a_keyword_value}]
           end
 
         [
