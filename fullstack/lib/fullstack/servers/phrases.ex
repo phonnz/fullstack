@@ -60,6 +60,12 @@ defmodule Fullstack.Servers.Generators.Phrases do
   end
 
   @impl true
+  def handle_info(happened, state) do
+    dbg(happened)
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_cast(:idle_or_connected, %{idle?: idle?} = state) do
     dbg(idle?)
 
@@ -70,12 +76,6 @@ defmodule Fullstack.Servers.Generators.Phrases do
       schedule_work()
       {:noreply, state}
     end
-  end
-
-  @impl true
-  def handle_info(happened, state) do
-    dbg(happened)
-    {:noreply, state}
   end
 
   @impl true

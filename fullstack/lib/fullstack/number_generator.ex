@@ -1,11 +1,13 @@
 defmodule Fullstack.Servers.NumberGenerator do
   use GenServer
 
+  def start_link(args \\ [])
+
   def start_link(max) when is_integer(max) do
     GenServer.start_link(__MODULE__, max)
   end
 
-  def start_link(args \\ []) do
+  def start_link(args) do
     max = Keyword.get(args, :max, 10_000)
     GenServer.start_link(__MODULE__, max)
   end
