@@ -175,7 +175,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPipelineTest do
        %{id: id, pid: pid, user: user} do
     Conversation.send_message(id, data())
     assert_receive {:provider, worker, "researcher", _}, 1_000
-    assert length(Conversations.list_messages(id)) >= 1
+    assert Conversations.list_messages(id) != []
     control = Conversations.get_for_user(id, user.id).validated_data["_pipeline"]
     assert is_binary(control["input_fingerprint"])
     assert control["run_ref"] == :sys.get_state(pid).run_ref

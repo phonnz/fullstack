@@ -102,7 +102,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
 
       assert Enum.any?(user_messages, fn m ->
                m.content =~ "country" or m.content == inspect(%{country: "Spain"})
-             end) or length(user_messages) > 0
+             end) or user_messages != []
     end
   end
 
@@ -120,7 +120,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationPersistenceTest do
       messages = Conversations.list_messages(record.id)
       assistant_messages = Enum.filter(messages, &(&1.role == "assistant"))
 
-      assert length(assistant_messages) > 0
+      assert assistant_messages != []
       assert Enum.all?(assistant_messages, &is_map(&1.metadata))
     end
   end
