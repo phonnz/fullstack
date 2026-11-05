@@ -17,7 +17,7 @@ defmodule FullstackWeb.CoreComponents do
   use Phoenix.Component
 
   alias Phoenix.LiveView.JS
-  import FullstackWeb.Gettext
+  use Gettext, backend: FullstackWeb.Gettext
 
   @doc """
   Renders a modal.

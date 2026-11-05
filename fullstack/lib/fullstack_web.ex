@@ -43,7 +43,7 @@ defmodule FullstackWeb do
         layouts: [html: FullstackWeb.Layouts]
 
       import Plug.Conn
-      import FullstackWeb.Gettext
+      use Gettext, backend: FullstackWeb.Gettext
 
       unquote(verified_routes())
     end
@@ -85,7 +85,7 @@ defmodule FullstackWeb do
       import Phoenix.HTML
       # Core UI components and translation
       import FullstackWeb.CoreComponents
-      import FullstackWeb.Gettext
+      use Gettext, backend: FullstackWeb.Gettext
 
       # Shortcut for generating JS commands
       alias Phoenix.LiveView.JS
