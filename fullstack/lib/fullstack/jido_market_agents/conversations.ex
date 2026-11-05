@@ -350,7 +350,7 @@ defmodule Fullstack.JidoMarketAgents.Conversations do
   never insert a second message. Control metadata is JSON-safe and system-owned.
   """
   @spec persist_stage_transition(Ecto.UUID.t(), Ecto.UUID.t(), non_neg_integer(), map()) ::
-          {:ok, :committed | :replayed, %{record: Record.t(), messages: [%Message{}]}}
+          {:ok, :committed | :replayed, %{record: Record.t(), messages: [Message.t()]}}
           | {:error, term()}
   def persist_stage_transition(user_id, record_id, expected_version, transition) do
     with {:ok, transition} <- normalize_transition(transition),
