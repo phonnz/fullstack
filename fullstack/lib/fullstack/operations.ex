@@ -3,7 +3,6 @@ defmodule Fullstack.Operations do
   alias Fullstack.Repo
 
   alias Fullstack.Financial.{Transaction, Transactions}
-  alias Fullstack.Utils.Charts.ChartsDates
 
   defdelegate count_transactions, to: Transactions
   defdelegate count_transactions(transactions), to: Transactions
