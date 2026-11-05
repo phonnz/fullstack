@@ -36,12 +36,9 @@ defmodule Fullstack.Wallet.WalletProjector do
   end
 
   def lookup_balance(customer_id) when is_binary(customer_id) do
-    with [{pid, _}] <-
-           Registry.lookup(@registry, customer_id) do
-      {:ok, get_balance(pid)}
-    else
-      _ ->
-        {:error, :unknown_account}
+    case Registry.lookup(@registry, customer_id) do
+      [{pid, _}] -> {:ok, get_balance(pid)}
+      _ -> {:error, :unknown_account}
     end
   end
 

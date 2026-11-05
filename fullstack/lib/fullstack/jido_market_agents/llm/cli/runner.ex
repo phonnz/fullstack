@@ -203,24 +203,25 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.Runner do
         Task.start(fn ->
           ref = Process.monitor(caller)
 
-          with {:ok, scratch_dir} <- create_scratch_dir(scratch_prefix) do
-            result =
-              run_supervised(
-                absolute_path,
-                argv,
-                env,
-                scratch_dir,
-                deadline,
-                grace_ms,
-                max_output_bytes,
-                before_cleanup,
-                caller,
-                ref
-              )
+          case create_scratch_dir(scratch_prefix) do
+            {:ok, scratch_dir} ->
+              result =
+                run_supervised(
+                  absolute_path,
+                  argv,
+                  env,
+                  scratch_dir,
+                  deadline,
+                  grace_ms,
+                  max_output_bytes,
+                  before_cleanup,
+                  caller,
+                  ref
+                )
 
-            Process.demonitor(ref, [:flush])
-            send(caller, {__MODULE__, self(), result})
-          else
+              Process.demonitor(ref, [:flush])
+              send(caller, {__MODULE__, self(), result})
+
             {:error, _reason} = error ->
               Process.demonitor(ref, [:flush])
               send(caller, {__MODULE__, self(), error})
