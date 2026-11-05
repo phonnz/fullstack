@@ -1,4 +1,5 @@
 defmodule Fullstack.Wallet.WalletProjector do
+  @moduledoc false
   use GenServer
   require Logger
 

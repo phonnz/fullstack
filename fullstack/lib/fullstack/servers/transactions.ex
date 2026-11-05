@@ -1,4 +1,5 @@
 defmodule Fullstack.Servers.Generators.Transactions do
+  @moduledoc false
   use GenServer
 
   alias Fullstack.Financial

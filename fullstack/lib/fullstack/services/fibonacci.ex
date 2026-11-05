@@ -1,4 +1,5 @@
 defmodule Fullstack.Services.Fibonacci.Server do
+  @moduledoc false
   use GenServer
 
   def start_link(default \\ []) when is_list(default) do

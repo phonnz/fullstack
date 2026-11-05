@@ -1,4 +1,5 @@
 defmodule Fullstack.Accounts.UserNotifier do
+  @moduledoc false
   import Swoosh.Email
 
   alias Fullstack.Mailer

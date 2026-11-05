@@ -1,4 +1,5 @@
 defmodule Fullstack.Services.Counters do
+  @moduledoc false
   use GenServer
   @table_name :counters
 

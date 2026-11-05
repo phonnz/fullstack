@@ -1,4 +1,5 @@
 defmodule Fullstack.Algos.SlidingWindow do
+  @moduledoc false
   @doc """
   - Find the maximumelement by window
   - k size window

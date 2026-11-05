@@ -1,4 +1,5 @@
 defmodule FullstackWeb.GroupChannel do
+  @moduledoc false
   use FullstackWeb, :channel
   alias FullstackWeb.Presence
   require Logger

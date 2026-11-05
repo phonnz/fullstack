@@ -1,4 +1,5 @@
 defmodule Fullstack.Servers.Generators.Customers do
+  @moduledoc false
   use GenServer
 
   alias Fullstack.Customers

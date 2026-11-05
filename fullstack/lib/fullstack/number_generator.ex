@@ -1,4 +1,5 @@
 defmodule Fullstack.Servers.NumberGenerator do
+  @moduledoc false
   use GenServer
 
   def start_link(args \\ [])

@@ -1,4 +1,5 @@
 defmodule Fullstack.Wallet.Aggregate.WalletAggregator do
+  @moduledoc false
   use GenServer
   require Logger
   @registry Fullstack.Wallet.Aggregate.WalletAggregators

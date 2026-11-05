@@ -1,4 +1,5 @@
 defmodule FullstackWeb.Live.MapComponent do
+  @moduledoc false
   use FullstackWeb, :live_component
   alias MapLibre
 

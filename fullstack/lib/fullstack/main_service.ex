@@ -1,4 +1,5 @@
 defmodule Fullstack.Services.MainService do
+  @moduledoc false
   use GenServer
 
   # Client

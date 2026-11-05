@@ -1,4 +1,5 @@
 defmodule Fullstack.Servers.Generators.Phrases do
+  @moduledoc false
   use GenServer
   require Logger
 

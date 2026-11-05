@@ -1,4 +1,5 @@
 defmodule Fullstack.Operations do
+  @moduledoc false
   import Ecto.Query, warn: false
   alias Fullstack.Repo
 

@@ -1,4 +1,5 @@
 defmodule FullstackWeb.Live.Graph do
+  @moduledoc false
   use FullstackWeb, :live_component
 
   @impl true

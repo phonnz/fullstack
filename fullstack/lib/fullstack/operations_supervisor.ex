@@ -1,4 +1,5 @@
 defmodule Fullstack.Servers.OperationsSupervisor do
+  @moduledoc false
   alias Fullstack.Servers.NumberGenerator
   use Supervisor
 

@@ -1,8 +1,10 @@
 defmodule Fullstack.Algos.Btree.Node do
+  @moduledoc false
   defstruct [:value, :left, :right]
 end
 
 defmodule Fullstack.Algos.Btree do
+  @moduledoc false
   alias Fullstack.Algos.Btree.Node
 
   # Example tree:

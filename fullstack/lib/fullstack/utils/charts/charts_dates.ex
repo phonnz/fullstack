@@ -1,4 +1,5 @@
 defmodule Fullstack.Utils.Charts.ChartsDates do
+  @moduledoc false
   def parse_chart_data([%Fullstack.Customers.Customer{} | _] = customers) do
     customers
     |> Enum.reduce(%{}, fn c, acc ->
