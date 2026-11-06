@@ -85,4 +85,68 @@ defmodule FullstackWeb.ChatLiveTest do
       refute String.contains?(all_classes, "bg-slate-400"), "Should not have bg-slate-400"
     end
   end
+
+  describe "ChatLive message list" do
+    setup do
+      Cachex.clear(:chat)
+      :ok
+    end
+
+    test "mount renders the cached messages", %{conn: conn} do
+      Cachex.put!(:chat, "chat", [%{id: 501, from: "ana", text: "cached hello"}])
+
+      {:ok, _view, html} = live(conn, ~p"/chat")
+
+      assert html =~ "cached hello"
+    end
+
+    test "broadcast messages are appended and earlier ones stay", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/chat")
+
+      FullstackWeb.Endpoint.broadcast("chat", "new_message", %{
+        id: 601,
+        from: "ana",
+        text: "first broadcast"
+      })
+
+      assert render(view) =~ "first broadcast"
+
+      FullstackWeb.Endpoint.broadcast("chat", "new_message", %{
+        id: 602,
+        from: "ben",
+        text: "second broadcast"
+      })
+
+      html = render(view)
+      assert html =~ "first broadcast"
+      assert html =~ "second broadcast"
+    end
+
+    test "submitting the form shows the sent message once", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/chat")
+
+      view
+      |> form("form", form: %{message: "typed by me"})
+      |> render_submit()
+
+      html = render(view)
+      assert length(String.split(html, "typed by me")) - 1 == 1
+    end
+
+    test "every sent message keeps its own entry in the list", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/chat")
+
+      for n <- 1..40 do
+        view
+        |> form("form", form: %{message: "msg-#{n}-end"})
+        |> render_submit()
+      end
+
+      html = render(view)
+
+      for n <- 1..40 do
+        assert html =~ "msg-#{n}-end"
+      end
+    end
+  end
 end

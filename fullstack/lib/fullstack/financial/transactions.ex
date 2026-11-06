@@ -15,9 +15,8 @@ defmodule Fullstack.Financial.Transactions do
   """
 
   import Ecto.Query, warn: false
-  alias Fullstack.Repo
-  alias Fullstack.Utils.Charts.Dates
   alias Fullstack.Financial.Transaction
+  alias Fullstack.Repo
 
   def count_transactions(transactions) do
     Enum.count(transactions)
@@ -46,14 +45,8 @@ defmodule Fullstack.Financial.Transactions do
     |> Repo.all()
   end
 
-  defp with_date_range(query, %{"dates" => %{"from" => from, "iuntil" => until}} = params) do
-    date_range = Map.merge(Dates.default_date_range(), params)
-
-    where(
-      query,
-      [t],
-      t.inserted_at >= ^date_range["from"] and t.inserted_at <= ^date_range["until"]
-    )
+  defp with_date_range(query, %{"dates" => %{"from" => from, "until" => until}}) do
+    where(query, [t], t.inserted_at >= ^from and t.inserted_at <= ^until)
   end
 
   defp with_date_range(query, _params), do: query
@@ -87,16 +80,6 @@ defmodule Fullstack.Financial.Transactions do
   end
 
   defp maybe_select_fields(query, _params), do: query
-
-  defp maybe_from_created_range(query, params) do
-    date_range = Map.merge(Dates.default_date_range(), params)
-
-    where(
-      query,
-      [c],
-      c.inserted_at >= ^date_range["from"] and c.inserted_at <= ^date_range["until"]
-    )
-  end
 
   @doc """
   Returns the list of transactions.

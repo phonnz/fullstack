@@ -1,8 +1,8 @@
 defmodule FullstackWeb.Public.DevicesLive.Index do
   alias Phoenix.LiveView.AsyncResult
   use FullstackWeb, :live_view
-  alias MapLibre
   alias Fullstack.Devices
+  alias MapLibre
   @fill_colour "#ffa8db"
 
   def mount(_params, _, socket) do
@@ -23,7 +23,7 @@ defmodule FullstackWeb.Public.DevicesLive.Index do
     <div :if={devices = @devices.ok? && @devices.result}>
       <ul>
         <li :for={device <- devices} id={device.id}>
-          <%= device.id %>
+          {device.id}
         </li>
       </ul>
     </div>

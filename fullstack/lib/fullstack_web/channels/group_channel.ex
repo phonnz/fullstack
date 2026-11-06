@@ -1,11 +1,12 @@
 defmodule FullstackWeb.GroupChannel do
+  @moduledoc false
   use FullstackWeb, :channel
   alias FullstackWeb.Presence
   require Logger
   #  intercept(["user_joined"])
 
   @impl true
-  def join("group:main", payload, socket) do
+  def join("group:main", _payload, socket) do
     if authorized?(socket.assigns) do
       send(self(), :after_join)
       {:ok, socket}
@@ -51,7 +52,7 @@ defmodule FullstackWeb.GroupChannel do
   end
 
   # Add authorization logic here as required.
-  defp authorized?(%{:mac_addr => _macc_adrr} = payload) do
+  defp authorized?(%{:mac_addr => _macc_adrr} = _payload) do
     true
   end
 end

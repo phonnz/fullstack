@@ -1,4 +1,5 @@
 defmodule Fullstack.Servers.Fibonacci.Fibonacci do
+  @moduledoc false
   use Agent
 
   def start do

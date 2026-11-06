@@ -11,9 +11,9 @@ defmodule Fullstack.JidoMarketAgents.Agents.BusinessAnalyzer do
     ]
 
   alias Fullstack.JidoMarketAgents.Agents.{
+    BusinessAnalysisOutput,
     ExtractionOutput,
-    MarketResearchOutput,
-    BusinessAnalysisOutput
+    MarketResearchOutput
   }
 
   alias Fullstack.JidoMarketAgents.LLM

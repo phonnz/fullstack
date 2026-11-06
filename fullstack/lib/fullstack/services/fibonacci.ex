@@ -1,4 +1,5 @@
 defmodule Fullstack.Services.Fibonacci.Server do
+  @moduledoc false
   use GenServer
 
   def start_link(default \\ []) when is_list(default) do
@@ -31,19 +32,5 @@ defmodule Fullstack.Services.Fibonacci.Server do
   def handle_cast({:push, element}, state) do
     new_state = [element | state]
     {:noreply, new_state}
-  end
-
-  defp get_randon_feature do
-    features =
-      [
-        "HTTP server",
-        "Request processing",
-        "Long-running requests",
-        "Server-wide state",
-        "Persistable data",
-        "Background jobs",
-        "Service crash recovery"
-      ]
-      |> Enum.random()
   end
 end

@@ -3,6 +3,7 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCodeTest do
 
   alias Fullstack.JidoMarketAgents.Agents.ExtractionOutput
   alias Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCode
+  alias Fullstack.JidoMarketAgents.LLM.Cli.Runner
 
   @fixtures_dir Path.join(__DIR__, "../../../../support/fake_cli") |> Path.expand()
 
@@ -106,7 +107,7 @@ defmodule Fullstack.JidoMarketAgents.LLM.Cli.ClaudeCodeTest do
     # adapter would build.
     defp captured_argv_lines(argv) do
       {:ok, result} =
-        Fullstack.JidoMarketAgents.LLM.Cli.Runner.run(
+        Runner.run(
           fixture("claude_echo_argv.sh"),
           argv,
           before_cleanup: fn scratch_dir ->

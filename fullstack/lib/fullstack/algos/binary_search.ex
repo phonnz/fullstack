@@ -1,4 +1,5 @@
 defmodule Fullstack.Algos.TimestampSearch do
+  @moduledoc false
   @doc """
   Finds the first registry in a sorted list that occurs after the given timestamp.
 

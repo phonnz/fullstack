@@ -104,15 +104,10 @@ defmodule FullstackWeb.Router do
 
     # Storybook routes are compiled only in dev/test (see elixirc_paths in
     # mix.exs). `use`/`import` are expanded by the compiler even inside a dead
-    # `if` branch, so the call is emitted via Module.eval_quoted/2 — the AST is
+    # `if` branch, so the call is emitted via Code.eval_quoted/3 — the AST is
     # only built when the module actually exists.
     if Code.ensure_loaded?(FullstackWeb.StorybookRoutes) do
-      Module.eval_quoted(
-        __MODULE__,
-        quote(do: use(FullstackWeb.StorybookRoutes)),
-        [],
-        __ENV__
-      )
+      Code.eval_quoted(quote(do: use(FullstackWeb.StorybookRoutes)), [], __ENV__)
     end
 
     scope "/dev" do

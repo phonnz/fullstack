@@ -13,14 +13,14 @@ defmodule Fullstack.JidoMarketAgents.Agents.StrategyAgent do
     ]
 
   alias Fullstack.JidoMarketAgents.Agents.{
+    BusinessAnalysisOutput,
     ExtractionOutput,
-    MarketResearchOutput,
-    BusinessAnalysisOutput
+    MarketResearchOutput
   }
 
-  alias Fullstack.JidoMarketAgents.{Knowledge, LLM}
-  alias Fullstack.JidoMarketAgents.Agents.TechAdoptionOutput
   alias Fullstack.JidoMarketAgents.Agents.SystemsStrategyOutput
+  alias Fullstack.JidoMarketAgents.Agents.TechAdoptionOutput
+  alias Fullstack.JidoMarketAgents.{Knowledge, LLM}
 
   defoverridable new: 1, set: 2
 

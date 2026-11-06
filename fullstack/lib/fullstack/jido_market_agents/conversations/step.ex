@@ -3,8 +3,8 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
   Caller-owned, non-serializable observer tokens for manual conversation stages.
   A dedicated observer owns the PubSub subscription; opening never submits input.
   """
-  alias Fullstack.JidoMarketAgents.{Conversation, Conversations}
   alias __MODULE__.Observer
+  alias Fullstack.JidoMarketAgents.{Conversation, Conversations}
 
   @stage_fields %{
     research: :market_research,
@@ -258,13 +258,11 @@ defmodule Fullstack.JidoMarketAgents.Conversations.Step do
 
   @doc "Closes only this lease and observer, leaving accepted stage work alive."
   def close(%__MODULE__{owner: owner} = session) when owner == self() do
-    try do
-      GenServer.call(session.pid, {:release_step, session.lease_ref})
-    catch
-      :exit, _ -> :ok
-    after
-      stop_observer(session.observer)
-    end
+    GenServer.call(session.pid, {:release_step, session.lease_ref})
+  catch
+    :exit, _ -> :ok
+  after
+    stop_observer(session.observer)
   end
 
   def close(%__MODULE__{}), do: {:error, :not_owner}

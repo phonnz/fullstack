@@ -6,7 +6,7 @@ defmodule Fullstack.Accounts do
   import Ecto.Query, warn: false
   alias Fullstack.Repo
 
-  alias Fullstack.Accounts.{User, UserToken, UserNotifier}
+  alias Fullstack.Accounts.{User, UserNotifier, UserToken}
 
   ## Database getters
 

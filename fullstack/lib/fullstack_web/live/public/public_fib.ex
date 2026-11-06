@@ -30,7 +30,6 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
       class="flex flex-wrap items-center grid grid-cols-6 gap-2"
     >
       <.input
-        class="col-span-full md:col-span-2 "
         type="text"
         name="value"
         field={@form[:value]}
@@ -93,7 +92,7 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
         <h3 class="text-lg font-bold">Simple</h3>
         <span :for={message <- @messages} class="font-size-8">
           <%= if String.starts_with?(message, "=>") do %>
-            <p><%= message %></p>
+            <p>{message}</p>
             <br />
           <% else %>
             .
@@ -103,19 +102,19 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
       <div class="col-span-3 lg:col-span-1  max-h-1/3">
         <h3 class="text-lg font-bold">Memoization</h3>
         <article :for={message <- @memo_messages} class="overflow-x-auto">
-          <b><%= message %></b>
+          <b>{message}</b>
         </article>
       </div>
       <div class="col-span-3 lg:col-span-1 max-h-1/3 overflow-x-auto">
         <h3 class="text-lg font-bold">Fast Fib</h3>
-        <b><%= @fast_fib %></b>
+        <b>{@fast_fib}</b>
       </div>
     </div>
     """
   end
 
   @impl true
-  def handle_params(params, _uri, socket) do
+  def handle_params(_params, _uri, socket) do
     {:noreply, socket}
   end
 
@@ -134,7 +133,21 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
   end
 
   @impl true
-  def handle_event("compute", %{"option" => option, "value" => value} = params, socket)
+  def handle_info({:EXIT, pid, _reason} = _args, socket) do
+    socket =
+      cond do
+        pid == socket.assigns.task ->
+          assign(socket, :task, nil)
+
+        pid == socket.assigns.task_m ->
+          assign(socket, :task_m, nil)
+      end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("compute", %{"option" => option, "value" => value} = _params, socket)
       when option in ["simple", "both", "memoized", "fast"] and
              value not in [nil, ""] do
     pid_from = self()
@@ -190,20 +203,6 @@ defmodule FullstackWeb.Public.FibonacciLive.Index do
       |> assign(:task, nil)
       |> assign(:task_m, nil)
       |> put_flash(:info, "Cancelled")
-
-    {:noreply, socket}
-  end
-
-  @impl true
-  def handle_info({:EXIT, pid, _reason} = _args, socket) do
-    socket =
-      cond do
-        pid == socket.assigns.task ->
-          assign(socket, :task, nil)
-
-        pid == socket.assigns.task_m ->
-          assign(socket, :task_m, nil)
-      end
 
     {:noreply, socket}
   end

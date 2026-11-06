@@ -1,8 +1,10 @@
 defmodule Fullstack.EcosystemLogo do
+  @moduledoc false
   defstruct [:id, :logo_path, :name, :link]
 end
 
 defmodule Fullstack.EcosystemLogos do
+  @moduledoc false
   def list do
     [
       %Fullstack.EcosystemLogo{

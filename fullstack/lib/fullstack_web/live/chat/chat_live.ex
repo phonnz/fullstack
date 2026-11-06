@@ -18,9 +18,8 @@ defmodule FullstackWeb.ChatLive do
       |> assign(:tmp_id, tmp_id(session))
       |> assign(:form, to_form(%{"message" => ""}, as: :form))
       |> assign(:typing_users, [])
-      |> assign(:messages, load_messages())
-      |> set_users_state(),
-      temporary_assigns: [messages: []]
+      |> stream(:messages, load_messages(), dom_id: &message_dom_id/1)
+      |> set_users_state()
     }
   end
 
@@ -30,18 +29,18 @@ defmodule FullstackWeb.ChatLive do
     <div class="flex flex-col h-screen bg-base-200">
       <.header>
         Hooah!<br /> This is your identifier:
-        <span class="badge badge-neutral badge-lg"><%= assigns.tmp_id %></span>
+        <span class="badge badge-neutral badge-lg">{assigns.tmp_id}</span>
       </.header>
       <div class="flex-1 overflow-y-auto p-4 space-y-2">
-        <div phx-update="append" id="messages" class="w-full bg-base-100 text-base-content p-2">
-          <div :for={message <- @messages} id={"m-#{message.id}"} class="w-full">
+        <div phx-update="stream" id="messages" class="w-full bg-base-100 text-base-content p-2">
+          <div :for={{dom_id, message} <- @streams.messages} id={dom_id} class="w-full">
             <.message_line message={message} tmp_id={@tmp_id}></.message_line>
           </div>
         </div>
       </div>
       <section class="shrink-0 border-t border-base-300 bg-base-100 p-4">
         <div class="text-sm text-muted">
-          <%= @users_count %> users with <%= @connections %> connections
+          {@users_count} users with {@connections} connections
         </div>
         <p
           :if={@typing_users != ""}
@@ -50,7 +49,7 @@ defmodule FullstackWeb.ChatLive do
           class="text-sm text-muted"
         >
           <span class="loading loading-dots loading-xs"></span>
-          <%= @typing_users %> typing...
+          {@typing_users} typing...
         </p>
         <.form for={@form} phx-change="change" phx-submit="save" class="mt-3 flex gap-2">
           <input
@@ -72,7 +71,7 @@ defmodule FullstackWeb.ChatLive do
 
   @impl true
   def handle_info(%{event: "new_message", payload: income_message}, socket) do
-    {:noreply, assign(socket, messages: [income_message])}
+    {:noreply, stream_insert(socket, :messages, income_message)}
   end
 
   @impl true
@@ -99,7 +98,7 @@ defmodule FullstackWeb.ChatLive do
   @impl true
   def handle_event("save", %{"form" => %{"message" => message}}, socket) do
     new_message = %{
-      id: :rand.uniform(100),
+      id: unique_message_id(),
       from: socket.assigns.tmp_id,
       text: message
     }
@@ -114,7 +113,7 @@ defmodule FullstackWeb.ChatLive do
 
     {:noreply,
      socket
-     |> assign(:messages, [new_message])
+     |> stream_insert(:messages, new_message)
      |> assign(:text_value, nil)}
   end
 
@@ -122,7 +121,7 @@ defmodule FullstackWeb.ChatLive do
     ~H"""
     <div class="chat chat-end">
       <div class="chat-bubble chat-bubble-primary">
-        <%= @message.text %>
+        {@message.text}
       </div>
     </div>
     """
@@ -132,7 +131,7 @@ defmodule FullstackWeb.ChatLive do
     ~H"""
     <div class="chat chat-start">
       <div class="chat-bubble chat-bubble-info">
-        <%= @message.text %>
+        {@message.text}
       </div>
     </div>
     """
@@ -142,10 +141,10 @@ defmodule FullstackWeb.ChatLive do
     ~H"""
     <div class="chat chat-start">
       <div class="chat-header text-xs text-muted">
-        <%= @message.from %>
+        {@message.from}
       </div>
       <div class="chat-bubble">
-        <%= @message.text %>
+        {@message.text}
       </div>
     </div>
     """
@@ -159,7 +158,7 @@ defmodule FullstackWeb.ChatLive do
     })
 
     broadcast_message(%{
-      id: :rand.uniform(1000),
+      id: unique_message_id(),
       from: "Fullstack",
       text: "#{tmp_id} joined the chat!"
     })
@@ -169,11 +168,15 @@ defmodule FullstackWeb.ChatLive do
 
   defp tmp_id(_session), do: nil
 
+  defp unique_message_id, do: System.unique_integer([:positive])
+
+  defp message_dom_id(message), do: "m-#{message.id}"
+
   defp broadcast_message(message) do
     FullstackWeb.Endpoint.broadcast("chat", "new_message", message)
   end
 
-  def load_messages() do
+  def load_messages do
     case Cachex.get(@cache, "chat") do
       {:ok, messages} when is_list(messages) ->
         Enum.reverse(messages)

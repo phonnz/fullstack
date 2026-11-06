@@ -13,8 +13,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.MarketResearcher do
       final_product_proposal: [type: :string, required: false]
     ]
 
-  alias Fullstack.JidoMarketAgents.LLM
   alias Fullstack.JidoMarketAgents.Agents.MarketResearchOutput
+  alias Fullstack.JidoMarketAgents.LLM
 
   def research(agent) do
     prompt = prompt(agent)

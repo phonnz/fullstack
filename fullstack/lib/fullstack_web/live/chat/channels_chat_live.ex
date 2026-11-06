@@ -12,7 +12,6 @@ defmodule FullstackWeb.ChannelsChatLive do
   """
 
   use FullstackWeb, :live_view
-  alias Phoenix.Presence
   alias FullstackWeb.ChatPresence, as: Presence
 
   @cache :chat

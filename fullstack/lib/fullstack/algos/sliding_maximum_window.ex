@@ -1,5 +1,5 @@
 defmodule Fullstack.Algos.SlidingMaximumWindow do
-  """
+  @moduledoc """
   - Find the maximumelement by window
   - k size window
   - use deque
@@ -45,16 +45,11 @@ defmodule Fullstack.Algos.SlidingMaximumWindow do
     result
   end
 
-  defp emove_smaller(deque, ns, current) do
-    deque
-    |> Enum.drop_while(fn idx -> Enum.at(ns, idx) > current end)
-  end
-
   defp initialize_deque(nums, window_size) do
     {deque, _} =
       Enum.reduce(0..(window_size - 1), {[], -1}, fn i, {dq, _} ->
         dq = remove_smaller(dq, nums, Enum.at(nums, i))
-        IO.inspect({[i | dq], i})
+        {[i | dq], i}
       end)
 
     # Enum.reduce(0..window_size-1, {[], -1}, fn i, {deque, _} ->
@@ -65,7 +60,6 @@ defmodule Fullstack.Algos.SlidingMaximumWindow do
     #   {deque ++ [i], i}
     #   |> IO.inspect()
     # end)
-    IO.inspect(deque)
     # Return the deque and the first window's maximum
     {deque, nums |> Enum.at(hd(deque))}
   end

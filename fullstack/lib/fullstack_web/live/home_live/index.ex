@@ -1,11 +1,11 @@
 defmodule FullstackWeb.HomeLive.Index do
   use FullstackWeb, :live_view
-  alias Phoenix.LiveView.AsyncResult
   alias Fullstack.Financial
+  alias Phoenix.LiveView.AsyncResult
 
   alias Fullstack.{Customers, Financial}
-  alias Fullstack.Services.Counters
   alias Fullstack.Servers.Generators.Phrases
+  alias Fullstack.Services.Counters
   import FullstackWeb.CustomComponents
 
   @impl true
@@ -167,10 +167,10 @@ defmodule FullstackWeb.HomeLive.Index do
 
   defp tmp_id(_session), do: nil
 
-  defp random_feature(), do: "..."
+  defp random_feature, do: "..."
   defp list_logos, do: Fullstack.EcosystemLogos.list()
-  defp count_transactions(), do: Financial.count_transactions()
-  defp customers_count(), do: Customers.customers_count()
+  defp count_transactions, do: Financial.count_transactions()
+  defp customers_count, do: Customers.customers_count()
 
   defp get_fib(value) do
     AsyncResult.ok(compute_fib(value))

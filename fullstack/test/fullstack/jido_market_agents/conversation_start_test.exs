@@ -5,8 +5,8 @@ defmodule Fullstack.JidoMarketAgents.ConversationStartTest do
 
   alias Fullstack.JidoMarketAgents
   alias Fullstack.JidoMarketAgents.{Conversation, Conversations}
-  alias Fullstack.JidoMarketAgents.ConversationSupervisor
   alias Fullstack.JidoMarketAgents.Conversations.Record
+  alias Fullstack.JidoMarketAgents.ConversationSupervisor
   alias Fullstack.JidoMarketAgents.MessageBufferSupervisor
 
   @registry Fullstack.JidoMarketAgents.ConversationRegistry

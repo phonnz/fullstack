@@ -1,4 +1,5 @@
 defmodule Fullstack.Utils.Charts.ChartsDates do
+  @moduledoc false
   def parse_chart_data([%Fullstack.Customers.Customer{} | _] = customers) do
     customers
     |> Enum.reduce(%{}, fn c, acc ->
@@ -47,7 +48,7 @@ defmodule Fullstack.Utils.Charts.ChartsDates do
     end)
   end
 
-  def default_date_range() do
+  def default_date_range do
     until = DateTime.utc_now()
     from = Timex.shift(until, years: -1)
     %{"from" => from, "until" => until}

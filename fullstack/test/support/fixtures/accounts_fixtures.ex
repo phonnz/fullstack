@@ -4,6 +4,8 @@ defmodule Fullstack.AccountsFixtures do
   entities via the `Fullstack.Accounts` context.
   """
 
+  alias Fullstack.Accounts.User
+
   def unique_user_email, do: "user#{System.unique_integer()}@example.com"
   def valid_user_password, do: "hello world!"
 
@@ -28,7 +30,7 @@ defmodule Fullstack.AccountsFixtures do
     if role do
       {:ok, user} =
         user
-        |> Fullstack.Accounts.User.role_changeset(%{role: role})
+        |> User.role_changeset(%{role: role})
         |> Fullstack.Repo.update()
 
       user

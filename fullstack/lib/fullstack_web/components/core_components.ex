@@ -17,7 +17,8 @@ defmodule FullstackWeb.CoreComponents do
   use Phoenix.Component
 
   alias Phoenix.LiveView.JS
-  import FullstackWeb.Gettext
+  alias Phoenix.HTML.Form
+  use Gettext, backend: FullstackWeb.Gettext
 
   @doc """
   Renders a modal.
@@ -315,7 +316,7 @@ defmodule FullstackWeb.CoreComponents do
 
   def input(%{type: "checkbox", value: value} = assigns) do
     assigns =
-      assign_new(assigns, :checked, fn -> Phoenix.HTML.Form.normalize_value("checkbox", value) end)
+      assign_new(assigns, :checked, fn -> Form.normalize_value("checkbox", value) end)
 
     ~H"""
     <div phx-feedback-for={@name}>
@@ -349,7 +350,7 @@ defmodule FullstackWeb.CoreComponents do
         {@rest}
       >
         <option :if={@prompt} value="">{@prompt}</option>
-        {Phoenix.HTML.Form.options_for_select(@options, @value)}
+        {Form.options_for_select(@options, @value)}
       </select>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
@@ -371,7 +372,7 @@ defmodule FullstackWeb.CoreComponents do
           @errors != [] && "textarea-error focus-visible:outline-error"
         ]}
         {@rest}
-      ><%= Phoenix.HTML.Form.normalize_value("textarea", @value) %></textarea>
+      ><%= Form.normalize_value("textarea", @value) %></textarea>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -386,7 +387,7 @@ defmodule FullstackWeb.CoreComponents do
         type={@type}
         name={@name}
         id={@id}
-        value={Phoenix.HTML.Form.normalize_value(@type, @value)}
+        value={Form.normalize_value(@type, @value)}
         class={[
           "input input-bordered mt-2 block w-full sm:text-sm sm:leading-6",
           "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",

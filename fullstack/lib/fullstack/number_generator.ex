@@ -1,12 +1,14 @@
 defmodule Fullstack.Servers.NumberGenerator do
-  alias Hex.API.Key
+  @moduledoc false
   use GenServer
+
+  def start_link(args \\ [])
 
   def start_link(max) when is_integer(max) do
     GenServer.start_link(__MODULE__, max)
   end
 
-  def start_link(args \\ []) do
+  def start_link(args) do
     max = Keyword.get(args, :max, 10_000)
     GenServer.start_link(__MODULE__, max)
   end
@@ -15,7 +17,7 @@ defmodule Fullstack.Servers.NumberGenerator do
     GenServer.call(pid, :rand, 30_000)
   end
 
-  def rand() do
+  def rand do
     GenServer.call(__MODULE__, :rand)
   end
 

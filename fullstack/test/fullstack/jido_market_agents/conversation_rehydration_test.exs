@@ -23,6 +23,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
 
   alias Fullstack.JidoMarketAgents.Conversation
   alias Fullstack.JidoMarketAgents.Conversations
+  alias Fullstack.JidoMarketAgents.Conversations.Lifecycle
 
   setup_all do
     responses = start_supervised!({Agent, fn -> %{} end})
@@ -1027,7 +1028,7 @@ defmodule Fullstack.JidoMarketAgents.ConversationRehydrationTest do
     test "restoration carries the persisted stage" do
       user = user_fixture()
 
-      for stage <- Fullstack.JidoMarketAgents.Conversations.Lifecycle.stages() do
+      for stage <- Lifecycle.stages() do
         record = stage_record(user, stage, nil)
         {:ok, pid} = Conversation.ensure_started(record.id, user.id)
         assert :sys.get_state(pid).stage == stage

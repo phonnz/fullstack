@@ -1,5 +1,4 @@
 defmodule FullstackWeb.Public.TransactionsTableLive do
-  alias Phoenix.LiveView.AsyncResult
   use FullstackWeb, :live_view
   alias Fullstack.Public.Transactions
   alias Money

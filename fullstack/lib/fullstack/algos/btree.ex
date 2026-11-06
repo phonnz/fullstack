@@ -1,20 +1,20 @@
 defmodule Fullstack.Algos.Btree.Node do
+  @moduledoc false
   defstruct [:value, :left, :right]
 end
 
 defmodule Fullstack.Algos.Btree do
+  @moduledoc false
   alias Fullstack.Algos.Btree.Node
 
-  """
-  ## Example
-        6
-      /   \
-     4     8
-    / \   /  \
-   1   5  -   9
-  """
+  # Example tree:
+  #         6
+  #       /   \
+  #      4     8
+  #     / \   /  \
+  #    1   5  -   9
 
-  def init() do
+  def init do
     node_b = %Node{value: 1}
     node_c = %Node{value: 5}
 
@@ -23,8 +23,8 @@ defmodule Fullstack.Algos.Btree do
     node_e = %Node{value: 9}
     node_d = %Node{value: 8, right: node_e}
 
-    node_n = %Node{value: 7}
-    root = %Node{value: 6, left: node_a, right: node_d}
+    _node_n = %Node{value: 7}
+    _root = %Node{value: 6, left: node_a, right: node_d}
   end
 
   # inorder -> LVR
@@ -79,7 +79,7 @@ defmodule Fullstack.Algos.Btree do
 
   def find(%Node{value: value} = btree, to_find) when value == to_find, do: btree
 
-  def find(%Node{left: left, right: right} = btree, to_find) do
+  def find(%Node{left: left, right: right} = _btree, to_find) do
     [l, r] = Enum.map([left, right], &find(&1, to_find))
     l || r
   end

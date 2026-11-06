@@ -4,8 +4,8 @@ defmodule Fullstack.Customers do
   """
 
   import Ecto.Query, warn: false
-  alias Fullstack.Repo
   alias Fullstack.Customers.Customer
+  alias Fullstack.Repo
   alias Fullstack.Utils.Charts.ChartsDates
 
   def customers_count, do: Repo.aggregate(Customer, :count, :id)
@@ -63,7 +63,7 @@ defmodule Fullstack.Customers do
     |> Enum.random()
   end
 
-  def gen() do
+  def gen do
     new_id =
       Repo.aggregate(Customer, :count, :id) + 1
 

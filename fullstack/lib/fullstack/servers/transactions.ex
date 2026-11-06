@@ -1,4 +1,5 @@
 defmodule Fullstack.Servers.Generators.Transactions do
+  @moduledoc false
   use GenServer
 
   alias Fullstack.Financial
@@ -29,6 +30,6 @@ defmodule Fullstack.Servers.Generators.Transactions do
     Process.send_after(self(), :work, generate_after)
   end
 
-  defp get_env(),
+  defp get_env,
     do: Application.get_env(:fullstack, :transactions)
 end

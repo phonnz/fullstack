@@ -1,4 +1,5 @@
 defmodule Fullstack.Algos.SlidingWindow do
+  @moduledoc false
   @doc """
   - Find the maximumelement by window
   - k size window
@@ -27,7 +28,7 @@ defmodule Fullstack.Algos.SlidingWindow do
     {ns, res, [Enum.at(ns, idx)]}
   end
 
-  defp filter_lt(ns, idx, {________res, dq}) do
+  defp filter_lt(_ns, idx, {________res, dq}) do
     List.last(dq) < idx
   end
 end

@@ -283,7 +283,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   @spec default_language() :: String.t()
   def default_language, do: @default_language
 
-  @doc "Whether a value is a well-formed language hint (e.g. `\"es\"`, `\"pt-BR\"`)."
+  @doc ~s|Whether a value is a well-formed language hint (e.g. `"es"`, `"pt-BR"`).|
   @spec valid_language?(term()) :: boolean()
   def valid_language?(value) when is_binary(value), do: Regex.match?(@language_format, value)
   def valid_language?(_value), do: false
@@ -379,7 +379,7 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   defp normalize_items(field, [], _item_fun),
     do: {:error, {:invalid_diagnosis, field, :items_required}}
 
-  defp normalize_items(field, items, item_fun) when is_list(items) do
+  defp normalize_items(_field, items, item_fun) when is_list(items) do
     Enum.reduce_while(items, {:ok, []}, fn item, {:ok, acc} ->
       case item_fun.(item) do
         {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
@@ -499,9 +499,8 @@ defmodule Fullstack.JidoMarketAgents.Agents.ExtractionOutput do
   defp normalize_baseline_item(_item),
     do: {:error, {:invalid_diagnosis, :metrics_baselines, :invalid_item}}
 
-  defp finite_number(value) when is_number(value) do
-    if value * 0 == 0, do: {:ok, value}, else: {:error, :not_finite}
-  end
+  # BEAM numbers are always finite: floats cannot be NaN or infinity.
+  defp finite_number(value) when is_number(value), do: {:ok, value}
 
   defp finite_number(_value), do: {:error, :not_number}
 

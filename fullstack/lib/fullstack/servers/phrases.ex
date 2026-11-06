@@ -1,4 +1,5 @@
 defmodule Fullstack.Servers.Generators.Phrases do
+  @moduledoc false
   use GenServer
   require Logger
 
@@ -12,7 +13,7 @@ defmodule Fullstack.Servers.Generators.Phrases do
     "quickly"
   ]
 
-  def get_state() do
+  def get_state do
     GenServer.call(__MODULE__, :get_state)
   end
 
@@ -40,7 +41,7 @@ defmodule Fullstack.Servers.Generators.Phrases do
   end
 
   @impl true
-  def handle_info(:work, state) do
+  def handle_info(:work, _state) do
     schedule_work()
     new_phrase = Enum.random(@phrases)
     notify_subscribers(new_phrase)
@@ -49,20 +50,21 @@ defmodule Fullstack.Servers.Generators.Phrases do
 
   @impl true
   def handle_info(:finish, state) do
-    dbg("finishing after doing work")
     {:stop, :shutdown, state}
   end
 
   @impl true
   def handle_info(:connected, state) do
-    dbg("renewing....")
     {:noreply, Map.put(state, :idle?, false)}
   end
 
   @impl true
-  def handle_cast(:idle_or_connected, %{idle?: idle?} = state) do
-    dbg(idle?)
+  def handle_info(_happened, state) do
+    {:noreply, state}
+  end
 
+  @impl true
+  def handle_cast(:idle_or_connected, %{idle?: idle?} = state) do
     if idle? do
       {:stop, :shutdown, %{}}
     else
@@ -70,12 +72,6 @@ defmodule Fullstack.Servers.Generators.Phrases do
       schedule_work()
       {:noreply, state}
     end
-  end
-
-  @impl true
-  def handle_info(happened, state) do
-    dbg(happened)
-    {:noreply, state}
   end
 
   @impl true

@@ -1,4 +1,5 @@
 defmodule Fullstack.Wallet.Aggregate.WalletAggregator do
+  @moduledoc false
   use GenServer
   require Logger
   @registry Fullstack.Wallet.Aggregate.WalletAggregators
@@ -43,12 +44,9 @@ defmodule Fullstack.Wallet.Aggregate.WalletAggregator do
   end
 
   defp lookup_aggregator(customer_id) when is_binary(customer_id) do
-    with [{pid, _}] <-
-           Registry.lookup(@registry, customer_id) do
-      pid
-    else
-      _ ->
-        {:error, :unknown_account}
+    case Registry.lookup(@registry, customer_id) do
+      [{pid, _}] -> pid
+      _ -> {:error, :unknown_account}
     end
   end
 

@@ -1,4 +1,5 @@
 defmodule Fullstack.Counter do
+  @moduledoc false
   use GenServer
 
   def start_link(default \\ 0) when is_number(default) do
