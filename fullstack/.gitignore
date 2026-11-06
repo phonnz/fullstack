@@ -1,3 +1,5 @@
 docs/
 dev/
 .iex.exs
+.atl/
+.plan/
