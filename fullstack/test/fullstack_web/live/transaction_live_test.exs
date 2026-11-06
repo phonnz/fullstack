@@ -5,7 +5,7 @@ defmodule FullstackWeb.TransactionLiveTest do
   import Fullstack.FinancialFixtures
 
   @update_attrs %{amount: 43}
-  @invalid_attrs %{amount: nil}
+  @invalid_attrs %{amount: "not a number"}
 
   defp create_transaction(%{conn: conn}) do
     transaction = transaction_fixture()
@@ -32,7 +32,7 @@ defmodule FullstackWeb.TransactionLiveTest do
 
       assert index_live
              |> form("#transaction-form", transaction: @invalid_attrs)
-             |> render_change() =~ "can&#39;t be blank"
+             |> render_change() =~ "is invalid"
 
       assert index_live
              |> form("#transaction-form", transaction: @update_attrs)
@@ -74,7 +74,7 @@ defmodule FullstackWeb.TransactionLiveTest do
 
       assert show_live
              |> form("#transaction-form", transaction: @invalid_attrs)
-             |> render_change() =~ "can&#39;t be blank"
+             |> render_change() =~ "is invalid"
 
       assert show_live
              |> form("#transaction-form", transaction: @update_attrs)
