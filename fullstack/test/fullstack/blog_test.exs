@@ -21,11 +21,20 @@ defmodule Fullstack.BlogTest do
     end
 
     test "create_post/1 with valid data creates a post" do
-      valid_attrs = %{title: "some title", content: "some content"}
+      author = Fullstack.AccountsFixtures.user_fixture()
+      valid_attrs = %{title: "some title", content: "some content", author_id: author.id}
 
       assert {:ok, %Post{} = post} = Blog.create_post(valid_attrs)
       assert post.title == "some title"
       assert post.content == "some content"
+      assert post.author_id == author.id
+    end
+
+    test "create_post/1 without an author returns an error changeset" do
+      attrs = %{title: "some title", content: "some content"}
+
+      assert {:error, %Ecto.Changeset{} = changeset} = Blog.create_post(attrs)
+      assert %{author_id: ["can't be blank"]} = errors_on(changeset)
     end
 
     test "create_post/1 with invalid data returns error changeset" do
