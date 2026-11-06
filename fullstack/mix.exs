@@ -70,6 +70,7 @@ defmodule Fullstack.MixProject do
       {:libcluster, "~> 3.3.3"},
       {:plug, "~> 1.17"},
       {:plug_cowboy, "~> 2.5"},
+      {:sentry, "~> 14.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:vega_lite, "~> 0.1.9"},
       {:cachex, "~> 3.6.0"},
