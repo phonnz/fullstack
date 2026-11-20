@@ -53,7 +53,7 @@ Branch: `whatsapp-twilio-channel`. Delivery: `ask-on-risk`. Test runner: `mix te
 | T4 | S5, S6 | inline | 4 (subscribe before broadcast) | done | `34bee87`, baseline fix in `b410dd1` |
 | T5 | S6, S7 | inline | 2 (auth) | done | `55a3d08` |
 | T6 | S8 | inline | none (docs) | done | docs commit |
-| V1 | all | delegated verifier | items 1, 2, 4 | pending | |
+| V1 | all | delegated verifier | items 1, 2, 4 | done: pass, 0 blockers | fixes `3255a30` |
 
 Route evidence: no Writer trigger reason; units share `router.ex` and config, so they run
 inline in order. One independent verifier runs at the feature's end (high-risk items 1, 2, 4).
@@ -94,3 +94,14 @@ Forecast: about 1100 authored changed lines, so `ask-on-risk` applies before pus
   `f45475b` (main merged into `fix-stale-tests`); feature range `f45475b..HEAD`, about 1700
   added lines in 6 commits, not pushed. Pending: manual Twilio sandbox run (needs the user's
   credentials and a tunnel).
+- **L9 (2026-11-20, verification):** independent verifier verdict pass, S1-S8 PASS, no
+  blockers; probes outside the workspace, migration round trip clean. Fixed in `3255a30`
+  (RED then GREEN): (1) placeholder-email squatting, since web sign-up and email change now
+  reject `.invalid` and channel users use `Accounts.register_channel_user/1`; (5) nested
+  params raised 500, now fail the signature check; (6) a deleted user crashed the relay, now
+  the notice is sent without a link. Accepted advisories, open: the hourly cap is soft under
+  concurrency; grapheme-based chunking may exceed Twilio's limit for emoji-heavy text; two
+  simultaneous first messages can create two conversations; an idle relay can exit right
+  after a touch; expired `whatsapp_login` tokens are not purged; phone numbers appear in logs.
+  Full suite 880 tests: 0 failures in 5 of 7 runs; the intermittent failures are the
+  documented pre-existing `ConversationPipelineTest` timing flakes (same seed passes on rerun).
