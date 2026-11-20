@@ -27,7 +27,10 @@ if config_env() != :test do
   config :fullstack, Fullstack.Channels.Twilio,
     account_sid: System.get_env("TWILIO_ACCOUNT_SID"),
     auth_token: System.get_env("TWILIO_AUTH_TOKEN"),
-    whatsapp_from: System.get_env("TWILIO_WHATSAPP_FROM")
+    whatsapp_from: System.get_env("TWILIO_WHATSAPP_FROM"),
+    # Public base URL Twilio calls (for example an ngrok or cloudflared URL in
+    # development); signatures cover it. Defaults to the endpoint URL.
+    webhook_base_url: System.get_env("TWILIO_WEBHOOK_BASE_URL")
 end
 
 if config_env() == :prod do

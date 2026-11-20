@@ -27,7 +27,7 @@ defmodule Fullstack.Channels.WhatsApp.Relay do
   require Logger
 
   alias Fullstack.Channels.Twilio
-  alias Fullstack.JidoMarketAgents.{Conversation, ConversationSupervisor}
+  alias Fullstack.JidoMarketAgents.{Conversation, Conversations, ConversationSupervisor}
 
   @registry Fullstack.JidoMarketAgents.ConversationRegistry
   @default_idle_timeout_ms :timer.minutes(30)
@@ -100,13 +100,16 @@ defmodule Fullstack.Channels.WhatsApp.Relay do
     {:ok, state, state.idle_timeout_ms}
   end
 
+  # A running conversation answers from memory, the same list its broadcasts
+  # carry. A stopped one rehydrates from the persisted messages when the
+  # inbound message starts it, so those are its baseline.
   defp current_messages(id) do
     case Conversation.list_messages(id) do
       {:ok, messages} -> messages
-      {:error, _} -> []
+      {:error, :conversation_not_found} -> Conversations.list_messages(id)
     end
   catch
-    :exit, _ -> []
+    :exit, _ -> Conversations.list_messages(id)
   end
 
   @impl true

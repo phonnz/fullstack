@@ -10,6 +10,8 @@ defmodule Fullstack.Channels.Twilio do
       signs inbound webhooks.
     * `:whatsapp_from` — the sender address, for example
       `"whatsapp:+14155238886"`.
+    * `:webhook_base_url` — the public base URL Twilio calls, when it differs
+      from the endpoint URL (proxy or tunnel); signatures are computed over it.
     * `:base_url` — defaults to `"https://api.twilio.com"`.
     * `:req_options` — extra `Req` options (tests plug `Req.Test` here).
   """
@@ -26,16 +28,28 @@ defmodule Fullstack.Channels.Twilio do
   @spec valid_signature?(String.t(), map(), String.t() | nil, String.t() | nil) :: boolean()
   def valid_signature?(url, params, signature, auth_token)
       when is_binary(signature) and is_binary(auth_token) and auth_token != "" do
+    Plug.Crypto.secure_compare(signature(url, params, auth_token), signature)
+  end
+
+  def valid_signature?(_url, _params, _signature, _auth_token), do: false
+
+  @doc "Computes the `X-Twilio-Signature` value Twilio sends for a request."
+  @spec signature(String.t(), map(), String.t()) :: String.t()
+  def signature(url, params, auth_token) do
     payload =
       params
       |> Enum.sort_by(fn {key, _value} -> key end)
       |> Enum.reduce(url, fn {key, value}, acc -> acc <> key <> to_string(value) end)
 
-    expected = :crypto.mac(:hmac, :sha, auth_token, payload) |> Base.encode64()
-    Plug.Crypto.secure_compare(expected, signature)
+    :crypto.mac(:hmac, :sha, auth_token, payload) |> Base.encode64()
   end
 
-  def valid_signature?(_url, _params, _signature, _auth_token), do: false
+  @doc """
+  The public base URL Twilio calls (`:webhook_base_url`), needed to verify
+  signatures behind a proxy or tunnel; `nil` when not configured.
+  """
+  @spec webhook_base_url() :: String.t() | nil
+  def webhook_base_url, do: Keyword.get(config(), :webhook_base_url)
 
   @doc "The configured auth token, used to validate inbound webhooks."
   @spec auth_token() :: String.t() | nil

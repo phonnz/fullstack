@@ -17,6 +17,12 @@ defmodule FullstackWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Provider webhooks: no session or CSRF; each controller authenticates the
+  # request itself (Twilio: X-Twilio-Signature).
+  scope "/webhooks", FullstackWeb do
+    post "/twilio/whatsapp", TwilioWebhookController, :whatsapp
+  end
+
   scope "/", FullstackWeb do
     pipe_through :browser
 

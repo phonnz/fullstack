@@ -1,9 +1,13 @@
 defmodule Fullstack.Channels.WhatsApp.RelayTest do
-  use ExUnit.Case, async: true
+  # Not async: the relay runs under the application's supervisor and reads
+  # persisted messages, so it needs the shared sandbox.
+  use Fullstack.DataCase, async: false
+
+  import Fullstack.AccountsFixtures
 
   alias Fullstack.Channels.Twilio
   alias Fullstack.Channels.WhatsApp.Relay
-  alias Fullstack.JidoMarketAgents.Conversation
+  alias Fullstack.JidoMarketAgents.{Conversation, Conversations}
 
   @to "whatsapp:+5215512345678"
 
@@ -86,6 +90,20 @@ defmodule Fullstack.Channels.WhatsApp.RelayTest do
 
     assert_receive {:sent, @to, "New"}
     refute_receive {:sent, _, "Old reply"}, 100
+  end
+
+  test "takes the persisted history as baseline when the conversation is not running" do
+    user = user_fixture()
+    {:ok, record} = Conversations.create(user.id)
+    {:ok, _} = Conversations.append_message(record.id, %{role: "user", content: "hi"})
+    {:ok, _} = Conversations.append_message(record.id, %{role: "assistant", content: "Old"})
+    start_relay(record.id)
+
+    rehydrated = [user("hi"), assistant("Old"), user("more"), assistant("New")]
+    broadcast(record.id, :message_received, %{messages: rehydrated})
+
+    assert_receive {:sent, @to, "New"}
+    refute_receive {:sent, _, "Old"}, 100
   end
 
   test "splits long text into chunks of at most 1600 characters", %{id: id} do
