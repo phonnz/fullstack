@@ -81,6 +81,17 @@ defmodule Fullstack.Accounts do
     |> maybe_grant_bootstrap_admin()
   end
 
+  @doc """
+  Registers a user created by a messaging channel. Unlike `register_user/1`
+  it accepts the reserved `.invalid` placeholder emails, and it never grants
+  the bootstrap admin role.
+  """
+  def register_channel_user(attrs) do
+    %User{}
+    |> User.registration_changeset(attrs, allow_reserved_domain: true)
+    |> Repo.insert()
+  end
+
   # The role cannot ride in on the registration changeset (see
   # User.role_changeset/2), so a configured bootstrap admin is promoted in a
   # second write immediately after insert. An {:error, changeset} passes
@@ -421,6 +432,45 @@ defmodule Fullstack.Accounts do
       user
     else
       _ -> nil
+    end
+  end
+
+  ## WhatsApp login links
+
+  @doc """
+  Creates a one-time WhatsApp login token for `user` and returns its
+  encoded value. Only the hash is stored; see `consume_whatsapp_login_token/1`.
+  """
+  def generate_whatsapp_login_token(%User{} = user) do
+    {encoded_token, user_token} = UserToken.build_whatsapp_login_token(user)
+    Repo.insert!(user_token)
+    encoded_token
+  end
+
+  @doc """
+  Returns the user of a valid WhatsApp login token without consuming it, or
+  `nil`. Used to render the confirmation page, which link previews may fetch.
+  """
+  def get_user_by_whatsapp_login_token(token) do
+    with {:ok, query} <- UserToken.verify_whatsapp_login_token_query(token),
+         {_token, %User{} = user} <- Repo.one(query) do
+      user
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Consumes a valid WhatsApp login token and returns its user. The token is
+  deleted, so a second call (even a concurrent one) returns `:error`.
+  """
+  def consume_whatsapp_login_token(token) do
+    with {:ok, query} <- UserToken.verify_whatsapp_login_token_query(token),
+         {%UserToken{id: id}, %User{} = user} <- Repo.one(query),
+         {1, _} <- Repo.delete_all(from(t in UserToken, where: t.id == ^id)) do
+      {:ok, user}
+    else
+      _ -> :error
     end
   end
 

@@ -20,6 +20,19 @@ if System.get_env("PHX_SERVER") do
   config :fullstack, FullstackWeb.Endpoint, server: true
 end
 
+# WhatsApp channel through Twilio. Without these variables the webhook rejects
+# every request (no auth token to verify signatures) and nothing is sent.
+# Test config sets fake credentials and a Req.Test stub instead.
+if config_env() != :test do
+  config :fullstack, Fullstack.Channels.Twilio,
+    account_sid: System.get_env("TWILIO_ACCOUNT_SID"),
+    auth_token: System.get_env("TWILIO_AUTH_TOKEN"),
+    whatsapp_from: System.get_env("TWILIO_WHATSAPP_FROM"),
+    # Public base URL Twilio calls (for example an ngrok or cloudflared URL in
+    # development); signatures cover it. Defaults to the endpoint URL.
+    webhook_base_url: System.get_env("TWILIO_WEBHOOK_BASE_URL")
+end
+
 if config_env() == :prod do
   # Sentry is only enabled with a DSN taken from the environment. The DSN is a
   # credential and must never be committed or set in compile-time config.
