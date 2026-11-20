@@ -106,6 +106,13 @@ config :money,
 # addresses registers later. Empty by default; set per environment.
 config :fullstack, bootstrap_admin_emails: []
 
+# Sentry: non-secret defaults only. The DSN is read from SENTRY_DSN in
+# config/runtime.exs (prod only); without a DSN the SDK is disabled.
+config :sentry,
+  enable_source_code_context: true,
+  root_source_code_paths: [File.cwd!()],
+  before_send: {Fullstack.Observability.SentryScrubber, :before_send}
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

@@ -4,18 +4,18 @@ defmodule FullstackWeb.GroupChannelTest do
   setup do
     {:ok, _, socket} =
       FullstackWeb.UserSocket
-      |> socket("user_id", %{some: :assign})
-      |> subscribe_and_join(FullstackWeb.GroupChannel, "group:lobby")
+      |> socket("user_id", %{mac_addr: "AA:BB:CC:DD:EE:FF"})
+      |> subscribe_and_join(FullstackWeb.GroupChannel, "group:main")
 
     %{socket: socket}
   end
 
   test "ping replies with status ok", %{socket: socket} do
     ref = push(socket, "ping", %{"hello" => "there"})
-    assert_reply ref, :ok, %{"hello" => "there"}
+    assert_reply ref, :ok, %{ping: :pong}
   end
 
-  test "shout broadcasts to group:lobby", %{socket: socket} do
+  test "shout broadcasts to group:main", %{socket: socket} do
     push(socket, "shout", %{"hello" => "all"})
     assert_broadcast "shout", %{"hello" => "all"}
   end

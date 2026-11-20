@@ -21,6 +21,18 @@ if System.get_env("PHX_SERVER") do
 end
 
 if config_env() == :prod do
+  # Sentry is only enabled with a DSN taken from the environment. The DSN is a
+  # credential and must never be committed or set in compile-time config.
+  config :sentry,
+    dsn:
+      System.get_env("SENTRY_DSN") ||
+        raise("""
+        environment variable SENTRY_DSN is missing.
+        Copy it from Sentry: Project Settings > Client Keys (DSN).
+        """),
+    environment_name: System.get_env("SENTRY_ENVIRONMENT") || "production",
+    release: System.get_env("SENTRY_RELEASE")
+
   database_url =
     System.get_env("DATABASE_URL") ||
       raise """

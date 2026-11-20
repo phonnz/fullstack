@@ -7,6 +7,10 @@ defmodule Fullstack.Application do
 
   @impl true
   def start(_type, _args) do
+    :logger.add_handler(:sentry_handler, Sentry.LoggerHandler, %{
+      config: %{metadata: [:request_id]}
+    })
+
     children =
       [
         # {Cluster.Supervisor,

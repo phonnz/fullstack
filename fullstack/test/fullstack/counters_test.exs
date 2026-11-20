@@ -24,7 +24,6 @@ defmodule Fullstack.Services.CountersTest do
       assert Counters.decrease("user_1", :identified) == {:identified, 1}
     end
 
-    @tag :skip
     test "get/2 returns the updated counter values" do
       Counters.increase("user_1", :identified)
       Counters.increase("user_1", :identified)
@@ -35,12 +34,11 @@ defmodule Fullstack.Services.CountersTest do
       assert Counters.get(nil, :centralized) == {:centralized, 2}
     end
 
-    @tag :skip
-    test "ETS table is initialized and used correctly" do
-      assert :ets.info(:test_counters)[:name] == :test_counters
-      assert :ets.info(:test_counters)[:type] == :set
-      assert :ets.info(:test_counters)[:protection] == :public
-      assert :ets.info(:test_counters)[:read_concurrency] == true
+    test "ETS table is initialized with the expected options" do
+      assert :ets.info(:counters)[:name] == :counters
+      assert :ets.info(:counters)[:type] == :set
+      assert :ets.info(:counters)[:protection] == :public
+      assert :ets.info(:counters)[:read_concurrency] == true
     end
   end
 end
