@@ -81,6 +81,17 @@ defmodule Fullstack.Accounts do
     |> maybe_grant_bootstrap_admin()
   end
 
+  @doc """
+  Registers a user created by a messaging channel. Unlike `register_user/1`
+  it accepts the reserved `.invalid` placeholder emails, and it never grants
+  the bootstrap admin role.
+  """
+  def register_channel_user(attrs) do
+    %User{}
+    |> User.registration_changeset(attrs, allow_reserved_domain: true)
+    |> Repo.insert()
+  end
+
   # The role cannot ride in on the registration changeset (see
   # User.role_changeset/2), so a configured bootstrap admin is promoted in a
   # second write immediately after insert. An {:error, changeset} passes

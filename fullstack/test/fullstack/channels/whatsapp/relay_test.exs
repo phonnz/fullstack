@@ -141,6 +141,19 @@ defmodule Fullstack.Channels.WhatsApp.RelayTest do
     assert notice =~ "technology strategy is ready"
   end
 
+  test "still sends a notice when no login link can be built", %{id: id} do
+    start_relay(id, login_url_fun: fn _conversation_id -> nil end)
+
+    broadcast(id, :research_complete, %{
+      messages: [assistant("{}", %{type: :market_research})]
+    })
+
+    assert_receive {:sent, @to, notice}
+    assert notice =~ "market research is ready"
+    assert notice =~ "Sign in on the web"
+    refute notice =~ "Open it here"
+  end
+
   test "tells the sender when the conversation is rate limited", %{id: id} do
     start_relay(id)
 

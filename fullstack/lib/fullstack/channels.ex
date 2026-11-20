@@ -83,7 +83,7 @@ defmodule Fullstack.Channels do
 
   defp insert_identity(channel, external_id) do
     Repo.transaction(fn ->
-      with {:ok, user} <- Accounts.register_user(channel_user_attrs(channel, external_id)),
+      with {:ok, user} <- Accounts.register_channel_user(channel_user_attrs(channel, external_id)),
            {:ok, identity} <-
              %Identity{}
              |> Identity.create_changeset(%{

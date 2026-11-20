@@ -25,6 +25,11 @@ defmodule Fullstack.Channels.TwilioTest do
       refute Twilio.valid_signature?(@url, @params, @signature, "54321")
     end
 
+    test "rejects nested parameters, which Twilio never sends, without raising" do
+      params = Map.put(@params, "Nested", %{"a" => "b"})
+      refute Twilio.valid_signature?(@url, params, @signature, "12345")
+    end
+
     test "rejects a missing signature or a missing token" do
       refute Twilio.valid_signature?(@url, @params, nil, "12345")
       refute Twilio.valid_signature?(@url, @params, @signature, nil)

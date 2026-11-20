@@ -28,7 +28,9 @@ defmodule Fullstack.Channels.Twilio do
   @spec valid_signature?(String.t(), map(), String.t() | nil, String.t() | nil) :: boolean()
   def valid_signature?(url, params, signature, auth_token)
       when is_binary(signature) and is_binary(auth_token) and auth_token != "" do
-    Plug.Crypto.secure_compare(signature(url, params, auth_token), signature)
+    # Twilio only sends flat string parameters; anything nested is not theirs.
+    Enum.all?(params, fn {_key, value} -> is_binary(value) end) and
+      Plug.Crypto.secure_compare(signature(url, params, auth_token), signature)
   end
 
   def valid_signature?(_url, _params, _signature, _auth_token), do: false

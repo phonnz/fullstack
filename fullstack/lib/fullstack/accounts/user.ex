@@ -63,7 +63,23 @@ defmodule Fullstack.Accounts.User do
     |> validate_required([:email])
     |> validate_format(:email, ~r/^[^\s]+@[^\s]+$/, message: "must have the @ sign and no spaces")
     |> validate_length(:email, max: 160)
+    |> maybe_reject_reserved_domain(opts)
     |> maybe_validate_unique_email(opts)
+  end
+
+  # `.invalid` (RFC 2606) addresses are the placeholder emails of users
+  # created by messaging channels (see Fullstack.Channels). Nobody else may
+  # take one, or they could block that phone number from the channel. Only
+  # `Accounts.register_channel_user/1` passes `allow_reserved_domain: true`.
+  defp maybe_reject_reserved_domain(changeset, opts) do
+    email = get_change(changeset, :email)
+
+    if Keyword.get(opts, :allow_reserved_domain, false) or not is_binary(email) or
+         not String.ends_with?(String.downcase(email), ".invalid") do
+      changeset
+    else
+      add_error(changeset, :email, "is reserved")
+    end
   end
 
   defp validate_password(changeset, opts) do

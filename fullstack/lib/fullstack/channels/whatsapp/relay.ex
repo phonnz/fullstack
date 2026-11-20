@@ -144,17 +144,18 @@ defmodule Fullstack.Channels.WhatsApp.Relay do
 
     case Map.fetch(@stage_results, type) do
       {:ok, label} ->
-        url = state.login_url_fun.(state.conversation_id)
-
-        deliver(
-          state,
-          "Your #{label} is ready. Open it here (single-use link, valid 15 minutes): #{url}"
-        )
+        deliver(state, stage_notice(label, state.login_url_fun.(state.conversation_id)))
 
       :error ->
         message |> field(:content) |> text() |> chunk() |> Enum.each(&deliver(state, &1))
     end
   end
+
+  defp stage_notice(label, url) when is_binary(url),
+    do: "Your #{label} is ready. Open it here (single-use link, valid 15 minutes): #{url}"
+
+  defp stage_notice(label, nil),
+    do: "Your #{label} is ready. Sign in on the web to see it."
 
   defp deliver(_state, ""), do: :ok
 

@@ -14,11 +14,12 @@ defmodule Fullstack.Channels.WhatsApp do
   """
   require Logger
 
-  alias Fullstack.Accounts
+  alias Fullstack.Accounts.User
   alias Fullstack.Channels
   alias Fullstack.Channels.Identity
   alias Fullstack.Channels.WhatsApp.Relay
   alias Fullstack.JidoMarketAgents.Conversations
+  alias Fullstack.Repo
 
   @channel "whatsapp"
 
@@ -98,9 +99,15 @@ defmodule Fullstack.Channels.WhatsApp do
   defp active_conversation(%Identity{active_conversation_id: id}), do: {:ok, id}
 
   # Loads the user when the link is built, so the token is bound to the
-  # user's current email.
+  # user's current email. A deleted user gets no link (the relay then sends
+  # the notice without one) instead of crashing the relay.
   defp login_url_fun(user_id, login_url) do
-    fn conversation_id -> login_url.(Accounts.get_user!(user_id), conversation_id) end
+    fn conversation_id ->
+      case Repo.get(User, user_id) do
+        %User{} = user -> login_url.(user, conversation_id)
+        nil -> nil
+      end
+    end
   end
 
   defp failure(step, reason) do
