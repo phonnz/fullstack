@@ -2,7 +2,7 @@
 
 Objective: let a WhatsApp user drive the same `Conversation` pipeline as the Business Discovery
 LiveView, through a Twilio webhook, with agent replies sent back over WhatsApp.
-Branch: `whatsapp-twilio-channel`. Delivery: `ask-on-risk`. Test runner: `mix test` (ExUnit).
+Branch: `whatsapp-twilio-channel`. Delivery: `exception-ok` (single PR, user decision L10). Test runner: `mix test` (ExUnit).
 
 ## Specs
 
@@ -105,3 +105,6 @@ Forecast: about 1100 authored changed lines, so `ask-on-risk` applies before pus
   after a touch; expired `whatsapp_login` tokens are not purged; phone numbers appear in logs.
   Full suite 880 tests: 0 failures in 5 of 7 runs; the intermittent failures are the
   documented pre-existing `ConversationPipelineTest` timing flakes (same seed passes on rerun).
+- **L10 (2026-11-20, user):** "Look into .env and see if the twilio credentials works to you.
+  One PR size exception is ok". `.env` has no `TWILIO_*` variables (names checked only; a
+  second read was denied by permissions). Single PR to `main` with all 8 commits.
