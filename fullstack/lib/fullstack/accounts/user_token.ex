@@ -12,6 +12,8 @@ defmodule Fullstack.Accounts.UserToken do
   @confirm_validity_in_days 7
   @change_email_validity_in_days 7
   @session_validity_in_days 60
+  # Sent in a chat message, so it must be short-lived and single use.
+  @whatsapp_login_validity_in_minutes 15
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -130,6 +132,42 @@ defmodule Fullstack.Accounts.UserToken do
 
   defp days_for_context("confirm"), do: @confirm_validity_in_days
   defp days_for_context("reset_password"), do: @reset_password_validity_in_days
+
+  @doc """
+  Builds a one-time login token sent over WhatsApp (context
+  `"whatsapp_login"`). Like email tokens, only its hash is stored and it is
+  bound to the user's current email.
+  """
+  def build_whatsapp_login_token(user) do
+    build_hashed_token(user, "whatsapp_login", user.email)
+  end
+
+  @doc """
+  Returns a query for `{token, user}` of a valid WhatsApp login token.
+
+  Valid means: the hash matches a `"whatsapp_login"` token, it is younger
+  than #{@whatsapp_login_validity_in_minutes} minutes, and the user's email
+  has not changed. The caller deletes the token to consume it.
+  """
+  def verify_whatsapp_login_token_query(token) do
+    case Base.url_decode64(token, padding: false) do
+      {:ok, decoded_token} ->
+        hashed_token = :crypto.hash(@hash_algorithm, decoded_token)
+
+        query =
+          from token in by_token_and_context_query(hashed_token, "whatsapp_login"),
+            join: user in assoc(token, :user),
+            where:
+              token.inserted_at > ago(@whatsapp_login_validity_in_minutes, "minute") and
+                token.sent_to == user.email,
+            select: {token, user}
+
+        {:ok, query}
+
+      :error ->
+        :error
+    end
+  end
 
   @doc """
   Checks if the token is valid and returns its underlying lookup query.

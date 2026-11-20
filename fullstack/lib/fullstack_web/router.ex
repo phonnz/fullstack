@@ -23,6 +23,11 @@ defmodule FullstackWeb.Router do
     resources "/about", AboutController, only: [:index]
     get "/u/:key", UrlRedirectController, :index
 
+    # One-time login links sent by the WhatsApp relay (see
+    # WhatsAppLoginController for why GET only renders a confirmation).
+    get "/whatsapp/login/:token", WhatsAppLoginController, :show
+    post "/whatsapp/login/:token", WhatsAppLoginController, :create
+
     live_session :waitlist, layout: false do
       live "/waitlist", WaitlistLive.Index, :index
     end
