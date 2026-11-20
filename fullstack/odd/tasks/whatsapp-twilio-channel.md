@@ -9,8 +9,10 @@ Branch: `whatsapp-twilio-channel`. Delivery: `ask-on-risk`. Test runner: `mix te
 - **S1 — Webhook endpoint.** `POST /webhooks/twilio/whatsapp` accepts Twilio's form-encoded
   inbound message. A missing or invalid `X-Twilio-Signature` (HMAC-SHA1 of the full public URL
   plus the sorted POST parameters, keyed by the auth token) returns 403 with no side effect.
-  A valid request returns 200 with an empty TwiML `<Response></Response>` immediately; the
-  agent reply is never sent in the webhook response (the LLM pipeline is asynchronous).
+  A valid request returns 200 with TwiML immediately: empty `<Response></Response>` when the
+  agents will reply, or a `<Message>` for an immediate system reply (command acknowledgement,
+  cap, text-only notice). The agent reply is never sent in the webhook response (the LLM
+  pipeline is asynchronous). A signed request without `From` or `MessageSid` returns 400.
 - **S2 — Idempotency.** A `MessageSid` already processed is acknowledged with 200 and has no
   further side effect (enforced by a unique index).
 - **S3 — Identity (user decision "2").** An unknown WhatsApp number automatically gets a user:
@@ -45,11 +47,13 @@ Branch: `whatsapp-twilio-channel`. Delivery: `ask-on-risk`. Test runner: `mix te
 
 | ID | Specs | Route | Risk | Status | Commit |
 |----|-------|-------|------|--------|--------|
-| T1 | S2, S3, S4 | inline | 1 (migration) | pending | |
-| T2 | S1, S8 | inline | 2 (signature) | pending | |
-| T3 | S1, S2, S4 | inline | 2 (public endpoint) | pending | |
-| T4 | S5, S6 | inline | 4 (subscribe before broadcast) | pending | |
-| T5 | S6, S7 | inline | 2 (auth) | pending | |
+| T1 | S2, S3, S4 | inline | 1 (migration) | done | `6b0ec67` |
+| T2 | S1, S8 | inline | 2 (signature) | done | `f51fd39` |
+| T3 | S1, S2, S4 | inline | 2 (public endpoint) | done | `b410dd1` |
+| T4 | S5, S6 | inline | 4 (subscribe before broadcast) | done | `34bee87`, baseline fix in `b410dd1` |
+| T5 | S6, S7 | inline | 2 (auth) | done | `55a3d08` |
+| T6 | S8 | inline | none (docs) | done | docs commit |
+| V1 | all | delegated verifier | items 1, 2, 4 | pending | |
 
 Route evidence: no Writer trigger reason; units share `router.ex` and config, so they run
 inline in order. One independent verifier runs at the feature's end (high-risk items 1, 2, 4).
@@ -75,3 +79,18 @@ Forecast: about 1100 authored changed lines, so `ask-on-risk` applies before pus
   conversation is created before its relay subscribes, so no broadcast can precede the
   subscription; the login URL is passed to the relay as a function, like the existing
   `deliver_*_instructions` url funs.
+- **L7 (2026-11-20, evidence):** RED observed before each GREEN: T1 (module missing), T2
+  (module missing), T4 (module missing; DB-baseline test failed on the previous relay), T5
+  (functions/routes missing), T3 (11/11 failing with the code stashed). GREEN: channels 12,
+  twilio 5, relay 8, login token 5 + controller 5, webhook 11. Relay and webhook suites stable
+  over 9 to 16 repeated runs. Full suite: 874 tests, 0 failures (baseline 828). Changes to
+  pre-existing files are additions only (accounts, user_token, router, config), so no
+  differential check applies. Twilio signature algorithm checked against the twilio-python
+  reference vector (`RSOYDt4T1cUTdK1PDd93/VVr8B8=`).
+- **L8 (2026-11-20, decisions):** system replies go back as TwiML `<Message>` (no API call);
+  S1 updated. The relay's baseline is read from the running conversation, or from persisted
+  messages when it is stopped, so `start_or_resume/3` stays the only thing that starts
+  conversations. Setup documented in `lib/fullstack/channels/README.md`. The branch sits on
+  `f45475b` (main merged into `fix-stale-tests`); feature range `f45475b..HEAD`, about 1700
+  added lines in 6 commits, not pushed. Pending: manual Twilio sandbox run (needs the user's
+  credentials and a tunnel).
