@@ -54,3 +54,11 @@ config :fullstack, Fullstack.JidoMarketAgents,
   rate_limit_count: 3,
   rate_limit_window_ms: 200,
   cooldown_ms: 400
+
+# Twilio WhatsApp channel: fake credentials and an in-process Req.Test stub,
+# so no test can reach the real Twilio API.
+config :fullstack, Fullstack.Channels.Twilio,
+  account_sid: "ACtest",
+  auth_token: "test_auth_token",
+  whatsapp_from: "whatsapp:+14155238886",
+  req_options: [plug: {Req.Test, Fullstack.Channels.Twilio}, retry: false]

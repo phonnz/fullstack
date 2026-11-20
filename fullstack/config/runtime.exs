@@ -20,6 +20,16 @@ if System.get_env("PHX_SERVER") do
   config :fullstack, FullstackWeb.Endpoint, server: true
 end
 
+# WhatsApp channel through Twilio. Without these variables the webhook rejects
+# every request (no auth token to verify signatures) and nothing is sent.
+# Test config sets fake credentials and a Req.Test stub instead.
+if config_env() != :test do
+  config :fullstack, Fullstack.Channels.Twilio,
+    account_sid: System.get_env("TWILIO_ACCOUNT_SID"),
+    auth_token: System.get_env("TWILIO_AUTH_TOKEN"),
+    whatsapp_from: System.get_env("TWILIO_WHATSAPP_FROM")
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||
