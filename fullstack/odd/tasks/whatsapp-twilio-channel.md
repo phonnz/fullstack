@@ -108,3 +108,9 @@ Forecast: about 1100 authored changed lines, so `ask-on-risk` applies before pus
 - **L10 (2026-11-20, user):** "Look into .env and see if the twilio credentials works to you.
   One PR size exception is ok". `.env` has no `TWILIO_*` variables (names checked only; a
   second read was denied by permissions). Single PR to `main` with all 8 commits.
+- **L11 (2026-11-20, user):** "source .env and you will find the Twilio vars". Read-only
+  checks (HTTP status only, no values printed): `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` ->
+  401 (code 20003); `TWILIO_SID` + `TWILIO_AUTH_TOKEN` -> 200, account active, type Full.
+  `TWILIO_WHATSAPP_FROM` lacks the `whatsapp:` prefix. Needed in `.env` before a sandbox run:
+  `TWILIO_ACCOUNT_SID` set to the `TWILIO_SID` value, and `TWILIO_WHATSAPP_FROM` prefixed with
+  `whatsapp:`. No message sent.
